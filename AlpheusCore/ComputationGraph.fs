@@ -126,9 +126,10 @@ type IntermediateGraphNode(methodVertex:DependencyGraph.ComputedVertex, experime
 
             use p = new System.Diagnostics.Process()
             
+
             p.StartInfo.FileName <- program
             p.StartInfo.Arguments <- args
-            p.StartInfo.WorkingDirectory <- Path.Combine(experimentRoot, methodVertex.WorkingDirectory)
+            p.StartInfo.WorkingDirectory <- Path.GetFullPath(Path.Combine(experimentRoot, methodVertex.WorkingDirectory))
             p.StartInfo.RedirectStandardError <- true
             p.StartInfo.RedirectStandardOutput <- true
             p.StartInfo.UseShellExecute <- false

@@ -394,5 +394,5 @@ let main argv =
             printfn "%s" usage
             2
     with e ->
-        printfn "%s" e.Message
+        printfn "%s" (e.ToString())
         0

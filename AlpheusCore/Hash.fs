@@ -26,7 +26,7 @@ let hashFileAsync fullPath =
             sha.TransformBlock(contentBytes,0,readChunkSize,contentBytes,0) |> ignore
         let finalBytes = Array.zeroCreate<byte> partialBlockSize
         if partialBlockSize > 0 then
-            let _ = f_stream.AsyncRead(finalBytes,0,partialBlockSize)                            
+            let! _ = f_stream.AsyncRead(finalBytes,0,partialBlockSize)                            
             ()
         sha.TransformFinalBlock(finalBytes,0,partialBlockSize) |> ignore
         return sha.Hash

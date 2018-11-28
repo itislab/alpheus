@@ -108,13 +108,17 @@ let artefactToAlphFile (artefact:ArtefactVertex) (alphFileDirFullPath:string) (e
                 IsTracked = sourceVertex.Artefact.Artefact.IsTracked
             }            
     |   ProducerVertex.Computed(computedVertex) ->
+        // dependency graph contains all paths relative to project root
+        // alpheus files contains all paths relative to alph file
+        let fullIDtoRelative fullID = 
+            Path.GetRelativePath(alphFileDirFullPath, Path.Combine(experimentRoot,fullID))
         let computeSection =
+            let relativeWorkingDir = fullIDtoRelative (computedVertex.WorkingDirectory+Path.DirectorySeparatorChar.ToString())            
             {
-                Inputs = computedVertex.Inputs |> Seq.map (fun x -> {ID= Path.GetRelativePath(alphFileDirFullPath, Path.Combine(experimentRoot,x.Artefact.FullID)) ; Hash=x.Version}) |> Array.ofSeq
-                Outputs = computedVertex.Outputs |> Seq.map (fun x -> {ID=Path.GetRelativePath(alphFileDirFullPath, Path.Combine(experimentRoot,x.Artefact.FullID)); Hash=x.Version}) |> Array.ofSeq
-                Command = computedVertex.Command
-                //WorkingDirectory = Path.GetDirectoryName(Path.GetRelativePath(alphFileDirFullPath,Path.GetFullPath(Path.Combine(experimentRoot,methodVertex.WorkingDirectory,"dummy.txt")))) // for some reason relative path works wrong when building directory to directory rel path
-                WorkingDirectory = Path.GetDirectoryName(Path.GetRelativePath(alphFileDirFullPath,Path.GetFullPath(Path.Combine(experimentRoot,computedVertex.WorkingDirectory+"\\")))) // for some reason relative path works wrong when building directory to directory rel path
+                Inputs = computedVertex.Inputs |> Seq.map (fun x -> {ID= fullIDtoRelative x.Artefact.FullID ; Hash=x.Version}) |> Array.ofSeq
+                Outputs = computedVertex.Outputs |> Seq.map (fun x -> {ID= fullIDtoRelative x.Artefact.FullID; Hash=x.Version}) |> Array.ofSeq
+                Command = computedVertex.Command                
+                WorkingDirectory = if relativeWorkingDir = String.Empty then "." else relativeWorkingDir
                 Signature = String.Empty
             }
         let computeSection = { computeSection with Signature = getSignature computeSection}
@@ -269,8 +273,8 @@ type Graph() =
                             let methodVertex = s.GetOrAllocateComputeMethod firstOutputFullID  
                             methodVertex.Command <- computeSection.Command
                             
-                            let workingDirAbs = Path.GetFullPath(Path.Combine(alphfileDirPath,computeSection.WorkingDirectory) )
-                            methodVertex.WorkingDirectory <- workingDirAbs
+                            let workingDirRootBased = Path.GetRelativePath(experimentRootPath,Path.GetFullPath(Path.Combine(alphfileDirPath,computeSection.WorkingDirectory)))
+                            methodVertex.WorkingDirectory <- if workingDirRootBased = String.Empty then "." else workingDirRootBased
 
                             //outputs match check
                             if methodVertex.Outputs.Count > 0 then
