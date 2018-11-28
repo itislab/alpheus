@@ -1,5 +1,5 @@
 # Alpheus
-[![Build Status](https://travis-ci.org/itislab/Alpheus.svg?branch=master)](https://travis-ci.org/itislab/Alpheus)
+[![Build Status](https://travis-ci.org/itislab/alpheus.svg?branch=master)](https://travis-ci.org/itislab/alpheus)
 ![NuGet](https://img.shields.io/nuget/v/Alpheus-cli.svg)
 [![NuGet](https://img.shields.io/nuget/dt/Alpheus-cli.svg)](https://www.nuget.org/packages/Alpheus-cli/)
 ---
