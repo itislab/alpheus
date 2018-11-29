@@ -39,6 +39,7 @@ with
 type BuildArgs = 
     |   D of dependency:string
     |   O of output:string
+    |   [<CliPrefix(CliPrefix.DoubleDash)>]Disable_Outputs_Clean
     | [<Last;CliPrefix(CliPrefix.None)>]Command
 with
     interface IArgParserTemplate with
@@ -46,6 +47,7 @@ with
             match s with
             |   D _ -> "Dependency path (file or folder)"
             |   O _ -> "Output path (file or folder)"
+            |   Disable_Outputs_Clean -> "Make the command responsible for clearing the outputs in case of re-computation. Useful for resumable computations. Default: The outputs are cleaned by alpheus"
             |   Command _ -> "Command that generates the outputs"
 
 [<CliPrefix(CliPrefix.None)>]

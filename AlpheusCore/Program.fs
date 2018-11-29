@@ -326,6 +326,8 @@ let main argv =
             traceVerbose(sprintf "Dependencies: %A" deps)
             let outputs = buildArgs.GetResults <@ O @>
             traceVerbose(sprintf "Outputs: %A" outputs)
+            let doNotCleanOutputs = 
+                if buildArgs.Contains Disable_Outputs_Clean then true else false
             if List.length outputs = 0 then
                 raise(ArgumentException("You need to specify at least one output"))
             let unrecognized = buildArgs.UnrecognizedCliParams
@@ -367,6 +369,10 @@ let main argv =
                     let rootBasedCwd = Path.GetRelativePath(experimentRoot, cwd)
                     methodVertex.WorkingDirectory <- rootBasedCwd
                     methodVertex.Command <- command
+
+                    methodVertex.DoNotCleanOutputs <- doNotCleanOutputs
+                    if doNotCleanOutputs then
+                        printfn "Clearing of outputs by alpheus is disabled for this computation"
 
                     traceVerbose(sprintf "Dependency graph is built (%d artefacts; %d methods)" g.ArtefactsCount g.MethodsCount)
                     traceVerbose(sprintf "Graph artefacts: %A" g.Artefacts)

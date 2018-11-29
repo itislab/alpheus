@@ -97,16 +97,17 @@ type IntermediateGraphNode(methodVertex:DependencyGraph.ComputedVertex, experime
             // 5) fill in corresponding method vertex (to fix propper versions)
             // 4) write alph files for outputs
 
-            // 1) Deleting outouts
-            let deletePath path =
-                if File.Exists path then
-                    File.Delete path
-                elif Directory.Exists path then
-                    Directory.Delete(path,true)
-                else
-                    ()
-            let fullOutputPaths = Seq.map (fun (x:DependencyGraph.VersionedArtefact) -> Path.GetRelativePath(experimentRoot,x.Artefact.FullID)) methodVertex.Outputs |> List.ofSeq
-            List.iter deletePath fullOutputPaths
+            // 1) Deleting outputs
+            if not methodVertex.DoNotCleanOutputs then
+                let deletePath path =
+                    if File.Exists path then
+                        File.Delete path
+                    elif Directory.Exists path then
+                        Directory.Delete(path,true)
+                    else
+                        ()
+                let fullOutputPaths = Seq.map (fun (x:DependencyGraph.VersionedArtefact) -> Path.GetRelativePath(experimentRoot,x.Artefact.FullID)) methodVertex.Outputs |> List.ofSeq
+                List.iter deletePath fullOutputPaths
 
             // 2) executing a command
             let command = methodVertex.Command.Trim()

@@ -73,6 +73,7 @@ and ComputedVertex(firstOutputFullID : ArtefactFullID) =
     let mutable outputs : Set<VersionedArtefact> = Set.empty
     let mutable command: string = String.Empty
     let mutable workingDirectory: string = String.Empty
+    let mutable doNotClean= false
     member s.FirstOutputFullID = firstOutputFullID    
     member s.Inputs
         with get() = inputs
@@ -88,7 +89,9 @@ and ComputedVertex(firstOutputFullID : ArtefactFullID) =
     member s.WorkingDirectory
         with get() = workingDirectory
         and set v = workingDirectory <-v
-
+    member s.DoNotCleanOutputs
+        with get() = doNotClean
+        and set v = doNotClean <- v
     member s.AddInput input =
         inputs <- Set.add input inputs
     member s.AddOutput output =
@@ -120,6 +123,7 @@ let artefactToAlphFile (artefact:ArtefactVertex) (alphFileDirFullPath:string) (e
                 Command = computedVertex.Command                
                 WorkingDirectory = if relativeWorkingDir = String.Empty then "." else relativeWorkingDir
                 Signature = String.Empty
+                OutputsCleanDisabled = computedVertex.DoNotCleanOutputs
             }
         let computeSection = { computeSection with Signature = getSignature computeSection}
         {
@@ -271,6 +275,9 @@ type Graph() =
                             let versionedOutputSet = Set.ofArray versionedOutputs
 
                             let methodVertex = s.GetOrAllocateComputeMethod firstOutputFullID  
+
+                            methodVertex.DoNotCleanOutputs <- computeSection.OutputsCleanDisabled
+
                             methodVertex.Command <- computeSection.Command
                             
                             let workingDirRootBased = Path.GetRelativePath(experimentRootPath,Path.GetFullPath(Path.Combine(alphfileDirPath,computeSection.WorkingDirectory)))

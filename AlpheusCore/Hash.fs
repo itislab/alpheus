@@ -1,6 +1,5 @@
 ﻿module ItisLab.Alpheus.Hash
 
-open System.Security.Cryptography
 open System.IO
 open System
 open System.Text
@@ -9,10 +8,13 @@ type HashString = string
         
 let hashToString (data : byte array) : HashString = System.BitConverter.ToString(data).Replace("-", System.String.Empty)
 
+let createHashAlgorithm() : System.Security.Cryptography.HashAlgorithm =
+    upcast System.Security.Cryptography.SHA512.Create()
+
 let hashFileAsync fullPath =
     let readChunkSize = 100 * 1024 * 1024 //in Bytes
     async {
-        use sha = SHA1.Create()
+        use hashAlg = createHashAlgorithm()
         // filename is not accounted for now, as well as attributes. Only file contents
         // let pathBytes = fname |> System.Text.Encoding.UTF8.GetBytes
         // sha.TransformBlock(pathBytes, 0, pathBytes.Length, pathBytes, 0) |> ignore
@@ -23,13 +25,19 @@ let hashFileAsync fullPath =
         //TODO: check chunked hashing
         for i in 0..(fullReads-1) do                
             let! contentBytes = f_stream.AsyncRead readChunkSize
-            sha.TransformBlock(contentBytes,0,readChunkSize,contentBytes,0) |> ignore
+            let readBytes = hashAlg.TransformBlock(contentBytes,0,readChunkSize,contentBytes,0)
+            assert(readBytes = readChunkSize)
+        if fullReads = 0 then
+            // according to documentation: "You must call the TransformBlock method before calling the TransformFinalBlock method. You must call both methods before you retrieve the final hash value. "
+            let dummy = Array.zeroCreate<byte> 0
+            hashAlg.TransformBlock(dummy,0,0,dummy,0) |> ignore
         let finalBytes = Array.zeroCreate<byte> partialBlockSize
         if partialBlockSize > 0 then
             let! _ = f_stream.AsyncRead(finalBytes,0,partialBlockSize)                            
             ()
-        sha.TransformFinalBlock(finalBytes,0,partialBlockSize) |> ignore
-        return sha.Hash
+        let finalRead = hashAlg.TransformFinalBlock(finalBytes,0,partialBlockSize).Length
+        assert(finalRead = partialBlockSize)
+        return hashAlg.Hash
     }
 
 let rec hashDirectoryAsync (fullPath:string) =
@@ -62,10 +70,12 @@ let rec hashDirectoryAsync (fullPath:string) =
         let allNames = Array.append fileNameBytes dirNameBytes
         let flattenHashes = Seq.collect (fun x -> x) allHashes |> Array.ofSeq
 
-        use sha = SHA1.Create()
-        sha.TransformBlock(allNames, 0,allNames.Length,allNames,0) |> ignore
-        sha.TransformFinalBlock(flattenHashes,0,flattenHashes.Length) |> ignore
-        return sha.Hash
+        use hashAlg = createHashAlgorithm()
+        let namesTransformedBytes = hashAlg.TransformBlock(allNames, 0,allNames.Length,allNames,0)
+        assert(namesTransformedBytes = allNames.Length)
+        let finalBytes = hashAlg.TransformFinalBlock(flattenHashes,0,flattenHashes.Length)
+        assert(finalBytes.Length = flattenHashes.Length)
+        return hashAlg.Hash
     }
 
 

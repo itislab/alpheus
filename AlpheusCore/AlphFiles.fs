@@ -17,6 +17,7 @@ type ComputeSection =  {
     WorkingDirectory: string
     Command: string    
     Signature: HashString
+    OutputsCleanDisabled: bool
 }
 
 
