@@ -17,12 +17,15 @@ type VersionedArtefact = {
     StoragesContainingVersion: string list
     }
 
-and ArtefactVertex(fullID:ArtefactFullID) =
+and ArtefactVertex(fullID:ArtefactFullID) =    
     let mutable input : ProducerVertex = NotSetYet
     let mutable outputs : Set<ComputedVertex> = Set.empty
     let mutable isTracked = false
     let mutable storagesContainingActialHash = []
     let mutable actualHash : Hash.HashString option = None // None means that file/dir does not exist on disk
+    //do
+        // artefact ID can not end with / or \ even if it is directory
+        //assert not (fullID.EndsWith(Path.DirectorySeparatorChar) || fullID.EndsWith(Path.AltDirectorySeparatorChar))    
     member s.FullID = fullID
     member s.Input
         with get() = input
@@ -48,14 +51,14 @@ and ArtefactVertex(fullID:ArtefactFullID) =
     interface System.IComparable with
         member s.CompareTo(other) =
             let typedOther:ArtefactVertex = downcast other
-            s.FullID.CompareTo(typedOther.FullID)
+            (AlphFiles.fullIDtoString s.FullID).CompareTo(AlphFiles.fullIDtoString typedOther.FullID)
 
     override s.ToString() =
         let version =
             match s.ActualHash with
             |   None -> "not exist"
             |   Some(hash) -> hash.Substring(0,6)
-        sprintf "Artefact(%s|%s)" s.FullID version
+        sprintf "Artefact(%s|%s)" (AlphFiles.fullIDtoString s.FullID) version
 and ProducerVertex =
     /// The vertex produces single artefact out of void
     |   Source of SourceVertex
@@ -88,7 +91,9 @@ and ComputedVertex(firstOutputFullID : ArtefactFullID) =
     /// From where the Command must be executed
     member s.WorkingDirectory
         with get() = workingDirectory
-        and set v = workingDirectory <-v
+        and set (v:string) =
+            assert (v.EndsWith(Path.DirectorySeparatorChar) || v.EndsWith(Path.AltDirectorySeparatorChar))
+            workingDirectory <- v
     member s.DoNotCleanOutputs
         with get() = doNotClean
         and set v = doNotClean <- v
@@ -99,9 +104,9 @@ and ComputedVertex(firstOutputFullID : ArtefactFullID) =
     interface System.IComparable with
         member s.CompareTo(other) =
             let typedOther:ComputedVertex = downcast other
-            s.FirstOutputFullID.CompareTo(typedOther.FirstOutputFullID)
+            (AlphFiles.fullIDtoString s.FirstOutputFullID).CompareTo(AlphFiles.fullIDtoString typedOther.FirstOutputFullID)
 
-let artefactToAlphFile (artefact:ArtefactVertex) (alphFileDirFullPath:string) (experimentRoot:string): AlphFile =
+let artefactToAlphFile (artefact:ArtefactVertex) (alphFileFullPath:string) (experimentRoot:string): AlphFile =
     let methodVertex = artefact.Input
     // Fills in Signature field in compute section object with correct value       
     match methodVertex with
@@ -113,10 +118,9 @@ let artefactToAlphFile (artefact:ArtefactVertex) (alphFileDirFullPath:string) (e
     |   ProducerVertex.Computed(computedVertex) ->
         // dependency graph contains all paths relative to project root
         // alpheus files contains all paths relative to alph file
-        let fullIDtoRelative fullID = 
-            Path.GetRelativePath(alphFileDirFullPath, Path.Combine(experimentRoot,fullID))
+        let fullIDtoRelative = AlphFiles.fullIDtoRelative experimentRoot alphFileFullPath
         let computeSection =
-            let relativeWorkingDir = fullIDtoRelative (computedVertex.WorkingDirectory+Path.DirectorySeparatorChar.ToString())            
+            let relativeWorkingDir = (computedVertex.WorkingDirectory+Path.DirectorySeparatorChar.ToString())            
             {
                 Inputs = computedVertex.Inputs |> Seq.map (fun x -> {ID= fullIDtoRelative x.Artefact.FullID ; Hash=x.Version}) |> Array.ofSeq
                 Outputs = computedVertex.Outputs |> Seq.map (fun x -> {ID= fullIDtoRelative x.Artefact.FullID; Hash=x.Version}) |> Array.ofSeq
@@ -130,12 +134,12 @@ let artefactToAlphFile (artefact:ArtefactVertex) (alphFileDirFullPath:string) (e
             Origin = DataOrigin.Computed computeSection
             IsTracked = artefact.IsTracked
         }
-    |   ProducerVertex.NotSetYet -> raise(InvalidOperationException(sprintf "Producer of %s is not set" artefact.FullID))
+    |   ProducerVertex.NotSetYet -> raise(InvalidOperationException(sprintf "Producer of %s is not set" (AlphFiles.fullIDtoString artefact.FullID)))
 
 /// Alpheus dependencies graph
 type Graph() = 
-    let mutable methodVertices : Map<string,ProducerVertex> = Map.empty //FirstOutputFullID -> Vertex
-    let mutable artefactVertices: Map<string,ArtefactVertex> = Map.empty //FullID -> Vertex
+    let mutable methodVertices : Map<ArtefactFullID,ProducerVertex> = Map.empty //FirstOutputFullID -> Vertex
+    let mutable artefactVertices: Map<ArtefactFullID,ArtefactVertex> = Map.empty //FullID -> Vertex
 
     member s.Artefacts =
         Map.toSeq artefactVertices |> Seq.map (fun t -> let id,a = t in a) |> Array.ofSeq
@@ -159,7 +163,7 @@ type Graph() =
     
     member s.AllocateSnapshotVertex (outputFullID) =
         if Map.containsKey outputFullID methodVertices then
-            raise(InvalidOperationException(sprintf "attempt to allocate snapshot vertex \"%s\", but the vertex with this ID is already allocated" outputFullID))
+            raise(InvalidOperationException(sprintf "attempt to allocate snapshot vertex \"%s\", but the vertex with this ID is already allocated" (AlphFiles.fullIDtoString outputFullID)))
         else
             let artefact = s.GetOrAllocateArtefact(outputFullID)
             let snapshotVertex = SourceVertex({Artefact = artefact; Version="to be set"; StoragesContainingVersion=[]})
@@ -167,7 +171,7 @@ type Graph() =
             methodVertices <- Map.add outputFullID vertex methodVertices
             snapshotVertex
     
-    member s.GetOrAllocateComputeMethod firstOutputFullID =
+    member s.GetOrAllocateComputeMethod (firstOutputFullID:ArtefactFullID) =
         match Map.tryFind firstOutputFullID methodVertices with
         |   Some(vertex) ->
             match vertex with
@@ -213,13 +217,10 @@ type Graph() =
                 // to process a vertex A means 1) to allocate verteces for direct A's producer method and it's direct inputs; 2) connect them 3) Enqueue them to be processed
                 let dequeuedArtefact = queue.Dequeue()
                 if not (Set.contains dequeuedArtefact processedOutputs) then
-                    let fullOutputPath = Path.Combine(experimentRootPath,dequeuedArtefact.FullID)                    
+                    let fullOutputPath = Path.GetFullPath(Path.Combine(experimentRootPath,AlphFiles.fullIDtoString dequeuedArtefact.FullID))
                     let alphfilePath = sprintf "%s.alph" fullOutputPath
                     let alphfileDirPath = Path.GetDirectoryName(alphfilePath)+Path.DirectorySeparatorChar.ToString()
-                    let getFullID artefactID =
-                        let artefactAbsPath = Path.Combine(alphfileDirPath, artefactID)
-                        let artefactFullID =  Path.GetRelativePath(experimentRootPath,artefactAbsPath)
-                        artefactFullID
+                    let getFullID = relIDtoFullID experimentRootPath alphfilePath
                     let! alphFileLoadResult = tryLoadAsync alphfilePath                    
                     match alphFileLoadResult with
                     |   None -> 
@@ -234,14 +235,14 @@ type Graph() =
                         let versionedArtefact =
                             match calculatedVersion with
                             |   None -> 
-                                raise(InvalidDataException(sprintf "The artefact %s does not exist on disk" dequeuedArtefact.FullID))
+                                raise(InvalidDataException(sprintf "The artefact %s does not exist on disk" (AlphFiles.fullIDtoString dequeuedArtefact.FullID)))
                             |   Some(version) ->
                                 { vertex.Artefact with Version=version }
                         vertex.Artefact <- versionedArtefact
                         // 2a) connect the method vertex to the outputs
                         s.ConnectArtefactAsOutput versionedArtefact (Source vertex)
                         // Dumping alph file to disk
-                        let alphFile = artefactToAlphFile dequeuedArtefact alphfileDirPath experimentRootPath
+                        let alphFile = artefactToAlphFile dequeuedArtefact alphfilePath experimentRootPath
                         do! AlphFiles.saveAsync alphFile alphfilePath 
                     |   Some(alphFile) ->
                         // Alph file exists
@@ -309,7 +310,7 @@ type Graph() =
 
 let fillinActualHashesAsync (artefacts:ArtefactVertex seq) (experimentRoot: string) =
     async {
-        let fullPaths = Seq.map (fun (a:ArtefactVertex) -> Path.Combine(experimentRoot,a.FullID)) artefacts
+        let fullPaths = Seq.map (fun (a:ArtefactVertex) -> fullIDtoFullPath experimentRoot a.FullID) artefacts
         let asyncs = Seq.map Hash.fastHashDataAsync fullPaths |> Array.ofSeq
         let! hashes = Async.Parallel asyncs
         Seq.iter2 (fun hash (art:ArtefactVertex) -> art.ActualHash <- hash ) hashes artefacts

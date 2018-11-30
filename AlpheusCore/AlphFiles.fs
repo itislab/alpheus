@@ -4,10 +4,48 @@ open Newtonsoft.Json
 open System.IO
 open Hash
 
-type ArtefactFullID = string
+/// Path relative to the project root
+type ArtefactFullID =
+    ID of string
+
+/// Path relative to some .alph file
+type RelativeArtefactID = 
+    ID of string
+
+let fullIDtoString (fullID:ArtefactFullID) =
+    match fullID with
+        |   ArtefactFullID.ID s -> s
+
+let relIDtoString (fullID:RelativeArtefactID) =
+    match fullID with
+        |   RelativeArtefactID.ID s -> s
+
+let fullIDtoFullPath rootPath (fullID:ArtefactFullID) =
+    let s =
+        match fullID with
+        |   ArtefactFullID.ID s -> s
+    Path.GetFullPath(Path.Combine(rootPath, s))
+
+let fullIDtoRelative rootPath (alphFileFullPath:string) (fullID:ArtefactFullID)  =
+    let fullID = 
+        match fullID with
+        |   ArtefactFullID.ID s -> s
+    let absPath = Path.GetFullPath(Path.Combine(rootPath,fullID))
+    let alphDir = Path.GetDirectoryName(alphFileFullPath)
+    let relID:RelativeArtefactID = RelativeArtefactID.ID(Path.GetRelativePath(alphDir,absPath))
+    relID
+
+let relIDtoFullID rootPath (alphFileFullPath:string) (relID:RelativeArtefactID)  =
+    let relID = 
+        match relID with
+        |   RelativeArtefactID.ID s -> s
+    let alphDir = Path.GetDirectoryName(alphFileFullPath)
+    let absPath = Path.GetFullPath(Path.Combine(alphDir,relID))
+    let fullID:ArtefactFullID = ArtefactFullID.ID(Path.GetRelativePath(rootPath, absPath))
+    fullID
 
 type VersionedArtefact = {
-    ID: ArtefactFullID
+    ID: RelativeArtefactID
     Hash: HashString
 }
 
@@ -58,7 +96,7 @@ let getSignature (computeSection:ComputeSection) =
     addHash computeSection.Command 
     addHash computeSection.WorkingDirectory
     let hashArtefact art =
-        addHash art.ID
+        addHash (relIDtoString art.ID)
         addHash art.Hash
     Seq.iter hashArtefact (Seq.append computeSection.Inputs  computeSection.Outputs)
     sha.TransformFinalBlock(Array.zeroCreate<byte> 0,0,0) |> ignore

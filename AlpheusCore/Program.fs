@@ -13,15 +13,6 @@ open System.Text
 open ItisLab.Alpheus.AlphFiles
 open ItisLab.Alpheus
 
-/// being in currentDir, returns the relative path to targetPath
-let getRelativePath currentDir targetPath =
-    if not(Directory.Exists currentDir) then
-        raise(ArgumentException(sprintf "The \"%s\" directory does not exist" currentDir))
-    else
-        Path.GetRelativePath(currentDir,targetPath)
-    
-
-
 [<EntryPoint>]
 let main argv =
     //dealing with tracing
@@ -173,9 +164,9 @@ let main argv =
                     1
                 |   Some(experimentRoot) ->
                     // removing .alph extension if it is present
-                    let alphFilePath = if alphFilePath.EndsWith(".alph") then alphFilePath.Substring(0,alphFilePath.Length-5) else alphFilePath                               
+                    let artefactPath = if alphFilePath.EndsWith(".alph") then alphFilePath.Substring(0,alphFilePath.Length-5) else alphFilePath                               
 
-                    let fullID = Path.GetRelativePath(experimentRoot, alphFilePath)
+                    let fullID = ArtefactFullID.ID(Path.GetRelativePath(experimentRoot, artefactPath))
                     let statusAsync = async {
                         let! g = buildDependencyGraphAsync experimentRoot fullID
                         
@@ -199,9 +190,9 @@ let main argv =
                     1
                 |   Some(experimentRoot) ->
                     // removing .alph extension if it is present
-                    let alphFilePath = if alphFilePath.EndsWith(".alph") then alphFilePath.Substring(0,alphFilePath.Length-5) else alphFilePath
+                    let artefactPath = if alphFilePath.EndsWith(".alph") then alphFilePath.Substring(0,alphFilePath.Length-5) else alphFilePath
             
-                    let fullID = Path.GetRelativePath(experimentRoot, alphFilePath)
+                    let fullID = ArtefactFullID.ID(Path.GetRelativePath(experimentRoot, artefactPath))
                     let statusAsync=
                         async {
                         let! g = buildDependencyGraphAsync experimentRoot fullID
@@ -233,26 +224,24 @@ let main argv =
                                 printfn "There is no %s file on disk to fetch the restore version from" alphFilePath
                                 return 2
                             |   Some(alphFile) ->
-                                let fullID = Path.GetRelativePath(experimentRoot, filePath)
-                                let absFilePath = Path.GetFullPath(filePath)
-                                let alphFileDir = Path.GetDirectoryName(absFilePath)+Path.DirectorySeparatorChar.ToString()                                
+                                let fullID = AlphFiles.ArtefactFullID.ID(Path.GetRelativePath(experimentRoot, filePath))
+                                let absFilePath = Path.GetFullPath(filePath)                                
                                 let versionToRestore =
                                     match alphFile.Origin with
                                     |   Snapshot(ver) -> ver
                                     |   Computed(comp) ->
-                                        let idToFullID id =
-                                            Path.GetRelativePath(experimentRoot,Path.Combine(alphFileDir,id))
+                                        let idToFullID = AlphFiles.relIDtoFullID experimentRoot absFilePath                                            
                                         (comp.Outputs |> Seq.find (fun o -> (idToFullID o.ID) = fullID)).Hash                                
                                 let! config = Config.openExperimentDirectoryAsync experimentRoot
                                 let checker = config.ConfigFile.Storage |> Map.toSeq |> StorageFactory.getPresenseChecker experimentRoot
                                 let! restoreSourcesResults = checker [| versionToRestore |]
                                 let restoreSources = restoreSourcesResults.[0]
                                 if List.length restoreSources = 0 then
-                                    printfn "%s:%s is not found in any registered storages" fullID (versionToRestore.Substring(0,6))
+                                    printfn "%s:%s is not found in any registered storages" (AlphFiles.fullIDtoString fullID) (versionToRestore.Substring(0,6))
                                     return 2
                                 else
                                     let restoreSource = List.head restoreSources
-                                    traceVerbose (sprintf "Restoring %s:%s from %s storage" fullID (versionToRestore.Substring(0,6)) restoreSource)
+                                    traceVerbose (sprintf "Restoring %s:%s from %s storage" (AlphFiles.fullIDtoString fullID) (versionToRestore.Substring(0,6)) restoreSource)
                                     let restore = StorageFactory.getStorageRestore experimentRoot (Map.find restoreSource config.ConfigFile.Storage)
                                     do! restore fullID versionToRestore
                                     return 0
@@ -300,7 +289,7 @@ let main argv =
                                 }                                       
                             do! AlphFiles.saveAsync alphFile alphFilePath
                             
-                            let fullID = Path.GetRelativePath(experimentRoot, filePath)
+                            let fullID = ArtefactFullID.ID(Path.GetRelativePath(experimentRoot, filePath))
                     
                             let! g = buildDependencyGraphAsync experimentRoot fullID                                                                                    
                             
@@ -315,7 +304,7 @@ let main argv =
                                 config.ConfigFile.Storage |> Map.toSeq |> Seq.filter (fun pair -> let k,_ = pair in k=storageName) |> Seq.map snd |> Seq.head
                             
                             let save = StorageFactory.getStorageSaver experimentRoot storageToSaveTo
-                            let saveDescriptors = artefactsToSave |> Array.map (fun art -> Path.Combine(experimentRoot,art.FullID),art.ActualHash.Value)
+                            let saveDescriptors = artefactsToSave |> Array.map (fun art -> (fullIDtoFullPath experimentRoot art.FullID),art.ActualHash.Value)
                             let! _ = save saveDescriptors
                             return 0
                         }
@@ -345,8 +334,8 @@ let main argv =
 
                 // generating leafs full alpheus path
                 let experimentRoot = (List.exactlyOne roots).Value
-                let fullInputIDs = List.map (fun x -> getRelativePath experimentRoot x) deps
-                let fullOutputIDs = List.map (fun x -> getRelativePath experimentRoot x) outputs
+                let fullInputIDs = List.map (fun x -> ArtefactFullID.ID(Path.GetRelativePath(experimentRoot,x))) deps
+                let fullOutputIDs = List.map (fun x -> ArtefactFullID.ID(Path.GetRelativePath(experimentRoot,x))) outputs
                 traceVerbose(sprintf "full dependency IDs: %A" fullInputIDs)
                 traceVerbose(sprintf "full output IDs: %A" fullOutputIDs)
                 traceVerbose(sprintf "Command is \"%s\"" command)

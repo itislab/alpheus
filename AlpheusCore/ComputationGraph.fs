@@ -31,7 +31,7 @@ type SourceGraphNode(orphanArtefact:DependencyGraph.ArtefactVertex, experimentRo
                 // dumping actual hash as expected
                 let dumpComputations = 
                     async {
-                        let filePath = Path.Combine(experimentRoot,orphanArtefact.FullID)
+                        let filePath = fullIDtoFullPath experimentRoot orphanArtefact.FullID
                         let alphFilePath = sprintf "%s.alph" filePath
                         let! alphLoadResults = AlphFiles.tryLoadAsync alphFilePath
                         let alphToDump =
@@ -61,7 +61,7 @@ type IntermediateGraphNode(methodVertex:DependencyGraph.ComputedVertex, experime
 
     override s.Execute(inputs, _) = //ignoring checkpoint.        
         let logVerbose str =
-            printfn "Computation %20s:\t\t%s" methodVertex.FirstOutputFullID str
+            printfn "Computation %20s:\t\t%s" (AlphFiles.fullIDtoString methodVertex.FirstOutputFullID) str
 
         let actualInputs = inputs |> List.map (fun x -> x:?> ComputedArtefact) |> List.sortBy (fun x -> x.FullID)
         let inputVertices = methodVertex.Inputs |> Set.toList |> List.sortBy (fun x -> x.Artefact.FullID)
@@ -106,7 +106,7 @@ type IntermediateGraphNode(methodVertex:DependencyGraph.ComputedVertex, experime
                         Directory.Delete(path,true)
                     else
                         ()
-                let fullOutputPaths = Seq.map (fun (x:DependencyGraph.VersionedArtefact) -> Path.GetRelativePath(experimentRoot,x.Artefact.FullID)) methodVertex.Outputs |> List.ofSeq
+                let fullOutputPaths = Seq.map (fun (x:DependencyGraph.VersionedArtefact) -> AlphFiles.fullIDtoFullPath experimentRoot x.Artefact.FullID) methodVertex.Outputs |> List.ofSeq
                 List.iter deletePath fullOutputPaths
 
             // 2) executing a command
@@ -138,8 +138,8 @@ type IntermediateGraphNode(methodVertex:DependencyGraph.ComputedVertex, experime
             logVerbose (sprintf "Executing \"%s %s\". Working dir is \"%s\"" program args p.StartInfo.WorkingDirectory)
             p.Start() |> ignore
                         
-            streamPrinterAsync (sprintf "%s [stdout]" methodVertex.FirstOutputFullID) p.StandardOutput |> Async.Start
-            streamPrinterAsync (sprintf "%s [stderr]" methodVertex.FirstOutputFullID) p.StandardError |> Async.Start 
+            streamPrinterAsync (sprintf "%s [stdout]" (AlphFiles.fullIDtoString methodVertex.FirstOutputFullID)) p.StandardOutput |> Async.Start
+            streamPrinterAsync (sprintf "%s [stderr]"(AlphFiles.fullIDtoString methodVertex.FirstOutputFullID)) p.StandardError |> Async.Start 
             
             p.WaitForExit()            
 
@@ -167,7 +167,7 @@ type IntermediateGraphNode(methodVertex:DependencyGraph.ComputedVertex, experime
                 // dumping to disk
                 let diskDumpComputation = 
                     async {                        
-                        let outputAlphfilePaths = Array.map (fun (x:DependencyGraph.VersionedArtefact) -> (sprintf "%s.alph" (Path.Combine(experimentRoot,x.Artefact.FullID)))) outputsArray
+                        let outputAlphfilePaths = Array.map (fun (x:DependencyGraph.VersionedArtefact) -> (sprintf "%s.alph" (fullIDtoFullPath experimentRoot x.Artefact.FullID))) outputsArray
 
                         let updateAlphFileAsync (alphFilePath:string) artefact =
                             async {

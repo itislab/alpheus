@@ -147,7 +147,7 @@ let printStatuses (g:FlowGraph<StatusGraphNode>) =
             Seq.init N (fun idx -> Control.outputScalar(vertex,idx) finalState ) |> Seq.map statusToStr
 
         let outdatedArtefacts = finalState.Graph.Structure.Vertices |> Set.toSeq |> Seq.collect getVertexOutdatedOutputs
-        let allArtefactStatuses = finalState.Graph.Structure.Vertices |> Set.toSeq |> Seq.collect getVertexOutputStatusStrings |> Seq.sortBy fst |> Seq.map (fun x -> let id,status = x in sprintf "%10s:\t%s" id status)
+        let allArtefactStatuses = finalState.Graph.Structure.Vertices |> Set.toSeq |> Seq.collect getVertexOutputStatusStrings |> Seq.sortBy fst |> Seq.map (fun x -> let id,status = x in sprintf "%10s:\t%s" (fullIDtoString id) status)
         let statuses = String.Join("\n\t", allArtefactStatuses)
         printfn "Statuses:\n\t%s" statuses
         0

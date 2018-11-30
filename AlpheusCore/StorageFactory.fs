@@ -6,6 +6,7 @@ open ItisLab.Alpheus.Storage
 open System.Collections
 open System
 open System.Threading
+open ItisLab.Alpheus.AlphFiles
 
 let traceVerbose str =
     printfn "Storage:\t %s" str
@@ -173,11 +174,11 @@ let getStorageSaver (projectRoot:string)  storageDef =
 
 //returns fullID -> version -> Async<unit>
 let getStorageRestore (projectRoot:string)  (storageDef:Config.Storage) =    
-    let restore fullID (version:Hash.HashString) =
+    let restore (fullID:ArtefactFullID) (version:Hash.HashString) =
         async {                
-                let absPath = Path.Combine(projectRoot,fullID)
+                let absPath = fullIDtoFullPath projectRoot fullID
                 let storage = createStorage projectRoot storageDef                         
-                traceVerbose (sprintf "restoring  %s:%s" fullID (version.Substring(0,8).ToLower()))
+                traceVerbose (sprintf "restoring  %s:%s" (fullIDtoString fullID) (version.Substring(0,8).ToLower()))
                 let! checkResult = storage.IsInStorageAsync version                            
                 match checkResult with
                 |   SingleFile ->
@@ -196,7 +197,7 @@ let getStorageRestore (projectRoot:string)  (storageDef:Config.Storage) =
                     do! waitComplete
                     streams |> Array.iter (fun s -> s.Close(); s.Dispose())
                 |   Absent -> raise(InvalidDataException("Artefact is absent in storage"))        
-                traceVerbose (sprintf "restored  %s:%s" fullID (version.Substring(0,8).ToLower()))
+                traceVerbose (sprintf "restored  %s:%s" (fullIDtoString fullID) (version.Substring(0,8).ToLower()))
                 return ()            
         }
     restore
