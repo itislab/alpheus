@@ -162,12 +162,12 @@ let main argv =
                 |   None ->
                     printfn "The file you've specified is not under Alpheus experiment folder"
                     1
-                |   Some(experimentRoot) ->
-                    // removing .alph extension if it is present
-                    let artefactPath = if alphFilePath.EndsWith(".alph") then alphFilePath.Substring(0,alphFilePath.Length-5) else alphFilePath                               
-
-                    let fullID = ArtefactFullID.ID(Path.GetRelativePath(experimentRoot, artefactPath))
+                |   Some(experimentRoot) ->                    
                     let statusAsync = async {
+                        let! artefactPath = alphFilePathToArtefactPathAsync alphFilePath
+
+                        let fullID = ArtefactFullID.ID(Path.GetRelativePath(experimentRoot, artefactPath))
+                    
                         let! g = buildDependencyGraphAsync experimentRoot fullID
                         
                         //flow graph to calculate statuses
@@ -189,13 +189,13 @@ let main argv =
                 |   None ->
                     printfn "The file you've specified is not under Alpheus experiment folder"
                     1
-                |   Some(experimentRoot) ->
-                    // removing .alph extension if it is present
-                    let artefactPath = if alphFilePath.EndsWith(".alph") then alphFilePath.Substring(0,alphFilePath.Length-5) else alphFilePath
-                    
-                    let fullID = ArtefactFullID.ID(Path.GetRelativePath(experimentRoot, artefactPath))
+                |   Some(experimentRoot) ->                    
                     let statusAsync=
                         async {
+                        let! artefactPath = alphFilePathToArtefactPathAsync alphFilePath
+                    
+                        let fullID = ArtefactFullID.ID(Path.GetRelativePath(experimentRoot, artefactPath))
+                    
                         let! g = buildDependencyGraphAsync experimentRoot fullID
                 
                         //flow graph to calculate statuses
