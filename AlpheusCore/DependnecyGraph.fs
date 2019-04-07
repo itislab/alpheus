@@ -88,7 +88,8 @@ and ComputedVertex(firstOutputFullID : ArtefactFullID) =
     member s.Command
         with get() = command
         and set v = command <- v
-    /// From where the Command must be executed
+    /// From where the Command must be executed.
+    /// Experiment root related
     member s.WorkingDirectory
         with get() = workingDirectory
         and set (v:string) =
@@ -107,25 +108,38 @@ and ComputedVertex(firstOutputFullID : ArtefactFullID) =
             (AlphFiles.fullIDtoString s.FirstOutputFullID).CompareTo(AlphFiles.fullIDtoString typedOther.FirstOutputFullID)
 
 let artefactToAlphFile (artefact:ArtefactVertex) (alphFileFullPath:string) (experimentRoot:string): AlphFile =
+    if not (Path.IsPathRooted alphFileFullPath) then
+        raise(ArgumentException(sprintf "artefactToAlphFile argument alphFileFullPath must contain rooted full path, but the following was received: %s" alphFileFullPath))
+
     let methodVertex = artefact.Input
     // Fills in Signature field in compute section object with correct value       
     match methodVertex with
     |   ProducerVertex.Source(sourceVertex) -> 
+            let snapshotSection = 
+                {
+                    Version = sourceVertex.Artefact.Version
+                    Type = if isFullIDDirectory sourceVertex.Artefact.Artefact.FullID then DirectoryArtefact else FileArtefact
+                }
             {
-                Origin = Snapshot sourceVertex.Artefact.Version
+                Origin = Snapshot snapshotSection
                 IsTracked = sourceVertex.Artefact.Artefact.IsTracked
             }            
     |   ProducerVertex.Computed(computedVertex) ->
         // dependency graph contains all paths relative to project root
         // alpheus files contains all paths relative to alph file
         let fullIDtoRelative = AlphFiles.fullIDtoRelative experimentRoot alphFileFullPath
+        
         let computeSection =
-            let relativeWorkingDir = (computedVertex.WorkingDirectory+Path.DirectorySeparatorChar.ToString())            
+            let alphFileRelativeWorkingDir = 
+                let alphFileDirFullPath = Path.GetDirectoryName(alphFileFullPath)
+                let candidate =
+                    Path.GetRelativePath(alphFileDirFullPath, Path.GetFullPath(Path.Combine(experimentRoot,computedVertex.WorkingDirectory)))
+                if candidate = "" then ("."+Path.DirectorySeparatorChar.ToString()) else candidate
             {
                 Inputs = computedVertex.Inputs |> Seq.map (fun x -> {ID= fullIDtoRelative x.Artefact.FullID ; Hash=x.Version}) |> Array.ofSeq
                 Outputs = computedVertex.Outputs |> Seq.map (fun x -> {ID= fullIDtoRelative x.Artefact.FullID; Hash=x.Version}) |> Array.ofSeq
                 Command = computedVertex.Command                
-                WorkingDirectory = if relativeWorkingDir = String.Empty then "." else relativeWorkingDir
+                WorkingDirectory = alphFileRelativeWorkingDir
                 Signature = String.Empty
                 OutputsCleanDisabled = computedVertex.DoNotCleanOutputs
             }
@@ -218,10 +232,10 @@ type Graph() =
                 let dequeuedArtefact = queue.Dequeue()
                 if not (Set.contains dequeuedArtefact processedOutputs) then
                     let fullOutputPath = Path.GetFullPath(Path.Combine(experimentRootPath,AlphFiles.fullIDtoString dequeuedArtefact.FullID))
-                    let alphfilePath = sprintf "%s.alph" fullOutputPath
-                    let alphfileDirPath = Path.GetDirectoryName(alphfilePath)+Path.DirectorySeparatorChar.ToString()
-                    let getFullID = relIDtoFullID experimentRootPath alphfilePath
-                    let! alphFileLoadResult = tryLoadAsync alphfilePath                    
+                    let alphFileFullPath = artefactPathToAlphFilePath fullOutputPath
+                   
+                    let getFullID = relIDtoFullID experimentRootPath alphFileFullPath
+                    let! alphFileLoadResult = tryLoadAsync alphFileFullPath                    
                     match alphFileLoadResult with
                     |   None -> 
                         // Absence of .alph file means that the artefact is initial (not produced)
@@ -241,19 +255,25 @@ type Graph() =
                         vertex.Artefact <- versionedArtefact
                         // 2a) connect the method vertex to the outputs
                         s.ConnectArtefactAsOutput versionedArtefact (Source vertex)
+
                         // Dumping alph file to disk
-                        let alphFile = artefactToAlphFile dequeuedArtefact alphfilePath experimentRootPath
-                        do! AlphFiles.saveAsync alphFile alphfilePath 
+                        // let alphFile = artefactToAlphFile dequeuedArtefact alphFileFullPath experimentRootPath
+                        // do! AlphFiles.saveAsync alphFile alphFileFullPath 
                     |   Some(alphFile) ->
                         // Alph file exists
                         dequeuedArtefact.IsTracked <- alphFile.IsTracked
                         match alphFile.Origin with
-                        |   DataOrigin.Snapshot(expctedVersion) ->
+                        |   DataOrigin.Snapshot(snapshot) ->
                             // Snapshot in .alph file means that is was snapshoted, thus Tracked
                             // 1) allocation a method vertex
                             let vertex = s.AllocateSnapshotVertex(dequeuedArtefact.FullID)
+
+                            match snapshot.Type with
+                            |   FileArtefact -> assert(not (isFullIDDirectory dequeuedArtefact.FullID))
+                            |   DirectoryArtefact -> assert(isFullIDDirectory dequeuedArtefact.FullID)
+
                             // setting up expected version
-                            let artefact = { vertex.Artefact with Version=expctedVersion }
+                            let artefact = { vertex.Artefact with Version=snapshot.Version }
                             vertex.Artefact <- artefact
                             // 2a) connect the method vertex to the outputs
                             s.ConnectArtefactAsOutput artefact (Source vertex)
@@ -281,8 +301,11 @@ type Graph() =
 
                             methodVertex.Command <- computeSection.Command
                             
-                            let workingDirRootBased = Path.GetRelativePath(experimentRootPath,Path.GetFullPath(Path.Combine(alphfileDirPath,computeSection.WorkingDirectory)))
-                            methodVertex.WorkingDirectory <- if workingDirRootBased = String.Empty then "." else workingDirRootBased
+                            let expRootRelatedWorkingDir =
+                                let alphFileDir = Path.GetDirectoryName(alphFileFullPath)
+                                Path.GetRelativePath(experimentRootPath,Path.GetFullPath(Path.Combine(alphFileDir,computeSection.WorkingDirectory)))
+
+                            methodVertex.WorkingDirectory <- expRootRelatedWorkingDir
 
                             //outputs match check
                             if methodVertex.Outputs.Count > 0 then

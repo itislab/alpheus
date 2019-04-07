@@ -49,7 +49,9 @@ let rec hashDirectoryAsync (fullPath:string) =
                 fullPath + Path.DirectorySeparatorChar.ToString()
         let fileNamesAbs =
             Directory.GetFiles fullPath            
-            |> Array.filter (fun name -> not(name.EndsWith(".hash"))) // ignoring hash file
+            |> Array.filter (fun name -> not(name.EndsWith(".hash") || name.EndsWith(".alph"))) // ignoring hash file and .alph files
+            // Assuming that if the code traverses .alph file, it means that the parent directory is being referenced by alpheus
+            // And standalong files (also referenced by alpheus and having .alph files) within this directory should not influence the hash of the parent dir
             |> Array.sort
         let fileNamesRel =
             fileNamesAbs
@@ -80,7 +82,8 @@ let rec hashDirectoryAsync (fullPath:string) =
 
 
 let hashDataAsync fullPath =
-    async {                
+    async {
+            printfn "%s" (sprintf "Hashing %s ..." fullPath)
             if File.Exists fullPath then
                 let! hash = hashFileAsync fullPath
                 return Some(hashToString hash)

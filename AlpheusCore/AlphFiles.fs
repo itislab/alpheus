@@ -3,14 +3,40 @@
 open Newtonsoft.Json
 open System.IO
 open Hash
+open System
+open ItisLab.Alpheus
 
 /// Path relative to the project root
+/// Trailing slash indicates that the artifact is folder
 type ArtefactFullID =
     ID of string
 
+let isFullIDDirectory (fullID:ArtefactFullID) =
+    match fullID with
+    |   ArtefactFullID.ID s -> s.EndsWith(Path.DirectorySeparatorChar)
+
 /// Path relative to some .alph file
+/// Trailing slash indicates that the artifact is folder
 type RelativeArtefactID = 
     ID of string
+
+let isRelativeIDDirectory (relID:RelativeArtefactID) =
+    match relID with
+    |   RelativeArtefactID.ID s -> s.EndsWith(Path.DirectorySeparatorChar)
+
+//GetDirectoryName('C:\MyDir\MySubDir\myfile.ext') returns 'C:\MyDir\MySubDir'
+//GetDirectoryName('C:\MyDir\MySubDir') returns 'C:\MyDir'
+//GetDirectoryName('C:\MyDir\') returns 'C:\MyDir'          <----- '\' at the end IS striped
+//GetDirectoryName('C:\MyDir') returns 'C:\'
+//GetDirectoryName('C:\') returns ''
+
+// GetFullPath('mydir') returns 'C:\Users\dmitr\source\repos\PathsUtils\PathsUtils\bin\Debug\netcoreapp2.1\mydir'
+// GetFullPath('myfile.ext') returns 'C:\Users\dmitr\source\repos\PathsUtils\PathsUtils\bin\Debug\netcoreapp2.1\myfile.ext'
+// GetFullPath('\mydir') returns 'C:\mydir'
+// GetFullPath('mydir\') returns 'C:\Users\dmitr\source\repos\PathsUtils\PathsUtils\bin\Debug\netcoreapp2.1\mydir\'            <----- '\' at the end is NOT striped
+
+//  string[] paths = { @"d:\archives", "2001", "media", @"images\" };
+//  Path.Combine(paths) returns d:\archives\2001\media\images\                            <----- '\' at the end is NOT striped
 
 let fullIDtoString (fullID:ArtefactFullID) =
     match fullID with
@@ -30,9 +56,10 @@ let fullIDtoRelative rootPath (alphFileFullPath:string) (fullID:ArtefactFullID) 
     let fullID = 
         match fullID with
         |   ArtefactFullID.ID s -> s
-    let absPath = Path.GetFullPath(Path.Combine(rootPath,fullID))
-    let alphDir = Path.GetDirectoryName(alphFileFullPath)
-    let relID:RelativeArtefactID = RelativeArtefactID.ID(Path.GetRelativePath(alphDir,absPath))
+    let artefactAbsPath = Path.GetFullPath(Path.Combine(rootPath,fullID))    
+    let fullAlphDir = Path.GetDirectoryName(alphFileFullPath)
+           
+    let relID:RelativeArtefactID = RelativeArtefactID.ID(Path.GetRelativePath(fullAlphDir,artefactAbsPath))
     relID
 
 let relIDtoFullID rootPath (alphFileFullPath:string) (relID:RelativeArtefactID)  =
@@ -52,19 +79,29 @@ type VersionedArtefact = {
 type ComputeSection =  {
     Inputs: VersionedArtefact array
     Outputs: VersionedArtefact array
+    /// Relative to the alph file location
     WorkingDirectory: string
     Command: string    
     Signature: HashString
     OutputsCleanDisabled: bool
 }
 
+type ArtefactType =
+    |   FileArtefact
+    |   DirectoryArtefact
+
+type SnapshotSection = {
+    Type: ArtefactType
+    Version : HashString
+}
 
 type DataOrigin =
     |   Computed of ComputeSection
-    |   Snapshot of HashString    
+    |   Snapshot of SnapshotSection    
 
 type AlphFile = {
     Origin: DataOrigin
+    /// Has ever been saved to some storage
     IsTracked: bool
 }
 
@@ -85,6 +122,42 @@ let tryLoadAsync (filepath:string) =
         else
             return None
     }
+   
+   
+/// Full path transformed to full path. Relative to relative.
+let artefactPathToAlphFilePath (artefactPath:string) =
+    let prefix = 
+        if artefactPath.EndsWith(Path.DirectorySeparatorChar) then
+            artefactPath.Substring(0,artefactPath.Length-1)
+        else
+            artefactPath
+    sprintf "%s.alph" prefix   
+
+/// Full path transformed to full path. Relative to relative.
+let alphFilePathToArtefactPathAsync (alphFilePath:string) =
+    async {
+        if not (alphFilePath.EndsWith(".alph")) then raise(ArgumentException(sprintf "%s path does not end with \".alph\"" alphFilePath))
+        // we need to know whether the corresponding artefact is directory (e.g. its ID ends with '\') or single file
+        // to figure this out we read the alph file content. First output by convention corresponds to the associated artefact (NOTE: each artefact has correspondent alph file)
+        let! loaded  = tryLoadAsync alphFilePath
+        match loaded with
+        |   None -> return failwith "alphFilePathToArtefactPath can be executed only for existent alph files"
+        |   Some(alphFile) ->
+            let isDir =
+                match alphFile.Origin with
+                |   Computed(comp) ->
+                    if comp.Outputs.Length>0 then
+                        isRelativeIDDirectory comp.Outputs.[0].ID
+                    else
+                        failwith "alphFile does not specify any output artefacts. How it was created at all!?"
+                |   Snapshot(snap) ->
+                    match snap.Type with
+                    |   DirectoryArtefact -> true
+                    |   FileArtefact -> false
+            let suffix = if isDir then Path.DirectorySeparatorChar.ToString() else ""
+            return (alphFilePath.Substring(0,alphFilePath.Length-5) + suffix)
+    }
+
 
 /// Computes signature of supplied computeSection (Signature and isTracked member inside this computeSection is ignored during hash calculation)
 let getSignature (computeSection:ComputeSection) =

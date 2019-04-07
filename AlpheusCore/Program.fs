@@ -153,7 +153,7 @@ let main argv =
                 if filePath.EndsWith(".alph") then
                     filePath
                 else
-                    sprintf "%s.alph" filePath
+                    artefactPathToAlphFilePath filePath
             if not (File.Exists(alphFilePath)) then
                printfn "Can't find .alph file \"%s\"" alphFilePath
                1
@@ -179,7 +179,8 @@ let main argv =
         elif parseResults.Contains Status then
             let statusArgs = parseResults.GetResult <@ Status @>
             let filepath = statusArgs.GetResult <@ StatusArgs.File  @>
-            let alphFilePath = if filepath.EndsWith(".alph") then filepath else (sprintf "%s.alph" filepath)
+            let alphFilePath = artefactPathToAlphFilePath filepath
+            
             if not (File.Exists(alphFilePath)) then
                printfn "The alph file %s does not exist" alphFilePath
                1
@@ -191,7 +192,7 @@ let main argv =
                 |   Some(experimentRoot) ->
                     // removing .alph extension if it is present
                     let artefactPath = if alphFilePath.EndsWith(".alph") then alphFilePath.Substring(0,alphFilePath.Length-5) else alphFilePath
-            
+                    
                     let fullID = ArtefactFullID.ID(Path.GetRelativePath(experimentRoot, artefactPath))
                     let statusAsync=
                         async {
@@ -206,11 +207,11 @@ let main argv =
         elif parseResults.Contains Restore then
             let restoreArgs = parseResults.GetResult <@ Restore @>
             let inputpath = restoreArgs.GetResult <@ RestoreArgs.Path @>
-            let alphFilePath,filePath =
+            let alphFilePath =
                 if inputpath.EndsWith(".alph") then
-                    inputpath, (inputpath.Substring(0,inputpath.Length-5))
+                    inputpath
                 else
-                    (sprintf "%s.alph" inputpath),inputpath
+                    artefactPathToAlphFilePath inputpath
             match Config.tryLocateExpereimentRoot alphFilePath with
                 |   None ->
                     printfn "The file/dir you've specified is not under Alpheus experiment folder"
@@ -224,11 +225,12 @@ let main argv =
                                 printfn "There is no %s file on disk to fetch the restore version from" alphFilePath
                                 return 2
                             |   Some(alphFile) ->
-                                let fullID = AlphFiles.ArtefactFullID.ID(Path.GetRelativePath(experimentRoot, filePath))
-                                let absFilePath = Path.GetFullPath(filePath)                                
+                                let! artefactPath =  alphFilePathToArtefactPathAsync alphFilePath
+                                let fullID = AlphFiles.ArtefactFullID.ID(Path.GetRelativePath(experimentRoot, artefactPath))
+                                let absFilePath = Path.GetFullPath(artefactPath)                                
                                 let versionToRestore =
                                     match alphFile.Origin with
-                                    |   Snapshot(ver) -> ver
+                                    |   Snapshot(ver) -> ver.Version
                                     |   Computed(comp) ->
                                         let idToFullID = AlphFiles.relIDtoFullID experimentRoot absFilePath                                            
                                         (comp.Outputs |> Seq.find (fun o -> (idToFullID o.ID) = fullID)).Hash                                
@@ -254,11 +256,11 @@ let main argv =
             let storageName = saveArgs.GetResult <@ SaveArgs.Storage @>
             
             let inputpath = saveArgs.GetResult <@ SaveArgs.Path @>
-            let alphFilePath,filePath =
+            let alphFilePath =
                 if inputpath.EndsWith(".alph") then
-                    inputpath, (inputpath.Substring(0,inputpath.Length-5))
+                    inputpath
                 else
-                    (sprintf "%s.alph" inputpath),inputpath
+                    artefactPathToAlphFilePath inputpath
 
             match Config.tryLocateExpereimentRoot alphFilePath with
                 |   None ->
@@ -267,29 +269,43 @@ let main argv =
                 |   Some(experimentRoot) ->     
                     let saveComputation = 
                         async {                            
-                            let! alphFile =
+                            let! alphFile,artefactPath =
                                 async {
                                     let! loadResults = AlphFiles.tryLoadAsync alphFilePath                                                                        
+                                    let! artefactPath =
+                                        async {
+                                            if inputpath.EndsWith(".alph") then
+                                                // extracting from alph file
+                                                let! result = alphFilePathToArtefactPathAsync inputpath
+                                                return result
+                                            else
+                                                return inputpath
+                                        }
                                     match loadResults with
                                     |   None ->                                
-                                        // This is "source" file without .alph file created yet. creating an .alphfile for it                                        
-                                        let! hashResult = Hash.fastHashDataAsync filePath
+                                        // This is "source" file without .alph file created yet. creating an .alphfile for it                                                                                
+                                        let! hashResult = Hash.fastHashDataAsync artefactPath
                                         match hashResult with
                                         |   None -> return raise(InvalidDataException("The data to save does not exist"))
                                         |   Some(version) ->
+                                            let snapshotSection =
+                                                {
+                                                    Version = version
+                                                    Type = if artefactPath.EndsWith(Path.DirectorySeparatorChar) then DirectoryArtefact else FileArtefact
+                                                }
                                             return {
                                                 IsTracked = true
-                                                Origin = Snapshot version
-                                            }
+                                                Origin = Snapshot snapshotSection
+                                            },artefactPath
                                     |   Some(alphFile) ->
                                         return {
                                                 alphFile with
                                                 IsTracked = true
-                                        }                                    
+                                        },artefactPath                             
                                 }                                       
                             do! AlphFiles.saveAsync alphFile alphFilePath
                             
-                            let fullID = ArtefactFullID.ID(Path.GetRelativePath(experimentRoot, filePath))
+                            let fullID = ArtefactFullID.ID(Path.GetRelativePath(experimentRoot, artefactPath))
                     
                             let! g = buildDependencyGraphAsync experimentRoot fullID                                                                                    
                             
@@ -355,7 +371,7 @@ let main argv =
                 
                     // saving command and current working dir
                     let cwd = Directory.GetCurrentDirectory()
-                    let rootBasedCwd = Path.GetRelativePath(experimentRoot, cwd)
+                    let rootBasedCwd = Path.GetRelativePath(experimentRoot, cwd) + Path.DirectorySeparatorChar.ToString()
                     methodVertex.WorkingDirectory <- rootBasedCwd
                     methodVertex.Command <- command
 
@@ -374,11 +390,11 @@ let main argv =
                                     alphFilePath
                                 else
                                     Path.Combine(".",alphFilePath)
-                            let alphFileDir = Path.GetFullPath(Path.GetDirectoryName(alphFilePath))
-                            let alphFile = DependencyGraph.artefactToAlphFile artefact alphFileDir experimentRoot                                                
+                            let alphFileFullPath = Path.GetFullPath(alphFilePath)
+                            let alphFile = DependencyGraph.artefactToAlphFile artefact alphFileFullPath experimentRoot                                                
                             do! AlphFiles.saveAsync alphFile alphFilePath
                         }
-                    let outputAlphPaths = List.map (fun x -> sprintf "%s.alph" x) outputs
+                    let outputAlphPaths = List.map (fun x -> artefactPathToAlphFilePath x) outputs
                     let! dummy = List.map2 updateAlphFileAsync outputAlphPaths outputVertices |> Async.Parallel
 
                     return ()
