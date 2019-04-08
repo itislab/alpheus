@@ -225,6 +225,7 @@ let main argv =
                                 printfn "There is no %s file on disk to fetch the restore version from" alphFilePath
                                 return 2
                             |   Some(alphFile) ->
+                                let alphFileFullPath = Path.GetFullPath(alphFilePath)
                                 let! artefactPath =  alphFilePathToArtefactPathAsync alphFilePath
                                 let fullID = AlphFiles.ArtefactFullID.ID(Path.GetRelativePath(experimentRoot, artefactPath))
                                 let absFilePath = Path.GetFullPath(artefactPath)                                
@@ -232,7 +233,8 @@ let main argv =
                                     match alphFile.Origin with
                                     |   Snapshot(ver) -> ver.Version
                                     |   Computed(comp) ->
-                                        let idToFullID = AlphFiles.relIDtoFullID experimentRoot absFilePath                                            
+                                        let idToFullID =
+                                            AlphFiles.relIDtoFullID experimentRoot alphFileFullPath                                            
                                         (comp.Outputs |> Seq.find (fun o -> (idToFullID o.ID) = fullID)).Hash                                
                                 let! config = Config.openExperimentDirectoryAsync experimentRoot
                                 let checker = config.ConfigFile.Storage |> Map.toSeq |> StorageFactory.getPresenseChecker experimentRoot
