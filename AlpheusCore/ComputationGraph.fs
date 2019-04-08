@@ -22,42 +22,41 @@ type SourceGraphNode(orphanArtefact:DependencyGraph.ArtefactVertex, experimentRo
     inherit ComputationGraphNode(0,1)
 
     override s.Execute(_, _) = //ignoring inputs and checkpoint.
-        // Just utilizing parallel method computation feature of AngaraFlow to check the statuses of all method vertex
-        // source method is always up to date, thus succeeds
+        // Utilizing parallel method computation feature of AngaraFlow to update the statuses of all method vertex if needed
         let hash =
             match orphanArtefact.ActualHash with
             |   None -> raise(InvalidOperationException("Source artefact must be on disk"))
             |   Some(actualHash) ->
                 // dumping actual hash as expected
-                let dumpComputations = 
+                let computation = 
                     async {
                         let artefactFullPath = fullIDtoFullPath experimentRoot orphanArtefact.FullID
                         let artefactType =
                             if artefactFullPath.EndsWith(Path.DirectorySeparatorChar) then DirectoryArtefact else FileArtefact
                         let alphFileFullPath = artefactPathToAlphFilePath artefactFullPath
                         let! alphLoadResults = AlphFiles.tryLoadAsync alphFileFullPath
-                        let snapshotSection = 
-                            {
-                                Type = artefactType
-                                Version = actualHash
-                            }
-                        let alphToDump =
-                            match alphLoadResults with
-                            |   None ->
+                        
+                        
+                        match alphLoadResults with
+                        |   None ->
+                            // if the .alph is absent, simply returning the hash of the referenced file/dir
+                            return actualHash
+                        |   Some(alphFile) ->
+                            // but if the .alph file is present, we need to update it's version during the execution
+                            let snapshotSection = 
                                 {
-                                    IsTracked = false
-                                    Origin = Snapshot snapshotSection
+                                    Type = artefactType
+                                    Version = actualHash
                                 }
-                            |   Some(alphFile) ->
+                            let alphFile =
                                 {
                                     alphFile with
                                         Origin = Snapshot snapshotSection
                                 }
-                        
-                        do! AlphFiles.saveAsync alphToDump alphFileFullPath
-                        return actualHash
+                            do! AlphFiles.saveAsync alphFile alphFileFullPath
+                            return actualHash
                     }
-                Async.RunSynchronously dumpComputations            
+                Async.RunSynchronously computation            
         seq{ yield [{FullID = orphanArtefact.FullID; Hash = hash} :> Artefact], null }
 
 type IntermediateGraphNode(methodVertex:DependencyGraph.ComputedVertex, experimentRoot:string) =
@@ -186,8 +185,8 @@ type IntermediateGraphNode(methodVertex:DependencyGraph.ComputedVertex, experime
 
                         let updateAlphFileAsync (alphFilePath:string) artefact =
                             async {
-                                let alphFileDir = Path.GetFullPath(Path.GetDirectoryName(alphFilePath))
-                                let alphFile = DependencyGraph.artefactToAlphFile artefact.Artefact alphFileDir experimentRoot
+                                let alphFileFullPath = Path.GetFullPath(alphFilePath)
+                                let alphFile = DependencyGraph.artefactToAlphFile artefact.Artefact alphFileFullPath experimentRoot
                                 do! AlphFiles.saveAsync alphFile alphFilePath
                             }
                             

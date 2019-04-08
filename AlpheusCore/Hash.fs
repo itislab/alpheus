@@ -95,8 +95,13 @@ let hashDataAsync fullPath =
     }
     
 /// optimization that caches the computed hashes into *.hash files
-let fastHashDataAsync fullPath =
-    let hashFilePath = sprintf "%s.hash" fullPath
+let fastHashDataAsync (fullPath:string) =
+    let hashFilePath =
+        let prefix =
+            if fullPath.EndsWith(Path.DirectorySeparatorChar) then
+                fullPath.Substring(0,fullPath.Length-1)
+            else fullPath
+        sprintf "%s.hash" prefix
     let hashAndSave() =            
         async {
             let! hashStr = hashDataAsync fullPath

@@ -303,7 +303,8 @@ type Graph() =
                             
                             let expRootRelatedWorkingDir =
                                 let alphFileDir = Path.GetDirectoryName(alphFileFullPath)
-                                Path.GetRelativePath(experimentRootPath,Path.GetFullPath(Path.Combine(alphFileDir,computeSection.WorkingDirectory)))
+                                let path = Path.GetRelativePath(experimentRootPath,Path.GetFullPath(Path.Combine(alphFileDir,computeSection.WorkingDirectory)))
+                                if path.EndsWith(Path.DirectorySeparatorChar) then path else path+Path.DirectorySeparatorChar.ToString()
 
                             methodVertex.WorkingDirectory <- expRootRelatedWorkingDir
 
