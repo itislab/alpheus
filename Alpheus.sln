@@ -5,6 +5,10 @@ VisualStudioVersion = 15.0.27703.2042
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "AlpheusCore", "AlpheusCore\AlpheusCore.fsproj", "{F429F84A-B34A-4FA2-9610-6D50B921D5B1}"
 EndProject
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "AlpheusDaemon", "AlpheusDaemon\AlpheusDaemon.fsproj", "{C569C7F4-20B7-40FE-913C-91BF379924AC}"
+EndProject
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Client", "AlpheusDaemon\Client\src\Client.fsproj", "{99F046AE-B4D4-4E5E-B0B7-D528B4D618D6}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +19,14 @@ Global
 		{F429F84A-B34A-4FA2-9610-6D50B921D5B1}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F429F84A-B34A-4FA2-9610-6D50B921D5B1}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F429F84A-B34A-4FA2-9610-6D50B921D5B1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C569C7F4-20B7-40FE-913C-91BF379924AC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C569C7F4-20B7-40FE-913C-91BF379924AC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C569C7F4-20B7-40FE-913C-91BF379924AC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C569C7F4-20B7-40FE-913C-91BF379924AC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{99F046AE-B4D4-4E5E-B0B7-D528B4D618D6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{99F046AE-B4D4-4E5E-B0B7-D528B4D618D6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{99F046AE-B4D4-4E5E-B0B7-D528B4D618D6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{99F046AE-B4D4-4E5E-B0B7-D528B4D618D6}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

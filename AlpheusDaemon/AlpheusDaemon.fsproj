@@ -1,0 +1,42 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>netcoreapp2.1</TargetFramework>
+    <YarnWorkingDir>$(MSBuildProjectDirectory)/Client</YarnWorkingDir>
+    <ClientPublishDir>Client/dist</ClientPublishDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="Client/**" />
+    <None Remove="Client/node_modules/**" />
+    <None Remove="Client/src/**" />
+    <None Remove="Client/dist/**" />
+    <Content Include="Client/dist/**"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory> </Content>
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Yarn.MSBuild" Version="1.13.0" />
+  </ItemGroup>
+
+  <Target Name="BuildClient" BeforeTargets="Build" Inputs="Client/yarn.lock;Client/package.json" Outputs="Client/node_modules/.yarn-integrity">
+
+    <Yarn Command="install" WorkingDirectory="$(YarnWorkingDir)" />
+    <ConvertToAbsolutePath Paths="$(ClientPublishDir)">
+      <Output TaskParameter="AbsolutePaths" PropertyName="AbsClientPublishDir" />
+    </ConvertToAbsolutePath>
+    <Yarn Command="run webpack --env.prod --env.publishDir=$(AbsClientPublishDir)" WorkingDirectory="$(YarnWorkingDir)" />
+  </Target>
+
+  <!--<Target Name="PublishWebpack"
+          BeforeTargets="Publish">
+
+    <ConvertToAbsolutePath Paths="$(PublishDir)">
+      <Output TaskParameter="AbsolutePaths" PropertyName="AbsPublishDir" />
+    </ConvertToAbsolutePath>
+
+    <Yarn Command="run webpack - -env.prod - -env.publishDir=$(AbsPublishDir)" />
+  </Target> -->
+
+</Project>
