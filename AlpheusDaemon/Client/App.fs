@@ -16,9 +16,7 @@ open Thoth.Json
 
 /// The different elements of the completed report.
 type Report =
-    { Location : LocationResponse
-      Crimes : CrimeResponse array
-      Weather: WeatherResponse }
+    { Location : LocationResponse }
 
 type ServerState = Idle | Loading | ServerError of string
 
@@ -53,15 +51,13 @@ let inline getJson<'T> (response:Fetch.Fetch_types.Response) = response.text() |
 let getResponse postcode = promise {
     let record = { Postcode = postcode }
     let! location = Fetch.postRecord "/api/distance/" record [] |> Promise.bind getJson<LocationResponse>
-    let! crimes = Fetch.postRecord "/api/crime/" record [] |> Promise.bind getJson<CrimeResponse array>
-    let! weather = Fetch.postRecord "/api/weather/" record [] |> Promise.bind getJson<WeatherResponse>
     //let! location = Fetch.fetchAs<LocationResponse> (sprintf "/api/distance/%s" postcode) decoderForLocationResponse []
     //let! crimes = Fetch.tryFetchAs (sprintf "api/crime/%s" postcode) decoderForCrimeResponse [] |> Promise.map (Result.defaultValue [||])
     //let! weather = Fetch.fetchAs<WeatherResponse> (sprintf "/api/weather/%s" postcode) decoderForWeatherResponse []
     (* Task 4.5 WEATHER: Fetch the weather from the API endpoint you created.
        Then, save its value into the Report below. You'll need to add a new
        field to the Report type first, though! *)
-    return { Location = location; Crimes = crimes; Weather = weather } }
+    return { Location = location } }
  
 /// The update function knows how to update the model given a message.
 let update msg model =
@@ -212,24 +208,6 @@ let view model dispatch =
                     Tile.ancestor [ ] [
                         Tile.parent [ Tile.Size Tile.Is12 ] [
                             bingMapTile model.Location.Location.LatLong
-                        ]
-                    ]
-                yield
-                    Tile.ancestor [ ] [
-                        Tile.parent [ Tile.IsVertical; Tile.Size Tile.Is4 ] [ 
-                            locationTile model
-                            (* Task 4.6 WEATHER: Generate the view code for the weather tile
-                               using the weatherTile function, supplying the weather report
-                               from the model, and include it here as part of the list *)
-                        ]
-                        Tile.parent [ Tile.Size Tile.Is8 ] [
-                            crimeTile model.Crimes
-                        ]                   
-                    ]
-                yield
-                    Tile.ancestor [ ] [
-                        Tile.parent [ Tile.Size Tile.Is12 ] [
-                            weatherTile model.Weather
                         ]
                     ]
         ]
