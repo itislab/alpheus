@@ -31,5 +31,9 @@
         "webpack-cli": "^3.1.2",
         "webpack-dev-server": "^3.1.14",
         "whatwg-fetch": "^3.0.0"
+    },
+    "dependencies": {
+        "@babel/runtime-corejs2": "^7.4.3",
+        "core-js": "2.6.5"
     }
 }

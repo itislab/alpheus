@@ -9,13 +9,14 @@
     <None Include="**/*.png" />
     <None Include="**/*.jpg" />
     <None Include="**/*.gif" />
-    <Compile Include="../../Shared/**/*.fs" />
-    <Compile Include="Shared.fs" />
+    <Compile Include="../Shared/Shared.fs" />
+    <!--<Compile Include="../Shared/Shared.fs" />-->
     <Compile Include="ViewHelpers.fs" />
     <Compile Include="App.fs" />
     <Compile Include="Client.fs" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="Elmish.Bridge.Client" Version="2.0.1" />
     <PackageReference Include="Fable.Core" Version="2.0.3" />
     <PackageReference Include="Fable.Elmish.Debugger" Version="2.0.3" />
     <PackageReference Include="Fable.Elmish.HMR" Version="3.2.0" />
