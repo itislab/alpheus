@@ -4,6 +4,9 @@ open System.IO
 open System.IO.Compression
 open System.Threading.Tasks
 open System.Threading
+open System.Diagnostics
+open ItisLab.Alpheus.DebuggingHelpers
+open System
 
 type ArchivingMessage =
     | Filename of filename:string
@@ -75,13 +78,14 @@ let archiveDirFilesToStreamAsync (syncObj:obj) (totCount:int) (sharedcounter:int
                             //printfn "Archiving %s" filePath
                             let nameInArchive =                                 
                                 // relative path
-                                filePath.Replace(directoryFullPath,System.String.Empty)
-                                
+                                Path.GetRelativePath(directoryFullPath,filePath)                                
+                               
+                            printfn "archiver: Adding archive item %s" nameInArchive
                             let fileStreamInZip = archive.CreateEntry(nameInArchive, CompressionLevel.Fastest).Open()
                             do! Async.AwaitTask (memStream.CopyToAsync fileStreamInZip)
                             memStream.Dispose()
                             fileStreamInZip.Dispose()
-                            //printfn "Archived %s" filePath
+                            printfn "archiver: Archived %s as %s" filePath nameInArchive
                             inbox.Post(Done filePath)
                         } |> Async.Start
             printfn "All %d files are saved" totalFiles |> ignore
@@ -99,10 +103,41 @@ let archiveDirFilesToStreamAsync (syncObj:obj) (totCount:int) (sharedcounter:int
 let artefactFromArchiveStreamAsync (targetAbsPath:string) (streamToReadFrom:Stream) isSingleFile =
     async {
         do! Async.SwitchToThreadPool()
+        
+        //let dbgAzureStream = new DebuggingStream("storage stream (for"+targetAbsPath+")",streamToReadFrom)
+
+        //dbgAzureStream.IsTraceEnabled <- false
+
+        // use memStream = new MemoryStream()
+        
+        //printfn "archiver: copying storage stream"
+        //do! Async.AwaitTask(dbgAzureStream.CopyToAsync(memStream))
+        //printfn "archiver: storage stream copied"
+        
         use archive = new ZipArchive(streamToReadFrom, ZipArchiveMode.Read, true)
+        
+        printfn "archiver: Archive content to extract to disk"
+        archive.Entries |> Seq.iter (fun entry -> printfn "archiver: %s:%s" entry.Name entry.FullName)
+
+
+        //printfn "archiver: compressed stream opened"
         if isSingleFile then
             let entry = archive.GetEntry("__artefact__")
             entry.ExtractToFile(targetAbsPath,true)
+            printfn "%s single file artefact restored" targetAbsPath
         else
-            archive.ExtractToDirectory targetAbsPath
+            printfn "archiver: decompressing stream into %s" targetAbsPath
+            //let tmpDirName = Path.Combine(System.IO.Path.GetTempPath(), Guid.NewGuid().ToString())
+            
+            try
+                //let dirInfo = Directory.CreateDirectory tmpDirName
+                //printfn "archiver: temp dir (%s) created" tmpDirName
+
+                archive.ExtractToDirectory targetAbsPath
+                //printfn "archiver: decompressed %s" targetAbsPath
+            with
+                | :? System.Exception as exc ->
+                    printfn "%A" exc  
+                    raise exc
+            
     }

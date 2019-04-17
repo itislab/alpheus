@@ -51,10 +51,14 @@ let throttlingAgent limit =
         | Completed ->
             decr running
             completeCounter <- completeCounter + 1
+            // printfn "throttling: %d complete" (int (round((float completeCounter)/(float totCount)*100.0)))
             if completeCounter = totCount then
                 mre.Set()
-        | Enqueue w -> queue.Enqueue(w)
+        | Enqueue w ->
+            // printfn "throttling: enqueued new work package"
+            queue.Enqueue(w)
         | ExpectedCount count ->
+            // printfn "throttling: waiting for %d work packages" count
             totCount <- count            
         // If we have less than limit & there is some work to
         // do, then start the work in the background!
@@ -64,7 +68,10 @@ let throttlingAgent limit =
           do! 
             // When the work completes, send 'Completed'
             // back to the agent to free a slot
-            async { do! work
+            async {
+                    // printfn "throttling: starting a work package"
+                    do! work
+                    // printfn "throttling: Complete work package"
                     inbox.Post(Completed) } 
             |> Async.StartChild
             |> Async.Ignore }),completeAsync
@@ -184,18 +191,25 @@ let getStorageRestore (projectRoot:string)  (storageDef:Config.Storage) =
                 |   SingleFile ->
                     let! stream = storage.getFileRestoreStreamAsync version
                     do! ArtefactArchiver.artefactFromArchiveStreamAsync absPath stream true
+                    stream.Dispose()
                 |   ArtefactType.Directory ->
                     let! streams = storage.getDirRestoreStreamsAsync version
                     let streamsCount = Array.length streams
-                    let extracter stream = ArtefactArchiver.artefactFromArchiveStreamAsync absPath stream false
+                    let extracter stream = 
+                        async {
+                            // printfn "WP: starting async artefact restore"
+                            do! ArtefactArchiver.artefactFromArchiveStreamAsync absPath stream false
+                            // printfn "WP: async artefact restore done"
+                            stream.Dispose()
+                            //printfn "Last op of the work package"
+                            }
                     let extractionComps = streams |> Array.map extracter
                     let concurrencyLevel = System.Environment.ProcessorCount*2
-                    traceVerbose (sprintf "using %d concurrent extractors to extract %d buckets" concurrencyLevel streamsCount)
+                    traceVerbose (sprintf "using pool of %d concurrent extractors to extract %d buckets" concurrencyLevel streamsCount)
                     let bucketProcessor,waitComplete = throttlingAgent concurrencyLevel
                     bucketProcessor.Post (ExpectedCount (Array.length extractionComps))
                     extractionComps |> Array.iter (fun x -> bucketProcessor.Post (Enqueue x))                    
                     do! waitComplete
-                    streams |> Array.iter (fun s -> s.Close(); s.Dispose())
                 |   Absent -> raise(InvalidDataException("Artefact is absent in storage"))        
                 traceVerbose (sprintf "restored  %s:%s" (fullIDtoString fullID) (version.Substring(0,8).ToLower()))
                 return ()            
