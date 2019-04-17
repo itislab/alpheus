@@ -12,6 +12,7 @@
     <Compile Include="../Shared/Shared.fs" />
     <Compile Include="Cytoscape.fs" />
     <Compile Include="ReactCytoscape.fs" />
+    <Compile Include="CytoscapeDagre.fs" />
     <!--<Compile Include="../Shared/Shared.fs" />-->
     <Compile Include="ViewHelpers.fs" />
     <Compile Include="App.fs" />

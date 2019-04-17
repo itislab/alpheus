@@ -249,10 +249,10 @@ let view model dispatch =
             //edgeCss.``arrow-scale`` <- Some 5.0
             edgeCss.label <- Some "data(label)"
             edgeStyle.style <- U2.Case2 edgeCss
-            let layoutOpts = createEmpty<GridLayoutOptions>
-            layoutOpts.name <- "grid"
-            layoutOpts.rows <- Some 1.0
-            layoutOpts.cols <- Some 2.0
+            let layoutOpts = createEmpty<NullLayoutOptions> // createEmpty<GridLayoutOptions>
+            layoutOpts.name <- "dagre" //"grid"
+            //layoutOpts.rows <- Some 1.0
+            //layoutOpts.cols <- Some 2.0
             let divStyle = createEmpty<ReactCytoscape.CytoscapeComponentStyle>
             divStyle.height <- "600px"
             divStyle.width <- "600px"

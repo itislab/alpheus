@@ -11,6 +11,7 @@ open Elmish.Debug
 open Elmish.HMR
 #endif
 
+Cytoscape.cytoscapeModuleImport.``use`` CytoscapeDagre.dagre
 Program.mkProgram init update view
 #if DEBUG
 |> Program.withConsoleTrace

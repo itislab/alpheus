@@ -7,6 +7,7 @@ open Fable.Import.Browser
 
 //let [<Import("*","cytoscape")>] cytoscape: Cytoscape.IExports = jsNative
 let [<Import("default","cytoscape")>] cytoscape: ?options: Cytoscape.CytoscapeOptions -> Cytoscape.Core = jsNative
+let [<Import("default","cytoscape")>] cytoscapeModuleImport: Cytoscape.IModuleUse = jsNative
 
 type [<AllowNullLiteral>] IExports =
     abstract cytoscape: ?options: Cytoscape.CytoscapeOptions -> Cytoscape.Core
@@ -14,12 +15,12 @@ type [<AllowNullLiteral>] IExports =
 
 module Cytoscape =
 
-    //type [<AllowNullLiteral>] IExports =
-    //    /// <summary>Register imported extension into cytoscape</summary>
-    //    /// <param name="module">Entry point for the extension, got by module = require('cy-ext')
-    //    /// or by import module from 'cy-ext'
-    //    /// http://js.cytoscape.org/#extensions</param>
-    //    abstract ``use``: ``module``: Ext -> unit
+    type [<AllowNullLiteral>] IModuleUse =
+        /// <summary>Register imported extension into cytoscape</summary>
+        /// <param name="module">Entry point for the extension, got by module = require('cy-ext')
+        /// or by import module from 'cy-ext'
+        /// http://js.cytoscape.org/#extensions</param>
+        abstract ``use``: ``module``: Ext -> unit
 
     type [<AllowNullLiteral>] Position =
         abstract x: float with get, set
