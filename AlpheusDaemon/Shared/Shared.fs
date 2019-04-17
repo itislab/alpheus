@@ -11,30 +11,15 @@ type Location =
 type PostcodeRequest = { Postcode : string }
 
 type LocationResponse = { Postcode : string; Location : Location; DistanceToLondon : float }
-type CrimeResponse = { Crime : string; Incidents : int }
-type WeatherType =
-    | Snow
-    | Sleet
-    | Hail
-    | Thunder
-    | HeavyRain
-    | LightRain
-    | Showers
-    | HeavyCloud
-    | LightCloud
-    | Clear
-    static member Parse =
-        let weatherTypes = FSharp.Reflection.FSharpType.GetUnionCases typeof<WeatherType>
-        fun (s:string) ->
-            weatherTypes
-            |> Array.find(fun w -> w.Name = s.Replace(" ", ""))
-            |> fun u -> FSharp.Reflection.FSharpValue.MakeUnion(u, [||]) :?> WeatherType
-    member this.Abbreviation =
-        match this with
-        | Snow -> "sn" | Sleet -> "sl" | Hail -> "h" | Thunder -> "t" | HeavyRain -> "hr"
-        | LightRain -> "lr" | Showers -> "s" | HeavyCloud -> "hc" | LightCloud -> "lc" | Clear -> "c"
 
-type WeatherResponse = { WeatherType : WeatherType; AverageTemperature : float }
+type ServerMsg =
+    | GiveLocation of PostcodeRequest
+
+type ClientMsg =
+    | GetLocation of LocationResponse
+
+module BridgeInfo =
+    let endpoint = "/socket"
 
 /// Provides validation on data. Shared across both client and server.
 module Validation =

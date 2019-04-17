@@ -17,6 +17,7 @@
     <None Remove="Client/.fable/**" />
     <None Include="package.json" />
     <None Include="webpack.config.js" />
+    <None Include="yarn.lock" />
     <!--
     <None Remove="Client/dist/**" />
     <Folder Include="Client/dist/">
@@ -26,6 +27,7 @@
     <Compile Include="Shared/Shared.fs" />
     <Compile Include="DataAccess.fs" />
     <Compile Include="Api.fs" />
+    <Compile Include="Socket.fs" />
     <Compile Include="Server.fs" />
   </ItemGroup>
 
