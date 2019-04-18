@@ -1,8 +1,13 @@
 namespace Shared
 
+type [<RequireQualifiedAccess>] NodeKind =
+    | Artefact
+    | Method
+
 type Node = {
     id: string
     label: string option
+    kind: NodeKind
 }
 
 type Edge = {

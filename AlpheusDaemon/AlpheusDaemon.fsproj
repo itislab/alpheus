@@ -52,6 +52,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\AlpheusCore\AlpheusCore.fsproj" />
     <ProjectReference Include="Client\Client.fsproj">
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
     </ProjectReference>

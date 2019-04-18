@@ -88,6 +88,10 @@ let view model dispatch =
         
         Container.container [] [
             
+            //yield Button.button [
+            //    Button.OnClick (fun _ -> Bridge.Send DoNothing)
+            //    ] [str "add node"]
+            
             
             let graph = model.graph
             match graph.nodes with
@@ -130,8 +134,8 @@ let view model dispatch =
                 //layoutOpts.rows <- Some 1.0
                 //layoutOpts.cols <- Some 2.0
                 let divStyle = createEmpty<ReactCytoscape.CytoscapeComponentStyle>
-                divStyle.height <- "600px"
-                divStyle.width <- "600px"
+                divStyle.height <- "1000px"
+                divStyle.width <- "1600px"
                 yield
                     ReactCytoscape.cytoscapeComponent [
                             ReactCytoscape.Elements defs

@@ -21,9 +21,9 @@ let browserRouter = router {
 //let config (services:IServiceCollection) =
 //    services.AddSingleton<Giraffe.Serialization.Json.IJsonSerializer>(Thoth.Json.Giraffe.ThothSerializer())
 
-let app = application {
+let app path = application {
     //use_router mainRouter
-    use_router (Socket.server ())
+    use_router (Socket.server path)
     url addr
     memory_cache 
     use_static clientPath
@@ -31,7 +31,11 @@ let app = application {
     //service_config config
     use_gzip }
 
-let browsePSI = ProcessStartInfo (addr)
-browsePSI.UseShellExecute <- true
-Process.Start(browsePSI) |> ignore // Race condition here - we need server to start before the browser will try to reach it. Fine for the prototype.
-run app
+[<EntryPoint>]
+let main args =
+    if args.Length <> 1 then failwith "Path to the repository must be provided as an argument"
+    let browsePSI = ProcessStartInfo (addr)
+    browsePSI.UseShellExecute <- true
+    Process.Start(browsePSI) |> ignore // Race condition here - we need server to start before the browser will try to reach it. Fine for the prototype.
+    run (app args.[0])
+    0
