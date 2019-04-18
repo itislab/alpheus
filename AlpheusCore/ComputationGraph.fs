@@ -22,35 +22,41 @@ type SourceGraphNode(orphanArtefact:DependencyGraph.ArtefactVertex, experimentRo
     inherit ComputationGraphNode(0,1)
 
     override s.Execute(_, _) = //ignoring inputs and checkpoint.
-        // Just utilizing parallel method computation feature of AngaraFlow to check the statuses of all method vertex
-        // source method is always up to date, thus succeeds
+        // Utilizing parallel method computation feature of AngaraFlow to update the statuses of all method vertex if needed
         let hash =
             match orphanArtefact.ActualHash with
             |   None -> raise(InvalidOperationException("Source artefact must be on disk"))
             |   Some(actualHash) ->
                 // dumping actual hash as expected
-                let dumpComputations = 
+                let computation = 
                     async {
-                        let filePath = fullIDtoFullPath experimentRoot orphanArtefact.FullID
-                        let alphFilePath = sprintf "%s.alph" filePath
-                        let! alphLoadResults = AlphFiles.tryLoadAsync alphFilePath
-                        let alphToDump =
-                            match alphLoadResults with
-                            |   None ->
+                        let artefactFullPath = fullIDtoFullPath experimentRoot orphanArtefact.FullID
+                        let artefactType =
+                            if artefactFullPath.EndsWith(Path.DirectorySeparatorChar) then DirectoryArtefact else FileArtefact
+                        let alphFileFullPath = artefactPathToAlphFilePath artefactFullPath
+                        let! alphLoadResults = AlphFiles.tryLoadAsync alphFileFullPath
+                        
+                        
+                        match alphLoadResults with
+                        |   None ->
+                            // if the .alph is absent, simply returning the hash of the referenced file/dir
+                            return actualHash
+                        |   Some(alphFile) ->
+                            // but if the .alph file is present, we need to update it's version during the execution
+                            let snapshotSection = 
                                 {
-                                    IsTracked = false
-                                    Origin = Snapshot actualHash
+                                    Type = artefactType
+                                    Version = actualHash
                                 }
-                            |   Some(alphFile) ->
+                            let alphFile =
                                 {
                                     alphFile with
-                                        Origin = Snapshot actualHash
+                                        Origin = Snapshot snapshotSection
                                 }
-                        
-                        do! AlphFiles.saveAsync alphToDump alphFilePath
-                        return actualHash
+                            do! AlphFiles.saveAsync alphFile alphFileFullPath
+                            return actualHash
                     }
-                Async.RunSynchronously dumpComputations            
+                Async.RunSynchronously computation            
         seq{ yield [{FullID = orphanArtefact.FullID; Hash = hash} :> Artefact], null }
 
 type IntermediateGraphNode(methodVertex:DependencyGraph.ComputedVertex, experimentRoot:string) =
@@ -99,13 +105,13 @@ type IntermediateGraphNode(methodVertex:DependencyGraph.ComputedVertex, experime
 
             // 1) Deleting outputs
             if not methodVertex.DoNotCleanOutputs then
-                let deletePath path =
-                    if File.Exists path then
-                        File.Delete path
-                    elif Directory.Exists path then
-                        Directory.Delete(path,true)
+                let deletePath (path:string) =
+                    if path.EndsWith(Path.DirectorySeparatorChar) then
+                        if Directory.Exists path then
+                            Directory.Delete(path,true)
                     else
-                        ()
+                        if File.Exists path then
+                            File.Delete path
                 let fullOutputPaths = Seq.map (fun (x:DependencyGraph.VersionedArtefact) -> AlphFiles.fullIDtoFullPath experimentRoot x.Artefact.FullID) methodVertex.Outputs |> List.ofSeq
                 List.iter deletePath fullOutputPaths
 
@@ -155,24 +161,32 @@ type IntermediateGraphNode(methodVertex:DependencyGraph.ComputedVertex, experime
                 // updating dependency versions in dependency graph
                 let updateVersions (artefacts:Set<DependencyGraph.VersionedArtefact>) =
                     let updateVersion (art:DependencyGraph.VersionedArtefact) = 
+                        let newVersion = 
+                            match art.Artefact.ActualHash with
+                            | Some(version) -> version
+                            | None ->
+                                printfn "WARNING: Artefact %s was not produced by the command supposed to create it" (fullIDtoString art.Artefact.FullID)
+                                String.Empty
                         {
-                            art with
-                                //TODO: handle absence of output file/dir
-                                Version = art.Artefact.ActualHash.Value //the value must be here, absence means that the output were not created
+                            art with                                
+                                Version = newVersion
                         }
                     Set.map updateVersion artefacts
                 methodVertex.Inputs <- updateVersions methodVertex.Inputs
                 methodVertex.Outputs <- updateVersions methodVertex.Outputs
 
-                // dumping to disk
+                // dumping updated alph files to disk
                 let diskDumpComputation = 
                     async {                        
-                        let outputAlphfilePaths = Array.map (fun (x:DependencyGraph.VersionedArtefact) -> (sprintf "%s.alph" (fullIDtoFullPath experimentRoot x.Artefact.FullID))) outputsArray
+                        let fullIDToFullAlphPath versionedArtefact =
+                            let fullArtefactPath = fullIDtoFullPath experimentRoot versionedArtefact.Artefact.FullID
+                            artefactPathToAlphFilePath fullArtefactPath
+                        let outputAlphfilePaths = Array.map fullIDToFullAlphPath outputsArray
 
                         let updateAlphFileAsync (alphFilePath:string) artefact =
                             async {
-                                let alphFileDir = Path.GetFullPath(Path.GetDirectoryName(alphFilePath))
-                                let alphFile = DependencyGraph.artefactToAlphFile artefact.Artefact alphFileDir experimentRoot
+                                let alphFileFullPath = Path.GetFullPath(alphFilePath)
+                                let alphFile = DependencyGraph.artefactToAlphFile artefact.Artefact alphFileFullPath experimentRoot
                                 do! AlphFiles.saveAsync alphFile alphFilePath
                             }
                             

@@ -70,6 +70,7 @@ type Storage(accountName:string,accountKey:string,containerName:string) =
                         stop <- true
                 
                 let! streams = streamTasks |> List.toArray |> Array.map Async.AwaitTask |> Async.Parallel
+                printfn "Azure storage: %d streams are opened for reading" (Array.length streams)
                 return streams
             }
 
