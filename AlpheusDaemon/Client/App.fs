@@ -63,6 +63,11 @@ let defineNode (node: Node) =
     dataDef.id <- Some node.id
     dataDef.["label"] <- Some (upcast (match node.label with Some l -> l | None -> node.id))
     def.data <- dataDef
+    match node.kind with
+    | NodeKind.Artefact ->
+        def.classes <- Some "artefact"
+    | NodeKind.Method ->
+        def.classes <- Some "method"
     def
 
 let defineEdge (edge: Edge) =
@@ -129,6 +134,16 @@ let view model dispatch =
                 //edgeCss.``arrow-scale`` <- Some 5.0
                 edgeCss.label <- Some "data(label)"
                 edgeStyle.style <- U2.Case2 edgeCss
+                let artefactStyle = createEmpty<StylesheetStyle>
+                artefactStyle.selector <- ".artefact"
+                let artefactCss = createEmpty<Css.Node>
+                artefactCss.``background-color`` <- Some "gray"
+                artefactStyle.style <- U2.Case1 artefactCss
+                let methodStyle = createEmpty<StylesheetStyle>
+                methodStyle.selector <- ".method"
+                let methodCss = createEmpty<Css.Node>
+                methodCss.``background-color`` <- Some "blue"
+                methodStyle.style <- U2.Case1 methodCss
                 let layoutOpts = createEmpty<NullLayoutOptions> // createEmpty<GridLayoutOptions>
                 layoutOpts.name <- "dagre" //"grid"
                 //layoutOpts.rows <- Some 1.0
@@ -139,7 +154,7 @@ let view model dispatch =
                 yield
                     ReactCytoscape.cytoscapeComponent [
                             ReactCytoscape.Elements defs
-                            ReactCytoscape.Stylesheet [| nodeStyle; edgeStyle |]
+                            ReactCytoscape.Stylesheet [| nodeStyle; edgeStyle; artefactStyle; methodStyle |]
                             ReactCytoscape.Style divStyle
                             ReactCytoscape.Layout layoutOpts
                         ]

@@ -9,8 +9,8 @@ open ItisLab.Alpheus.DependencyGraph
 open System.IO
 //open Giraffe
 
-let nodeA = { id = "A"; label = Some "A"; kind = NodeKind.Method }
-let nodeB = { id = "B"; label = Some "B"; kind = NodeKind.Artefact }
+let nodeA = { id = "A"; label = Some "Loading"; kind = NodeKind.Method }
+let nodeB = { id = "B"; label = Some "graph"; kind = NodeKind.Artefact }
 
 let edgeAB = {
     id = "AB"
@@ -68,6 +68,8 @@ let buildDependencyGraphAsync experimentRoot artefactFullIDs =
                 return g
                 }
 
+let strcut (str: string) maxlen = if (str.Length > maxlen) then "..." + str.Substring(str.Length - maxlen, maxlen) else str
+
 let loadGraph path = async {
     let methodIdPrefix = "5F3E69FF"
     match Config.tryLocateExpereimentRoot path with
@@ -75,16 +77,32 @@ let loadGraph path = async {
         globalState <- { graph = { nodes = [ { id = "COULD NOT LOAD GRAPH"; label = Some "COULD NOT LOAD GRAPH"; kind = NodeKind.Artefact } ]; edges = [] } }
         failwith "COULD NOT LOAD GRAPH"
     | Some experimentRoot ->
-        let allAlphFiles = Directory.GetFiles(experimentRoot, "*.alph")
-        let artefactIDs = allAlphFiles |> Seq.map (fun fn -> ArtefactFullID.ID(Path.GetRelativePath(experimentRoot, if fn.EndsWith(".alph") then fn.Substring(0, fn.Length - 5) else fn))) |> List.ofSeq
+        let allAlphFiles = Directory.GetFiles(experimentRoot, "*.alph", SearchOption.AllDirectories)
+        let! artefactPaths = allAlphFiles |> Array.map alphFilePathToArtefactPathAsync |> Async.Parallel
+        let relPaths = artefactPaths |> Array.map (fun fn -> Path.GetRelativePath(experimentRoot, fn))
+        let artefactIDs = relPaths |> Seq.map ArtefactFullID.ID |> List.ofSeq
         let! depGraph = buildDependencyGraphAsync experimentRoot artefactIDs
-        let artefactNodes = depGraph.Artefacts |> Seq.map (fun art -> { id = (fullIDtoString art.FullID); label = Some (fullIDtoString art.FullID); kind = NodeKind.Artefact })
+        let artefactNodes =
+            depGraph.Artefacts
+            |> Seq.map (fun art -> 
+                let id = fullIDtoString art.FullID
+                { 
+                    id = id
+                    label = Some (strcut id 20)
+                    kind = NodeKind.Artefact
+                })
         let methodNodes = depGraph.Methods
                             |> Seq.choose
                                 (fun m -> 
                                     match m with
                                     | Source _ -> None
-                                    | Computed cv -> Some { id = methodIdPrefix + (fullIDtoString cv.FirstOutputFullID); label = Some cv.Command; kind = NodeKind.Method }
+                                    | Computed cv ->
+                                        let foid = fullIDtoString cv.FirstOutputFullID
+                                        Some {
+                                            id = methodIdPrefix + foid
+                                            label = Some ("Produce " + (strcut foid 20))
+                                            kind = NodeKind.Method
+                                        }
                                     | NotSetYet -> None)
         let nodes = Seq.append artefactNodes methodNodes |> List.ofSeq
         let idToNode = nodes |> List.map (fun n -> (n.id, n)) |> Map.ofList
@@ -104,7 +122,7 @@ let loadGraph path = async {
                                         }
                                         for outp in cv.Outputs -> { 
                                             id = methodId + " -> " + (fullIDtoString outp.Artefact.FullID)
-                                            label = Some "input"
+                                            label = Some "output"
                                             source = idToNode.[methodId]
                                             target = idToNode.[fullIDtoString outp.Artefact.FullID]
                                         }
