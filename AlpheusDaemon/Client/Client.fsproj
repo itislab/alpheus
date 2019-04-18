@@ -1,0 +1,30 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="**/*.html" />
+    <None Include="**/*.sass" />
+    <None Include="**/*.css" />
+    <None Include="**/*.png" />
+    <None Include="**/*.jpg" />
+    <None Include="**/*.gif" />
+    <Compile Include="../Shared/Shared.fs" />
+    <Compile Include="Cytoscape.fs" />
+    <Compile Include="ReactCytoscape.fs" />
+    <Compile Include="CytoscapeDagre.fs" />
+    <!--<Compile Include="../Shared/Shared.fs" />-->
+    <Compile Include="ViewHelpers.fs" />
+    <Compile Include="App.fs" />
+    <Compile Include="Client.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Elmish.Bridge.Client" Version="2.0.1" />
+    <PackageReference Include="Fable.Core" Version="2.0.3" />
+    <PackageReference Include="Fable.Elmish.Debugger" Version="2.0.3" />
+    <PackageReference Include="Fable.Elmish.HMR" Version="3.2.0" />
+    <PackageReference Include="Fable.Elmish.React" Version="2.2.0" />
+    <PackageReference Include="Fable.FontAwesome.Free" Version="1.0.0" />
+    <PackageReference Include="Fulma" Version="1.1.0" />
+  </ItemGroup>
+</Project>

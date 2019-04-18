@@ -1,0 +1,69 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>netcoreapp2.1</TargetFramework>
+    <YarnWorkingDir>$(MSBuildProjectDirectory)</YarnWorkingDir>
+    <ClientPublishDir>Client/dist</ClientPublishDir>
+    <GetNodeJsAndYarnFromNuget>true</GetNodeJsAndYarnFromNuget>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="Client/**" />
+    <None Remove="Client/node_modules/**" />
+    <None Remove="Client/src/**" />
+    <None Remove="Client/.fable/**" />
+    <None Include="package.json" />
+    <None Include="webpack.config.js" />
+    <None Include="yarn.lock" />
+    <!--
+    <None Remove="Client/dist/**" />
+    <Folder Include="Client/dist/">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Folder>
+    <Content Include="Client/dist/**"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory> </Content>-->
+    <Compile Include="Shared/Shared.fs" />
+    <Compile Include="Socket.fs" />
+    <Compile Include="Server.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--<PackageReference Include="Microsoft.AspNetCore.All" Version="2.1.3" />-->
+    <PackageReference Include="Elmish.Bridge.Giraffe" Version="2.0.1" />
+    <PackageReference Include="Microsoft.AspNetCore" Version="2.2.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Antiforgery" Version="2.2.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.Cookies" Version="2.2.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="2.2.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.OAuth" Version="2.2.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Authorization" Version="2.2.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Cors" Version="2.2.0" />
+    <PackageReference Include="Microsoft.AspNetCore.ResponseCompression" Version="2.2.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Rewrite" Version="2.2.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Session" Version="2.2.0" />
+    <PackageReference Include="Microsoft.AspNetCore.StaticFiles" Version="2.2.0" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="2.2.0" />
+    <PackageReference Include="Saturn" Version="0.8.0" />
+    <PackageReference Include="Thoth.Json.Giraffe" Version="1.1.0" />
+    <PackageReference Include="Yarn.MSBuild" Version="1.13.0" />
+    <!--<PackageReference Include="Microsoft.AspNetCore.Authorization" Version="2.1.2" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="2.1.1" />-->
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AlpheusCore\AlpheusCore.fsproj" />
+    <ProjectReference Include="Client\Client.fsproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
+  </ItemGroup>
+
+  <Target Name="BuildClient" BeforeTargets="Build"> <!-- Inputs="yarn.lock;package.json" Outputs="node_modules/.yarn-integrity"  -->
+    <Yarn Command="install" WorkingDirectory="$(YarnWorkingDir)" />
+    <ConvertToAbsolutePath Paths="$(OutputPath)/Client">
+      <Output TaskParameter="AbsolutePaths" PropertyName="AbsClientPublishDir" />
+    </ConvertToAbsolutePath>
+    <Yarn Command="run webpack --env.prod --env.publishDir=$(AbsClientPublishDir)" WorkingDirectory="$(YarnWorkingDir)" />
+  </Target>
+
+</Project>

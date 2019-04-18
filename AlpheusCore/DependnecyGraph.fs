@@ -249,7 +249,8 @@ type Graph() =
                         let versionedArtefact =
                             match calculatedVersion with
                             |   None -> 
-                                raise(InvalidDataException(sprintf "The artefact %s does not exist on disk" (AlphFiles.fullIDtoString dequeuedArtefact.FullID)))
+                                { vertex.Artefact with Version = "Not present on disk" }
+                                //raise(InvalidDataException(sprintf "The artefact %s does not exist on disk" (AlphFiles.fullIDtoString dequeuedArtefact.FullID)))
                             |   Some(version) ->
                                 { vertex.Artefact with Version=version }
                         vertex.Artefact <- versionedArtefact
