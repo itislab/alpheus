@@ -1,28 +1,32 @@
 namespace Shared
 
-type LatLong =
-    { Latitude : float
-      Longitude : float }
-type Location =
-    { Town : string
-      Region : string
-      LatLong : LatLong }
+type Node = {
+    id: string
+    label: string option
+}
 
-type PostcodeRequest = { Postcode : string }
+type Edge = {
+    id: string
+    label: string option
+    source: Node
+    target: Node
+}
 
-type LocationResponse = { Postcode : string; Location : Location; DistanceToLondon : float }
+type Graph = {
+    nodes: Node list
+    edges: Edge list
+}
+
+type State = {
+    graph: Graph
+}
 
 type ServerMsg =
-    | GiveLocation of PostcodeRequest
+    | DoNothing
 
 type ClientMsg =
-    | GetLocation of LocationResponse
+    | Init
+    | StateUpdated of State
 
 module BridgeInfo =
     let endpoint = "/socket"
-
-/// Provides validation on data. Shared across both client and server.
-module Validation =
-    open System.Text.RegularExpressions
-    let validatePostcode postcode =
-        Regex.IsMatch(postcode, @"([Gg][Ii][Rr] 0[Aa]{2})|((([A-Za-z][0-9]{1,2})|(([A-Za-z][A-Ha-hJ-Yj-y][0-9]{1,2})|(([A-Za-z][0-9][A-Za-z])|([A-Za-z][A-Ha-hJ-Yj-y][0-9]?[A-Za-z]))))\s?[0-9][A-Za-z]{2})")

@@ -1,4 +1,3 @@
-open Api
 open Giraffe
 open Giraffe.Serialization
 open Microsoft.Extensions.DependencyInjection
@@ -15,9 +14,9 @@ let addr = "http://localhost:" + port.ToString() + "/"
 let browserRouter = router {
     get "/" (htmlFile (Path.Combine(clientPath, "/index.html"))) }
 
-let mainRouter = router {
-    forward Shared.BridgeInfo.endpoint (Socket.server ())
-    forward "" browserRouter }
+//let mainRouter = router {
+//    forward Shared.BridgeInfo.endpoint (Socket.server ())
+//    forward "" browserRouter }
 
 //let config (services:IServiceCollection) =
 //    services.AddSingleton<Giraffe.Serialization.Json.IJsonSerializer>(Thoth.Json.Giraffe.ThothSerializer())

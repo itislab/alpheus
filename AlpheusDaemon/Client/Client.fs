@@ -16,12 +16,13 @@ Program.mkProgram init update view
 #if DEBUG
 |> Program.withConsoleTrace
 #endif
-|> Program.withBridgeConfig(
-    Bridge.endpoint BridgeInfo.endpoint
-    |> Bridge.withMapping
-        (fun bridgeMsg ->
-            match bridgeMsg with
-            | GetLocation loc -> GotReport { Report.Location = loc } ))
+|> Program.withBridge BridgeInfo.endpoint
+//|> Program.withBridgeConfig(
+//    Bridge.endpoint BridgeInfo.endpoint
+//    |> Bridge.withMapping
+//        (fun bridgeMsg ->
+//            match bridgeMsg with
+//            | GetLocation loc -> GotReport { Report.Location = loc } ))
 |> Program.withReact "elmish-app"
 #if DEBUG
 |> Program.withDebugger
