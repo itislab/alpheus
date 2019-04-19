@@ -70,6 +70,10 @@ let buildDependencyGraphAsync experimentRoot artefactFullIDs =
 
 let strcut (str: string) maxlen = if (str.Length > maxlen) then "..." + str.Substring(str.Length - maxlen, maxlen) else str
 
+let formatCaption (label: string) =
+    let cutLabel = strcut label 20
+    if cutLabel.Length > 11 then cutLabel.Substring(0, 12) + "\n" + cutLabel.Substring(12) else cutLabel
+
 let loadGraph path = async {
     let methodIdPrefix = "5F3E69FF"
     match Config.tryLocateExpereimentRoot path with
@@ -88,7 +92,7 @@ let loadGraph path = async {
                 let id = fullIDtoString art.FullID
                 { 
                     id = id
-                    label = Some (strcut id 20)
+                    label = Some (formatCaption id)
                     kind = NodeKind.Artefact
                 })
         let methodNodes = depGraph.Methods
@@ -100,7 +104,7 @@ let loadGraph path = async {
                                         let foid = fullIDtoString cv.FirstOutputFullID
                                         Some {
                                             id = methodIdPrefix + foid
-                                            label = Some ("Produce " + (strcut foid 20))
+                                            label = Some ("Produce\n" + (formatCaption foid))
                                             kind = NodeKind.Method
                                         }
                                     | NotSetYet -> None)
@@ -116,13 +120,13 @@ let loadGraph path = async {
                                     seq {
                                         for inp in cv.Inputs -> { 
                                             id = (fullIDtoString inp.Artefact.FullID) + " -> " + methodId
-                                            label = Some "input"
+                                            label = Some ""
                                             source = idToNode.[fullIDtoString inp.Artefact.FullID]
                                             target = idToNode.[methodId]
                                         }
                                         for outp in cv.Outputs -> { 
                                             id = methodId + " -> " + (fullIDtoString outp.Artefact.FullID)
-                                            label = Some "output"
+                                            label = Some ""
                                             source = idToNode.[methodId]
                                             target = idToNode.[fullIDtoString outp.Artefact.FullID]
                                         }

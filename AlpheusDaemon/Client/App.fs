@@ -109,8 +109,8 @@ let view model dispatch =
                 nodeStyle.selector <- "node"
                 let nodeCss = createEmpty<Css.Node>
                 nodeCss.shape <- Some Css.NodeShape.Roundrectangle
-                nodeCss.height <- Some (U2.Case2 "label") //Some (U2.Case1 20.0)
-                nodeCss.width <- Some (U2.Case2 "label") //Some (U2.Case1 20.0)
+                nodeCss.height <- Some (U2.Case2 "label")
+                nodeCss.width <- Some (U2.Case2 "label")
                 nodeCss.label <- Some "data(label)"
                 nodeCss.``text-halign`` <- Some Css.TextHAlign.Center
                 nodeCss.``text-valign`` <- Some Css.TextVAlign.Center
@@ -122,6 +122,7 @@ let view model dispatch =
                 nodeCss.``border-style`` <- Some Css.LineStyle.Solid
                 nodeCss.``border-color`` <- Some "black"
                 nodeCss.``border-opacity`` <- Some 1.0
+                nodeCss.``text-wrap`` <- Some Css.TextWrap.Wrap
                 nodeStyle.style <- U2.Case1 nodeCss
                 let edgeStyle = createEmpty<StylesheetStyle>
                 edgeStyle.selector <- "edge"
@@ -131,7 +132,6 @@ let view model dispatch =
                 edgeCss.``target-arrow-shape`` <- Some Css.ArrowShape.Triangle
                 edgeCss.``target-arrow-fill`` <- Some Css.ArrowFill.Filled
                 edgeCss.``target-arrow-color`` <- Some "black"
-                //edgeCss.``arrow-scale`` <- Some 5.0
                 edgeCss.label <- Some "data(label)"
                 edgeStyle.style <- U2.Case2 edgeCss
                 let artefactStyle = createEmpty<StylesheetStyle>
@@ -144,10 +144,12 @@ let view model dispatch =
                 let methodCss = createEmpty<Css.Node>
                 methodCss.``background-color`` <- Some "blue"
                 methodStyle.style <- U2.Case1 methodCss
-                let layoutOpts = createEmpty<NullLayoutOptions> // createEmpty<GridLayoutOptions>
-                layoutOpts.name <- "dagre" //"grid"
-                //layoutOpts.rows <- Some 1.0
-                //layoutOpts.cols <- Some 2.0
+                let layoutOpts = createEmpty<CytoscapeDagre.DagreLayoutOptions>
+                layoutOpts.name <- "dagre"
+                layoutOpts.rankDir <- Some CytoscapeDagre.DagreRankDir.LeftToRight
+                layoutOpts.ranker <- Some CytoscapeDagre.DagreRanker.LongestPath
+                layoutOpts.rankSep <- Some 200.0
+                layoutOpts.nodeDimensionsIncludeLabels <- true
                 let divStyle = createEmpty<ReactCytoscape.CytoscapeComponentStyle>
                 divStyle.height <- "1000px"
                 divStyle.width <- "1600px"
