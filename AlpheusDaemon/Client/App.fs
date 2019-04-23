@@ -27,7 +27,8 @@ type ServerState = Idle | Loading | ServerError of string
 
 /// The init function is called to start the message pump with an initial view.
 let init () = 
-    { graph = { nodes = []; edges = [] } }, Cmd.ofMsg Init
+    { graph = { artefacts = Set.empty; methods = Set.empty } }, Cmd.ofMsg Init
+    //{ graph = { nodes = []; edges = [] } }, Cmd.ofMsg Init
     
  
 /// The update function knows how to update the model given a message.
@@ -57,31 +58,81 @@ module ViewParts =
                 (Heading.h2 [ ] [ str title ] :: content)
         ]             
 
-let defineNode (node: Node) =
+//let defineNode (node: Node) =
+//    let def = createEmpty<NodeDefinition>
+//    let dataDef = createEmpty<NodeDataDefinition>
+//    dataDef.id <- Some node.id
+//    dataDef.["label"] <- Some (upcast (match node.label with Some l -> l | None -> node.id))
+//    def.data <- dataDef
+//    match node.kind with
+//    | NodeKind.Artefact ->
+//        def.classes <- Some "artefact"
+//    | NodeKind.Method ->
+//        def.classes <- Some "method"
+//    def
+
+//let defineEdge (edge: Edge) =
+//    let def = createEmpty<EdgeDefinition>
+//    let dataDef = createEmpty<EdgeDataDefinition>
+//    dataDef.id <- Some edge.id
+//    match edge.label with
+//    | Some l ->
+//        dataDef.["label"] <- Some (upcast l)
+//    | None -> ()
+//    dataDef.source <- edge.source.id
+//    dataDef.target <- edge.target.id
+//    def.data <- dataDef
+//    def
+
+let sourceContainerId = "341DDCD4"
+
+let sourceContainer =
     let def = createEmpty<NodeDefinition>
     let dataDef = createEmpty<NodeDataDefinition>
-    dataDef.id <- Some node.id
-    dataDef.["label"] <- Some (upcast (match node.label with Some l -> l | None -> node.id))
+    dataDef.id <- Some sourceContainerId
+    dataDef.["label"] <- Some (upcast "Source data")
     def.data <- dataDef
-    match node.kind with
-    | NodeKind.Artefact ->
-        def.classes <- Some "artefact"
-    | NodeKind.Method ->
-        def.classes <- Some "method"
+    def.classes <- Some "artefact"
     def
 
-let defineEdge (edge: Edge) =
-    let def = createEmpty<EdgeDefinition>
-    let dataDef = createEmpty<EdgeDataDefinition>
-    dataDef.id <- Some edge.id
-    match edge.label with
-    | Some l ->
-        dataDef.["label"] <- Some (upcast l)
-    | None -> ()
-    dataDef.source <- edge.source.id
-    dataDef.target <- edge.target.id
+let defineArtefactNode (artefact: ArtefactVertex) isSource =
+    let def = createEmpty<NodeDefinition>
+    let dataDef = createEmpty<NodeDataDefinition>
+    dataDef.id <- Some artefact.id
+    dataDef.["label"] <- Some (upcast (match artefact.label with Some l -> l | None -> artefact.id))
+    if isSource then
+        dataDef.parent <- Some sourceContainerId
+    else
+        dataDef.parent <- Some artefact.source
     def.data <- dataDef
+    def.classes <- Some "artefact"
     def
+
+let defineMethodNode (method: ComputedVertex) =
+    let def = createEmpty<NodeDefinition>
+    let dataDef = createEmpty<NodeDataDefinition>
+    dataDef.id <- Some method.id
+    dataDef.["label"] <- Some (upcast (match method.label with Some l -> l | None -> method.id))
+    def.data <- dataDef
+    def.classes <- Some "method"
+    def
+
+let defineEdges (artefact: ArtefactVertex) = seq {
+    for dependant in artefact.dependants ->
+        let def = createEmpty<EdgeDefinition>
+        let dataDef = createEmpty<EdgeDataDefinition>
+        dataDef.id <- Some (artefact.id + " -> " + dependant)
+        dataDef.source <- artefact.id
+        dataDef.target <- dependant
+        def.data <- dataDef
+        def
+}
+
+let artefactIsSource (methodMap: Map<VertexId, ProducerVertex>) (artefact: ArtefactVertex) =
+    let parent = methodMap.[artefact.source]
+    match parent with
+    | Source _ -> true
+    | Computed _ -> false
 
 /// The view function knows how to render the UI given a model, as well as to dispatch new messages based on user actions.
 let view model dispatch =
@@ -99,12 +150,22 @@ let view model dispatch =
             
             
             let graph = model.graph
-            match graph.nodes with
-            | [] -> ()
-            | _ ->
-                let nodeDefs = graph.nodes |> Seq.map defineNode
-                let edgeDefs = graph.edges |> Seq.map defineEdge
+            if graph.artefacts.Count = 0 && graph.methods.Count = 0
+            then
+                ()
+            else
+                let methodMap = graph.methods |> Seq.map (fun m -> match m with Source s -> (s.id, m) | Computed c -> (c.id, m)) |> Map.ofSeq
+                let artefactIsSourceMask = graph.artefacts |> Seq.map (artefactIsSource methodMap)
+                let artefactNodeDefs = graph.artefacts |> Seq.map2 defineArtefactNode <| artefactIsSourceMask
+                let methodNodeDefs = graph.methods |> Seq.choose (fun m-> match m with Source _ -> None | Computed c -> Some c) |> Seq.map defineMethodNode
+                //let nodeDefs = graph.nodes |> Seq.map defineNode
+                //let edgeDefs = graph.edges |> Seq.map defineEdge
+                let nodeDefs = Seq.append artefactNodeDefs methodNodeDefs
+
+                let edgeDefs = graph.artefacts |> Seq.collect defineEdges
+
                 let defs = Seq.append (Seq.cast<ElementDefinition> nodeDefs) (Seq.cast<ElementDefinition> edgeDefs) |> Array.ofSeq
+
                 let nodeStyle = createEmpty<StylesheetStyle>
                 nodeStyle.selector <- "node"
                 let nodeCss = createEmpty<Css.Node>
