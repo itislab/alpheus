@@ -13,6 +13,7 @@
     <Compile Include="Cytoscape.fs" />
     <Compile Include="ReactCytoscape.fs" />
     <Compile Include="CytoscapeDagre.fs" />
+    <Compile Include="CytoscapeKlay.fs" />
     <Compile Include="CytoscapeReact.fs" />
     <!--<Compile Include="../Shared/Shared.fs" />-->
     <Compile Include="ViewHelpers.fs" />
@@ -27,5 +28,8 @@
     <PackageReference Include="Fable.Elmish.React" Version="3.0.1" />
     <PackageReference Include="Fable.FontAwesome.Free" Version="2.0.0" />
     <PackageReference Include="Fulma" Version="2.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Update="FSharp.Core" Version="4.6.2" />
   </ItemGroup>
 </Project>

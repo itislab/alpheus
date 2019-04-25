@@ -13,7 +13,7 @@ type CytoscapeComponentProps =
     /// The flat list of Cytoscape elements to be included in the graph, each represented as non-stringified JSON.
     | Elements of Cytoscape.ElementDefinition array
     /// The Cytoscape stylesheet.
-    | Stylesheet of Cytoscape.StylesheetStyle array
+    | Stylesheet of Cytoscape.Stylesheet array
     /// Use a layout to automatically position the nodes in the graph.
     | Layout of Cytoscape.LayoutOptions
     (* This prop allows for getting a reference to the Cytoscape cy reference using a React ref function. This cy reference can be used to access the Cytoscape API directly. E.g.:
