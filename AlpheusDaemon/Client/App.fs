@@ -2,32 +2,25 @@ module App
 
 open Elmish
 
-open Fable
-open Fable.FontAwesome
 open Fable.Core.JsInterop
-open Fable.Helpers.React
-open Fable.Helpers.React.Props
-open Fable.PowerPack
+open Fable.React
+open Fable.React.Props
 
 open Fulma
 
 open Shared
-open Thoth.Json
 
-open Elmish.Bridge
 
 open Cytoscape
 open Cytoscape.Cytoscape
 open Fable.Core
-open Fable.Import
 
-open Fable.PowerPack
 
 type ServerState = Idle | Loading | ServerError of string
 
 /// The init function is called to start the message pump with an initial view.
 let init () = 
-    { graph = { artefacts = Set.empty; methods = Set.empty } }, Cmd.ofMsg Init
+    { graph = { artefacts = []; methods = [] } }, Cmd.ofMsg Init
     //{ graph = { nodes = []; edges = [] } }, Cmd.ofMsg Init
     
  
@@ -122,6 +115,7 @@ let defineEdges (artefact: ArtefactVertex) = seq {
         let def = createEmpty<EdgeDefinition>
         let dataDef = createEmpty<EdgeDataDefinition>
         dataDef.id <- Some (artefact.id + " -> " + dependant)
+        dataDef.["label"] <- Some (upcast "")
         dataDef.source <- artefact.id
         dataDef.target <- dependant
         def.data <- dataDef
@@ -133,6 +127,15 @@ let artefactIsSource (methodMap: Map<VertexId, ProducerVertex>) (artefact: Artef
     match parent with
     | Source _ -> true
     | Computed _ -> false
+
+let vertexA = Shared.Computed { id = "A"; label = Some "A"; inputs = []; outputs = [ "C" ]; command = ""; workingDirectory = "" }
+let vertexB = Shared.Computed { id = "B"; label = Some "B"; inputs = [ "C" ]; outputs = []; command = ""; workingDirectory = "" }
+let vertexC = { ArtefactVertex.id ="C"; label = Some "C"; source = "A"; dependants = [ (*"B"*) ] }
+let graphTest = {
+    artefacts = [ vertexC ]
+    methods = [ vertexA; vertexB ]
+}
+
 
 /// The view function knows how to render the UI given a model, as well as to dispatch new messages based on user actions.
 let view model dispatch =
@@ -149,8 +152,8 @@ let view model dispatch =
             //    ] [str "add node"]
             
             
-            let graph = model.graph
-            if graph.artefacts.Count = 0 && graph.methods.Count = 0
+            let graph = graphTest // model.graph
+            if graph.artefacts.IsEmpty && graph.methods.IsEmpty
             then
                 ()
             else
@@ -160,21 +163,31 @@ let view model dispatch =
                 let methodNodeDefs = graph.methods |> Seq.choose (fun m-> match m with Source _ -> None | Computed c -> Some c) |> Seq.map defineMethodNode
                 //let nodeDefs = graph.nodes |> Seq.map defineNode
                 //let edgeDefs = graph.edges |> Seq.map defineEdge
-                let nodeDefs = Seq.append artefactNodeDefs methodNodeDefs
+                let nodeDefs = Seq.append artefactNodeDefs methodNodeDefs |> Seq.append (seq { yield sourceContainer })
 
                 let edgeDefs = graph.artefacts |> Seq.collect defineEdges
 
-                let defs = Seq.append (Seq.cast<ElementDefinition> nodeDefs) (Seq.cast<ElementDefinition> edgeDefs) |> Array.ofSeq
+                printf "nodes:"
+                nodeDefs |> Seq.iter (fun n -> printfn "%s" n.data.id.Value)
+                printf "# edges: %d" (Seq.length edgeDefs)
+                edgeDefs |> Seq.iter (fun e -> printfn "%s -> %s" e.data.source e.data.target)
+
+                if (edgeDefs |> Seq.exists (fun e -> not (nodeDefs |> Seq.exists (fun n -> n.data.id.Value = e.data.target)))) then
+                    printf "Bad edge(s) present"
+
+                let defs = Seq.concat [
+                    Seq.cast<ElementDefinition> nodeDefs
+                    Seq.cast<ElementDefinition> edgeDefs ] |> Array.ofSeq
 
                 let nodeStyle = createEmpty<StylesheetStyle>
                 nodeStyle.selector <- "node"
                 let nodeCss = createEmpty<Css.Node>
                 nodeCss.shape <- Some Css.NodeShape.Roundrectangle
-                nodeCss.height <- Some (U2.Case2 "label")
+                //nodeCss.height <- Some (U2.Case2 "label")
                 nodeCss.width <- Some (U2.Case2 "label")
                 nodeCss.label <- Some "data(label)"
                 nodeCss.``text-halign`` <- Some Css.TextHAlign.Center
-                nodeCss.``text-valign`` <- Some Css.TextVAlign.Center
+                nodeCss.``text-valign`` <- Some Css.TextVAlign.Top
                 nodeCss.``padding-bottom`` <- Some "3"
                 nodeCss.``padding-top`` <- Some "3"
                 nodeCss.``padding-left`` <- Some "3"
@@ -188,12 +201,12 @@ let view model dispatch =
                 let edgeStyle = createEmpty<StylesheetStyle>
                 edgeStyle.selector <- "edge"
                 let edgeCss = createEmpty<Css.Edge>
-                edgeCss.width <- Some (U2.Case1 1.0)
+                //edgeCss.width <- Some (U2.Case1 1.0)
                 edgeCss.``curve-style`` <- Some Css.CurveStyle.Bezier
-                edgeCss.``target-arrow-shape`` <- Some Css.ArrowShape.Triangle
-                edgeCss.``target-arrow-fill`` <- Some Css.ArrowFill.Filled
-                edgeCss.``target-arrow-color`` <- Some "black"
-                edgeCss.label <- Some "data(label)"
+                //edgeCss.``target-arrow-shape`` <- Some Css.ArrowShape.Triangle
+                //edgeCss.``target-arrow-fill`` <- Some Css.ArrowFill.Filled
+                //edgeCss.``target-arrow-color`` <- Some "black"
+                //edgeCss.label <- Some "data(label)"
                 edgeStyle.style <- U2.Case2 edgeCss
                 let artefactStyle = createEmpty<StylesheetStyle>
                 artefactStyle.selector <- ".artefact"
@@ -205,19 +218,22 @@ let view model dispatch =
                 let methodCss = createEmpty<Css.Node>
                 methodCss.``background-color`` <- Some "blue"
                 methodStyle.style <- U2.Case1 methodCss
-                let layoutOpts = createEmpty<CytoscapeDagre.DagreLayoutOptions>
-                layoutOpts.name <- "dagre"
-                layoutOpts.rankDir <- Some CytoscapeDagre.DagreRankDir.LeftToRight
-                layoutOpts.ranker <- Some CytoscapeDagre.DagreRanker.LongestPath
-                layoutOpts.rankSep <- Some 200.0
-                layoutOpts.nodeDimensionsIncludeLabels <- true
+                //let layoutOpts = createEmpty<CytoscapeDagre.DagreLayoutOptions>
+                //layoutOpts.name <- "dagre"
+                //layoutOpts.rankDir <- Some CytoscapeDagre.DagreRankDir.LeftToRight
+                //layoutOpts.ranker <- Some CytoscapeDagre.DagreRanker.LongestPath
+                //layoutOpts.rankSep <- Some 200.0
+                //layoutOpts.nodeDimensionsIncludeLabels <- true
+                let layoutOpts = createEmpty<Cytoscape.GridLayoutOptions>
+                layoutOpts.name <- "grid"
+                //layoutOpts.nodeDimensionsIncludeLabels <- true
                 let divStyle = createEmpty<ReactCytoscape.CytoscapeComponentStyle>
                 divStyle.height <- "1000px"
                 divStyle.width <- "1600px"
                 yield
                     ReactCytoscape.cytoscapeComponent [
                             ReactCytoscape.Elements defs
-                            ReactCytoscape.Stylesheet [| nodeStyle; edgeStyle; artefactStyle; methodStyle |]
+                            ReactCytoscape.Stylesheet [| nodeStyle; artefactStyle; methodStyle; edgeStyle |]
                             ReactCytoscape.Style divStyle
                             ReactCytoscape.Layout layoutOpts
                         ]

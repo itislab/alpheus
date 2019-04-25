@@ -19,17 +19,17 @@ let edgeAB = {
     target = nodeB
 }
 
-let vertexLoading = Shared.Computed { id = "A"; label = Some "Loading"; inputs = Set.empty; outputs = (Set.ofList [ "B" ]); command = ""; workingDirectory = "" }
-let vertexGraph = { ArtefactVertex.id ="B"; label = Some "graph"; source = "A"; dependants = Set.empty }
+let vertexLoading = Shared.Computed { id = "A"; label = Some "Loading"; inputs = []; outputs = [ "B" ]; command = ""; workingDirectory = "" }
+let vertexGraph = { ArtefactVertex.id ="B"; label = Some "graph"; source = "A"; dependants = [] }
 let graphLoadingGraph = {
-    artefacts = Set.ofList [ vertexGraph ]
-    methods = Set.ofList [ vertexLoading ]
+    artefacts = [ vertexGraph ]
+    methods = [ vertexLoading ]
 }
 
-let vertexCouldNotLoad = Shared.Computed { id = "A"; label = Some "COULD NOT LOAD GRAPH"; inputs = Set.empty; outputs = Set.empty; command = ""; workingDirectory = "" }
+let vertexCouldNotLoad = Shared.Computed { id = "A"; label = Some "COULD NOT LOAD GRAPH"; inputs = []; outputs = []; command = ""; workingDirectory = "" }
 let graphCouldNotLoad = {
-    artefacts = Set.empty
-    methods = Set.ofList [ vertexCouldNotLoad ]
+    artefacts = []
+    methods = [ vertexCouldNotLoad ]
 } // { nodes = [ { id = "COULD NOT LOAD GRAPH"; label = Some "COULD NOT LOAD GRAPH"; kind = NodeKind.Artefact } ]; edges = [] }
 
 let mutable globalState = {
@@ -114,9 +114,9 @@ let loadGraph path = async {
                     ArtefactVertex.id = id
                     label = Some (formatCaption id)
                     source = (idForMethod art.Input)
-                    dependants = art.Outputs |> Set.map idForComputed
+                    dependants = art.Outputs |> Seq.map idForComputed |> List.ofSeq
                 })
-            |> Set.ofSeq
+            |> List.ofSeq
         let methodNodes = depGraph.Methods
                             |> Seq.choose
                                 (fun m -> 
@@ -132,13 +132,13 @@ let loadGraph path = async {
                                         Some (Shared.Computed {
                                             id = idForComputed cv
                                             label = Some "Produce"
-                                            inputs = cv.Inputs |> Set.map (fun va -> idForArtefact va.Artefact)
-                                            outputs = cv.Outputs |> Set.map (fun va -> idForArtefact va.Artefact)
+                                            inputs = cv.Inputs |> Seq.map (fun va -> idForArtefact va.Artefact) |> List.ofSeq
+                                            outputs = cv.Outputs |> Seq.map (fun va -> idForArtefact va.Artefact) |> List.ofSeq
                                             command = cv.Command
                                             workingDirectory = cv.WorkingDirectory
                                         })
                                     | NotSetYet -> None)
-                            |> Set.ofSeq
+                            |> List.ofSeq
         //let artefactNodes =
         //    depGraph.Artefacts
         //    |> Seq.map (fun art -> 

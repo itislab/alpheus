@@ -1,11 +1,9 @@
 ﻿module ReactCytoscape
 
 open Fable.Core
-open Fable.Helpers.React
-open Fable.Import.React
+open Fable.React
 open Fable.Core.JsInterop
 open Cytoscape
-open Fable.Helpers.React.Props
 
 type [<AllowNullLiteral>] CytoscapeComponentStyle =
     abstract width: string with get, set
@@ -58,5 +56,5 @@ class MyApp extends React.Component {
     | Style of CytoscapeComponentStyle
 
 let inline cytoscapeComponent (props: CytoscapeComponentProps list) : ReactElement =
-    ofImport "default" "react-cytoscapejs" (keyValueList CaseRules.LowerFirst props) []
+    ofImport "default" "react-cytoscapejs/src" (keyValueList CaseRules.LowerFirst props) []
 

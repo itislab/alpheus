@@ -6,7 +6,7 @@ type ArtefactVertex = {
     id: VertexId
     label: string option
     source : VertexId
-    dependants : Set<VertexId>
+    dependants : VertexId list
 }
 and ProducerVertex =
     /// The vertex produces single artefact out of void
@@ -16,8 +16,8 @@ and ProducerVertex =
 and ComputedVertex = {
     id: VertexId
     label: string option
-    inputs : Set<VertexId>
-    outputs : Set<VertexId>
+    inputs : VertexId list
+    outputs : VertexId list
     command: string
     workingDirectory: string
 }
@@ -28,8 +28,8 @@ and SourceVertex = {
 }
 
 type AlpheusGraph = {
-    artefacts: Set<ArtefactVertex>
-    methods: Set<ProducerVertex>
+    artefacts: ArtefactVertex list
+    methods: ProducerVertex list
 }
 
 type [<RequireQualifiedAccess>] NodeKind =

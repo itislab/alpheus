@@ -23,7 +23,7 @@ Program.mkProgram init update view
 //        (fun bridgeMsg ->
 //            match bridgeMsg with
 //            | GetLocation loc -> GotReport { Report.Location = loc } ))
-|> Program.withReact "elmish-app"
+|> Program.withReactBatched "elmish-app"
 #if DEBUG
 |> Program.withDebugger
 #endif

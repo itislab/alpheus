@@ -1,9 +1,8 @@
 // ts2fable 0.0.0
 module rec Cytoscape
-open System
 open Fable.Core
-open Fable.Import.JS
-open Fable.Import.Browser
+open Fable.Core.JS
+open Browser.Types
 
 //let [<Import("*","cytoscape")>] cytoscape: Cytoscape.IExports = jsNative
 let [<Import("default","cytoscape")>] cytoscape: ?options: Cytoscape.CytoscapeOptions -> Cytoscape.Core = jsNative
