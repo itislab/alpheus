@@ -157,12 +157,18 @@ let layout =
     layoutOpts.klay <- Some klayOpts
     layoutOpts
 
+let expandCollapseOptions =
+    let opts = createEmpty<CytoscapeExpandCollapse.Options>
+    opts.layoutBy <- Some (upcast layout)
+    opts.undoable <- Some false
+    opts
+
 type CytoscapeReactProps = { graph: AlpheusGraph }
 
 let private _cytoscape (props: CytoscapeReactProps) =
     let selfRef = Hooks.useRef<Browser.Types.Element option> None
     //let graphState = Hooks.useState props.graph
-    let cyState = Hooks.useState<Cytoscape.Core option> None
+    let cyState = Hooks.useState<CytoscapeExpandCollapse.CoreWithExpandCollapse option> None
     Hooks.useEffectDisposable((fun () ->
         match cyState.current with
         | Some cy -> cy.destroy ()
@@ -172,11 +178,12 @@ let private _cytoscape (props: CytoscapeReactProps) =
         | Some ref (*when (ref :? HTMLElement)*) ->
             let opts = createEmpty<CytoscapeOptions>
             opts.container <- Some (ref :?> HTMLElement)
-            opts.elements <- Some (U4.Case2 (buildCytoscapeGraph props.graph))// graphState.current))
+            opts.elements <- Some (U4.Case2 (buildCytoscapeGraph props.graph))
             opts.style <- Some (U2.Case1 styles)
             opts.layout <- Some (upcast layout)
-            let cy = Cytoscape.cytoscape opts
+            let cy = Cytoscape.cytoscape opts :?> CytoscapeExpandCollapse.CoreWithExpandCollapse
             cyState.update (Some cy)
+            cy.expandCollapse expandCollapseOptions |> ignore
         | _ -> 
             cyState.update None
         
