@@ -3,10 +3,6 @@
 open Fable.Core
 open Cytoscape
 open Cytoscape.Cytoscape
-
-//let [<Import("default","cytoscape-expand-collapse")>] expandCollapse: Cytoscape.Ext = jsNative
-//?options: Cytoscape.CytoscapeOptions -> Cytoscape.Core
-
 type [<AllowNullLiteral>] JQueryForCytoscapeExpandCollapse = interface end
 
 let [<Import("default","jquery")>] jquery: JQueryForCytoscapeExpandCollapse = jsNative

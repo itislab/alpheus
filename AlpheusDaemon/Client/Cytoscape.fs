@@ -4,7 +4,6 @@ open Fable.Core
 open Fable.Core.JS
 open Browser.Types
 
-//let [<Import("*","cytoscape")>] cytoscape: Cytoscape.IExports = jsNative
 let [<Import("default","cytoscape")>] cytoscape: ?options: Cytoscape.CytoscapeOptions -> Cytoscape.Core = jsNative
 let [<Import("default","cytoscape")>] cytoscapeModuleImport: Cytoscape.IModuleUse = jsNative
 

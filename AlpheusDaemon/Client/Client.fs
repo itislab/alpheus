@@ -14,7 +14,6 @@ open Elmish.HMR
 #endif
 
 Cytoscape.cytoscapeModuleImport.``use`` CytoscapeKlay.klay
-//Cytoscape.cytoscapeModuleImport.``use`` CytoscapeExpandCollapse.expandCollapse
 CytoscapeExpandCollapse.expandCollapse.Invoke (Cytoscape.cytoscape, CytoscapeExpandCollapse.jquery)
 Program.mkProgram init update view
 #if DEBUG
@@ -29,6 +28,6 @@ Program.mkProgram init update view
 //            | GetLocation loc -> GotReport { Report.Location = loc } ))
 |> Program.withReactBatched "elmish-app"
 #if DEBUG
-//|> Program.withDebugger
+|> Program.withDebugger
 #endif
 |> Program.run

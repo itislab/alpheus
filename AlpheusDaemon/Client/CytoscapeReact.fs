@@ -100,7 +100,6 @@ let styles =
     nodeStyle.selector <- "node"
     let nodeCss = createEmpty<Css.Node>
     nodeCss.shape <- Some Css.NodeShape.Roundrectangle
-    //nodeCss.height <- Some (U2.Case2 "label")
     nodeCss.width <- Some (U2.Case2 "label")
     nodeCss.label <- Some "data(label)"
     nodeCss.``text-halign`` <- Some Css.TextHAlign.Center
@@ -154,6 +153,11 @@ let layout =
     layoutOpts.name <- "klay"
     let klayOpts = createEmpty<CytoscapeKlay.KlayOptions>
     klayOpts.direction <- Some CytoscapeKlay.Direction.Right
+    klayOpts.layoutHierarchy <- Some true
+    klayOpts.nodePlacement <- Some CytoscapeKlay.NodePlacementStrategy.LinearSegments
+    klayOpts.nodeLayering <- Some CytoscapeKlay.NodeLayeringStrategy.NetworkSimplex
+    klayOpts.mergeHierarchyCrossingEdges <- Some true
+    klayOpts.thoroughness <- Some 100.0
     layoutOpts.klay <- Some klayOpts
     layoutOpts
 
@@ -167,7 +171,6 @@ type CytoscapeReactProps = { graph: AlpheusGraph }
 
 let private _cytoscape (props: CytoscapeReactProps) =
     let selfRef = Hooks.useRef<Browser.Types.Element option> None
-    //let graphState = Hooks.useState props.graph
     let cyState = Hooks.useState<CytoscapeExpandCollapse.CoreWithExpandCollapse option> None
     Hooks.useEffectDisposable((fun () ->
         match cyState.current with
@@ -175,13 +178,14 @@ let private _cytoscape (props: CytoscapeReactProps) =
         | None -> ()
         
         match selfRef.current with
-        | Some ref (*when (ref :? HTMLElement)*) ->
+        | Some ref ->
             let opts = createEmpty<CytoscapeOptions>
-            opts.container <- Some (ref :?> HTMLElement)
+            opts.container <- Some (ref :?> HTMLElement) // ref is attached to a div, downcast is valid
             opts.elements <- Some (U4.Case2 (buildCytoscapeGraph props.graph))
             opts.style <- Some (U2.Case1 styles)
             opts.layout <- Some (upcast layout)
-            let cy = Cytoscape.cytoscape opts :?> CytoscapeExpandCollapse.CoreWithExpandCollapse
+            let cy = Cytoscape.cytoscape opts :?> CytoscapeExpandCollapse.CoreWithExpandCollapse // necessary setup to make
+            // this downcast valid is done in Client.fs
             cyState.update (Some cy)
             cy.expandCollapse expandCollapseOptions |> ignore
         | _ -> 
@@ -194,8 +198,8 @@ let private _cytoscape (props: CytoscapeReactProps) =
     div [ 
         RefHook selfRef
         Style [
-            Width "1200px"
-            Height "900px"
+            Width "1600px"
+            Height "1000px"
         ] 
     ] []
 
