@@ -1682,6 +1682,11 @@ cytoscape-dagre@^2.2.2:
   dependencies:
     dagre "^0.8.2"
 
+cytoscape-expand-collapse@^3.1.2:
+  version "3.1.2"
+  resolved "https://registry.yarnpkg.com/cytoscape-expand-collapse/-/cytoscape-expand-collapse-3.1.2.tgz#b4dbbfad159723f6bf627b20bfb9a3ec7d0f2d29"
+  integrity sha512-yClfo0z2IqEkhlOipUh85k1kJGSgxaSKs4e30KO1mDIXPKOnvL/iQhVXmNt9+KmuIGg9YtNt09P0j3F4BN3WsA==
+
 cytoscape-klay@^3.1.2:
   version "3.1.2"
   resolved "https://registry.yarnpkg.com/cytoscape-klay/-/cytoscape-klay-3.1.2.tgz#02d1c699d03ee23ae7f57c1b9c2358cf1f847b0b"

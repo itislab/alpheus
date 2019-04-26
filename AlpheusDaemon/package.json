@@ -38,6 +38,7 @@
         "core-js": "2.6.5",
         "cytoscape": "^3.5.3",
         "cytoscape-dagre": "^2.2.2",
+        "cytoscape-expand-collapse": "^3.1.2",
         "cytoscape-klay": "^3.1.2",
         "react": "16.8.6",
         "react-cytoscapejs": "^1.1.0",

@@ -12,6 +12,7 @@ open Elmish.HMR
 #endif
 
 Cytoscape.cytoscapeModuleImport.``use`` CytoscapeKlay.klay
+Cytoscape.cytoscapeModuleImport.``use`` CytoscapeExpandCollapse.expandCollapse
 Program.mkProgram init update view
 #if DEBUG
 |> Program.withConsoleTrace

@@ -104,7 +104,7 @@ let styles =
     nodeCss.width <- Some (U2.Case2 "label")
     nodeCss.label <- Some "data(label)"
     nodeCss.``text-halign`` <- Some Css.TextHAlign.Center
-    nodeCss.``text-valign`` <- Some Css.TextVAlign.Top
+    nodeCss.``text-valign`` <- Some Css.TextVAlign.Center
     nodeCss.``padding-bottom`` <- Some "3"
     nodeCss.``padding-top`` <- Some "3"
     nodeCss.``padding-left`` <- Some "3"
@@ -115,6 +115,14 @@ let styles =
     nodeCss.``border-opacity`` <- Some 1.0
     nodeCss.``text-wrap`` <- Some Css.TextWrap.Wrap
     nodeStyle.style <- U2.Case1 nodeCss
+
+    let containerStyle = createEmpty<Stylesheet>
+    containerStyle.selector <- ":parent"
+    let containerCss = createEmpty<Css.Node>
+    containerCss.``text-valign`` <- Some Css.TextVAlign.Top
+    containerCss.``background-opacity`` <- Some 0.333
+    containerStyle.style <- U2.Case1 containerCss
+
     let edgeStyle = createEmpty<Stylesheet>
     edgeStyle.selector <- "edge"
     let edgeCss = createEmpty<Css.Edge>
@@ -125,17 +133,29 @@ let styles =
     edgeCss.``target-arrow-color`` <- Some "black"
     //edgeCss.label <- Some "data(label)"
     edgeStyle.style <- U2.Case2 edgeCss
+
     let artefactStyle = createEmpty<Stylesheet>
     artefactStyle.selector <- ".artefact"
     let artefactCss = createEmpty<Css.Node>
     artefactCss.``background-color`` <- Some "gray"
     artefactStyle.style <- U2.Case1 artefactCss
+
     let methodStyle = createEmpty<Stylesheet>
     methodStyle.selector <- ".method"
     let methodCss = createEmpty<Css.Node>
     methodCss.``background-color`` <- Some "blue"
     methodStyle.style <- U2.Case1 methodCss
-    ResizeArray [| nodeStyle; artefactStyle; methodStyle; edgeStyle |]
+
+    ResizeArray [| nodeStyle; containerStyle; artefactStyle; methodStyle; edgeStyle |]
+
+let layout =
+    let layoutOpts = createEmpty<CytoscapeKlay.KlayLayoutOptions>
+    layoutOpts.nodeDimensionsIncludeLabels <- true
+    layoutOpts.name <- "klay"
+    let klayOpts = createEmpty<CytoscapeKlay.KlayOptions>
+    klayOpts.direction <- Some CytoscapeKlay.Direction.Right
+    layoutOpts.klay <- Some klayOpts
+    layoutOpts
 
 type CytoscapeReactProps = { graph: AlpheusGraph }
 
@@ -154,9 +174,7 @@ let private _cytoscape (props: CytoscapeReactProps) =
             opts.container <- Some (ref :?> HTMLElement)
             opts.elements <- Some (U4.Case2 (buildCytoscapeGraph props.graph))// graphState.current))
             opts.style <- Some (U2.Case1 styles)
-            let layoutOpts = createEmpty<Cytoscape.NullLayoutOptions>
-            layoutOpts.name <- "klay"
-            opts.layout <- Some (upcast layoutOpts)
+            opts.layout <- Some (upcast layout)
             let cy = Cytoscape.cytoscape opts
             cyState.update (Some cy)
         | _ -> 
@@ -176,50 +194,3 @@ let private _cytoscape (props: CytoscapeReactProps) =
 
 let cytoscape =
     FunctionComponent.Of _cytoscape
-
-//type CytoscapeState = { counter: int }
-//type CytoscapeReactState = { graph: AlpheusGraph }
-
-//type CytoscapeReact(props) =
-//    inherit Component<CytoscapeReactProps, CytoscapeReactState>(props)
-//    do base.setInitState({ graph = props.graph })
-
-//    //let mutable ref : Element = null
-
-//    //override this.componentDidMount() =
-//    //    let s = 
-//    //    let container = ref
-//    //    let opts = createEmpty<Cytoscape.CytoscapeOptions>
-//    //    opts.container <- Some (upcast container.)
-//    //    ()
-
-//    override this.componentDidUpdate (prevProps, _) = ()
-
-//    override this.render() =
-//        div [ ] [ str "Counter = "; ofInt 5 ]
-
-//let inline counterDisplay p = ofType<CytoscapeReact,_,_> p []
-
-//type CytoscapeReact(initialProps) as this =
-//    inherit Compo Component<obj, CounterState>(initialProps)
-//    do
-//        this.setInitState({ counter = 0})
-
-//    // This is the equivalent of doing `this.add = this.add.bind(this)`
-//    // in javascript (Except for the fact that we can't reuse the name)
-//    let add = this.Add
-//    let remove = this.Remove
-
-//    member this.Add(_:MouseEvent) =
-//        this.setState({ counter = this.state.counter + 1 })
-
-//    member this.Remove(_:MouseEvent) =
-//        this.setState({ counter = this.state.counter - 1 })
-
-//    override this.render() =
-//        div [] [
-//            counterDisplay { CounterDisplayProps.counter = this.state.counter }
-//            addRemove { add = add; remove = remove }
-//        ]
-
-//let inline counter props = ofType<Counter,_,_> props []
