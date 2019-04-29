@@ -2439,9 +2439,11 @@ module Cytoscape =
 
         type [<StringEnum>] [<RequireQualifiedAccess>] CurveStyle =
             | Haystack
+            | Straight
             | Bezier
-            | Unbundled
+            | [<CompiledName("unbundled-bezier")>] UnbundledBezier
             | Segments
+            | Taxi
 
         /// These properties affect the styling of an edge’s line:
         /// 

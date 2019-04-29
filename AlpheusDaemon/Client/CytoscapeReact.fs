@@ -61,14 +61,6 @@ let artefactIsSource (methodMap: Map<VertexId, ProducerVertex>) (artefact: Artef
     | Source _ -> true
     | Computed _ -> false
 
-let vertexA = Shared.Computed { id = "A"; label = Some "A"; inputs = []; outputs = [ "C" ]; command = ""; workingDirectory = "" }
-let vertexB = Shared.Computed { id = "B"; label = Some "B"; inputs = [ "C" ]; outputs = []; command = ""; workingDirectory = "" }
-let vertexC = { ArtefactVertex.id ="C"; label = Some "C"; source = "A"; dependants = [ (*"B"*) ] }
-let graphTest = {
-    artefacts = [ vertexC ]
-    methods = [ vertexA; vertexB ]
-}
-
 let buildCytoscapeGraph (graph: AlpheusGraph) =
     if graph.artefacts.IsEmpty && graph.methods.IsEmpty
         then
@@ -126,7 +118,7 @@ let styles =
     edgeStyle.selector <- "edge"
     let edgeCss = createEmpty<Css.Edge>
     //edgeCss.width <- Some (U2.Case1 1.0)
-    edgeCss.``curve-style`` <- Some Css.CurveStyle.Bezier
+    edgeCss.``curve-style`` <- Some Css.CurveStyle.UnbundledBezier
     edgeCss.``target-arrow-shape`` <- Some Css.ArrowShape.Triangle
     edgeCss.``target-arrow-fill`` <- Some Css.ArrowFill.Filled
     edgeCss.``target-arrow-color`` <- Some "black"
