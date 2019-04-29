@@ -13,18 +13,24 @@
     <Compile Include="Cytoscape.fs" />
     <Compile Include="ReactCytoscape.fs" />
     <Compile Include="CytoscapeDagre.fs" />
+    <Compile Include="CytoscapeKlay.fs" />
+    <Compile Include="CytoscapeExpandCollapse.fs" />
+    <Compile Include="CytoscapeReact.fs" />
     <!--<Compile Include="../Shared/Shared.fs" />-->
     <Compile Include="ViewHelpers.fs" />
     <Compile Include="App.fs" />
     <Compile Include="Client.fs" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Elmish.Bridge.Client" Version="2.0.1" />
-    <PackageReference Include="Fable.Core" Version="2.0.3" />
-    <PackageReference Include="Fable.Elmish.Debugger" Version="2.0.3" />
-    <PackageReference Include="Fable.Elmish.HMR" Version="3.2.0" />
-    <PackageReference Include="Fable.Elmish.React" Version="2.2.0" />
-    <PackageReference Include="Fable.FontAwesome.Free" Version="1.0.0" />
-    <PackageReference Include="Fulma" Version="1.1.0" />
+    <PackageReference Include="Elmish.Bridge.Client" Version="3.0.0" />
+    <PackageReference Include="Fable.Core" Version="3.0.0" />
+    <PackageReference Include="Fable.Elmish.Debugger" Version="3.0.0" />
+    <PackageReference Include="Fable.Elmish.HMR" Version="4.0.1" />
+    <PackageReference Include="Fable.Elmish.React" Version="3.0.1" />
+    <PackageReference Include="Fable.FontAwesome.Free" Version="2.0.0" />
+    <PackageReference Include="Fulma" Version="2.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Update="FSharp.Core" Version="4.6.2" />
   </ItemGroup>
 </Project>

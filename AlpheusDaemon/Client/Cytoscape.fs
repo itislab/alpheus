@@ -1,11 +1,9 @@
 // ts2fable 0.0.0
 module rec Cytoscape
-open System
 open Fable.Core
-open Fable.Import.JS
-open Fable.Import.Browser
+open Fable.Core.JS
+open Browser.Types
 
-//let [<Import("*","cytoscape")>] cytoscape: Cytoscape.IExports = jsNative
 let [<Import("default","cytoscape")>] cytoscape: ?options: Cytoscape.CytoscapeOptions -> Cytoscape.Core = jsNative
 let [<Import("default","cytoscape")>] cytoscapeModuleImport: Cytoscape.IModuleUse = jsNative
 
@@ -681,39 +679,39 @@ module Cytoscape =
     /// Get the entry point to modify the visual style of the graph after initialisation.
     /// http://js.cytoscape.org/#core/style
     type [<AllowNullLiteral>] ElementStylesheetStyle =
-        inherit StylesheetStyle
+        inherit Stylesheet // StylesheetStyle
         abstract json: unit -> obj option
 
-    type [<AllowNullLiteral>] ElementStylesheetCSS =
-        inherit StylesheetCSS
-        abstract json: unit -> obj option
+    //type [<AllowNullLiteral>] ElementStylesheetCSS =
+    //    inherit StylesheetCSS
+    //    abstract json: unit -> obj option
 
     type [<AllowNullLiteral>] CoreStyle =
         /// Get the current style object.
-        abstract style: unit -> U2<ElementStylesheetStyle, ElementStylesheetCSS>
+        abstract style: unit -> Stylesheet // U2<ElementStylesheetStyle, ElementStylesheetCSS>
         /// Assign a new stylesheet to replace the existing one.
         abstract style: sheet: U3<Stylesheet, ResizeArray<Stylesheet>, string> -> Stylesheet
 
-    type Stylesheet =
-        U2<StylesheetStyle, StylesheetCSS>
+    //type Stylesheet =
+    //    U2<StylesheetStyle, StylesheetCSS>
 
-    [<RequireQualifiedAccess; CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-    module Stylesheet =
-        let ofStylesheetStyle v: Stylesheet = v |> U2.Case1
-        let isStylesheetStyle (v: Stylesheet) = match v with U2.Case1 _ -> true | _ -> false
-        let asStylesheetStyle (v: Stylesheet) = match v with U2.Case1 o -> Some o | _ -> None
-        let ofStylesheetCSS v: Stylesheet = v |> U2.Case2
-        let isStylesheetCSS (v: Stylesheet) = match v with U2.Case2 _ -> true | _ -> false
-        let asStylesheetCSS (v: Stylesheet) = match v with U2.Case2 o -> Some o | _ -> None
+    //[<RequireQualifiedAccess; CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    //module Stylesheet =
+    //    let ofStylesheetStyle v: Stylesheet = v |> U2.Case1
+    //    let isStylesheetStyle (v: Stylesheet) = match v with U2.Case1 _ -> true | _ -> false
+    //    let asStylesheetStyle (v: Stylesheet) = match v with U2.Case1 o -> Some o | _ -> None
+    //    let ofStylesheetCSS v: Stylesheet = v |> U2.Case2
+    //    let isStylesheetCSS (v: Stylesheet) = match v with U2.Case2 _ -> true | _ -> false
+    //    let asStylesheetCSS (v: Stylesheet) = match v with U2.Case2 o -> Some o | _ -> None
 
-    type [<AllowNullLiteral>] StylesheetStyle =
+    type [<AllowNullLiteral>] Stylesheet = // StylesheetStyle =
         abstract selector: string with get, set
         abstract style: U2<Css.Node, Css.Edge> with get, set
 
-    /// http://js.cytoscape.org/#cy.style
-    type [<AllowNullLiteral>] StylesheetCSS =
-        abstract selector: string with get, set
-        abstract css: U2<Css.Node, Css.Edge> with get, set
+    ///// http://js.cytoscape.org/#cy.style
+    //type [<AllowNullLiteral>] StylesheetCSS =
+    //    abstract selector: string with get, set
+    //    abstract css: U2<Css.Node, Css.Edge> with get, set
 
     /// http://js.cytoscape.org/#core/export
     type [<AllowNullLiteral>] ExportOptions =
@@ -2441,9 +2439,11 @@ module Cytoscape =
 
         type [<StringEnum>] [<RequireQualifiedAccess>] CurveStyle =
             | Haystack
+            | Straight
             | Bezier
-            | Unbundled
+            | [<CompiledName("unbundled-bezier")>] UnbundledBezier
             | Segments
+            | Taxi
 
         /// These properties affect the styling of an edge’s line:
         /// 

@@ -1,5 +1,37 @@
 namespace Shared
 
+type VertexId = string
+
+type ArtefactVertex = { 
+    id: VertexId
+    label: string option
+    source : VertexId
+    dependants : VertexId list
+}
+and ProducerVertex =
+    /// The vertex produces single artefact out of void
+    |   Source of SourceVertex
+    /// The vertex corresponds to invocation of single CLI command
+    |   Computed of ComputedVertex
+and ComputedVertex = {
+    id: VertexId
+    label: string option
+    inputs : VertexId list
+    outputs : VertexId list
+    command: string
+    workingDirectory: string
+}
+and SourceVertex = {
+    id: string
+    label: string option
+    artefact: VertexId
+}
+
+type AlpheusGraph = {
+    artefacts: ArtefactVertex list
+    methods: ProducerVertex list
+}
+
 type [<RequireQualifiedAccess>] NodeKind =
     | Artefact
     | Method
@@ -23,7 +55,7 @@ type Graph = {
 }
 
 type State = {
-    graph: Graph
+    graph: AlpheusGraph
 }
 
 type ServerMsg =

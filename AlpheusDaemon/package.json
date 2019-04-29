@@ -18,12 +18,12 @@
         "babel-loader": "^8.0.0",
         "copy-webpack-plugin": "^4.6.0",
         "css-loader": "^2.0.1",
-        "fable-compiler": "^2.1.8",
-        "fable-loader": "^2.1.1",
+        "fable-compiler": "^2.3.3",
+        "fable-loader": "^2.1.6",
         "html-webpack-plugin": "^3.2.0",
         "mini-css-extract-plugin": "^0.5.0",
-        "react": "16.5.2",
-        "react-dom": "16.5.2",
+        "react": "16.8.6",
+        "react-dom": "16.8.6",
         "remotedev": "^0.2.9",
         "sass": "^1.15.2",
         "sass-loader": "^7.1.0",
@@ -36,8 +36,17 @@
     "dependencies": {
         "@babel/runtime-corejs2": "^7.4.3",
         "core-js": "2.6.5",
-        "cytoscape": "^3.5.2",
+        "cytoscape": "^3.5.3",
         "cytoscape-dagre": "^2.2.2",
-        "react-cytoscapejs": "^1.1.0"
+        "cytoscape-expand-collapse": "^3.1.2",
+        "cytoscape-klay": "^3.1.2",
+        "jquery": "^3.4.0",
+        "react": "16.8.6",
+        "react-cytoscapejs": "^1.1.0",
+        "react-dom": "16.8.6"
+    },
+    "resolutions": {
+        "**/react": "16.8.6",
+        "**/react-dom": "16.8.6"
     }
 }

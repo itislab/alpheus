@@ -5,13 +5,16 @@ open Elmish.React
 open Elmish.Bridge
 open App
 open Shared
+open Fable.Core
  
 #if DEBUG
 open Elmish.Debug
 open Elmish.HMR
+
 #endif
 
-Cytoscape.cytoscapeModuleImport.``use`` CytoscapeDagre.dagre
+Cytoscape.cytoscapeModuleImport.``use`` CytoscapeKlay.klay
+CytoscapeExpandCollapse.expandCollapse.Invoke (Cytoscape.cytoscape, CytoscapeExpandCollapse.jquery)
 Program.mkProgram init update view
 #if DEBUG
 |> Program.withConsoleTrace
@@ -23,7 +26,7 @@ Program.mkProgram init update view
 //        (fun bridgeMsg ->
 //            match bridgeMsg with
 //            | GetLocation loc -> GotReport { Report.Location = loc } ))
-|> Program.withReact "elmish-app"
+|> Program.withReactBatched "elmish-app"
 #if DEBUG
 |> Program.withDebugger
 #endif

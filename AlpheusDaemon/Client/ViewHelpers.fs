@@ -1,8 +1,8 @@
 [<AutoOpen>]
 module ViewHelpers
 
-open Fable.Helpers.React
-open Fable.Helpers.React.Props
+open Fable.React
+open Fable.React.Props
 
 open Fulma
 
@@ -12,7 +12,7 @@ module KeyCode =
     let downArrow =  40.
 
 let onKeyDown keyCode action =
-    OnKeyDown (fun (ev:Fable.Import.React.KeyboardEvent) ->
+    OnKeyDown (fun ev ->
         if ev.keyCode = keyCode then
             ev.preventDefault()
             action ev)
