@@ -10,6 +10,10 @@ open Cytoscape.Cytoscape
 
 open Browser.Types
 
+let folderIdPrefix = "24A670DC"
+
+let folderId folder = folderIdPrefix + folder
+
 let sourceContainerId = "341DDCD4"
 
 let sourceContainer =
@@ -18,8 +22,28 @@ let sourceContainer =
     dataDef.id <- Some sourceContainerId
     dataDef.["label"] <- Some (upcast "Source data")
     def.data <- dataDef
-    def.classes <- Some "artefact"
+    def.classes <- Some "folder"
     def
+
+//let defineArtefactNode (artefact: ArtefactVertex) isSource =
+//    let def = createEmpty<NodeDefinition>
+//    let dataDef = createEmpty<NodeDataDefinition>
+//    dataDef.id <- Some artefact.id
+//    dataDef.["label"] <- Some (upcast (match artefact.label with Some l -> l | None -> artefact.id))
+//    if isSource then
+//        dataDef.parent <- Some sourceContainerId
+//    else
+//        dataDef.parent <- Some artefact.source
+//    def.data <- dataDef
+//    def.classes <- Some "artefact"
+//    def
+
+let trySplitParentFolder (path: string) =
+    let parts = path.Split([|'\\'; '/'|])
+    if parts.Length > 1 then
+        Some ((System.String.Join("/", parts |> Array.take (parts.Length - 1))), Array.last parts)
+    else
+        None
 
 let defineArtefactNode (artefact: ArtefactVertex) isSource =
     let def = createEmpty<NodeDefinition>
@@ -27,18 +51,40 @@ let defineArtefactNode (artefact: ArtefactVertex) isSource =
     dataDef.id <- Some artefact.id
     dataDef.["label"] <- Some (upcast (match artefact.label with Some l -> l | None -> artefact.id))
     if isSource then
-        dataDef.parent <- Some sourceContainerId
+        match trySplitParentFolder artefact.id with
+        | Some (parent, _) ->
+            dataDef.parent <- Some (folderId parent)
+        | None -> ()
     else
         dataDef.parent <- Some artefact.source
     def.data <- dataDef
     def.classes <- Some "artefact"
     def
 
+let defineFolderNode (path: string) =
+    let def = createEmpty<NodeDefinition>
+    let dataDef = createEmpty<NodeDataDefinition>
+    dataDef.id <- Some (folderId path)
+    
+    match trySplitParentFolder path with
+    | Some (parent, self) ->
+        dataDef.parent <- Some (folderId parent)
+        dataDef.["label"] <- Some (upcast self)
+    | None ->
+        dataDef.["label"] <- Some (upcast path)
+    def.data <- dataDef
+    def.classes <- Some "folder"
+    def
+
 let defineMethodNode (method: ComputedVertex) =
     let def = createEmpty<NodeDefinition>
     let dataDef = createEmpty<NodeDataDefinition>
     dataDef.id <- Some method.id
-    dataDef.["label"] <- Some (upcast (match method.label with Some l -> l | None -> method.id))
+    dataDef.["label"] <- Some (upcast (match method.label with Some l -> l | None -> method.command.Split(' ').[0].Split([|'\\'; '/'|]) |> Array.last))
+    match trySplitParentFolder method.outputs.Head with
+    | Some (parent, _) ->
+        dataDef.parent <- Some (folderId parent)
+    | None -> ()
     def.data <- dataDef
     def.classes <- Some "method"
     def
@@ -55,6 +101,18 @@ let defineEdges (artefact: ArtefactVertex) = seq {
         def
 }
 
+let defineEdgesMethodBased (artefact: ArtefactVertex) isSource = seq {
+    for dependant in artefact.dependants ->
+        let def = createEmpty<EdgeDefinition>
+        let dataDef = createEmpty<EdgeDataDefinition>
+        dataDef.id <- Some (artefact.id + " -> " + dependant)
+        dataDef.["label"] <- Some (upcast "")
+        dataDef.source <- if isSource then artefact.id else artefact.source
+        dataDef.target <- dependant
+        def.data <- dataDef
+        def
+}
+
 let artefactIsSource (methodMap: Map<VertexId, ProducerVertex>) (artefact: ArtefactVertex) =
     let parent = methodMap.[artefact.source]
     match parent with
@@ -66,13 +124,20 @@ let buildCytoscapeGraph (graph: AlpheusGraph) =
         then
             [||]
         else
+            let getMentionedFolders (path: string) =
+                let parts = path.Split([|'\\'; '/'|])
+                seq { for i in 1..parts.Length - 1 -> System.String.Join ("/", parts |> Array.take i) }
+            let folders = graph.artefacts |> Seq.collect (fun art -> getMentionedFolders art.id) |> Seq.distinct
+            let folderNodeDefs = folders |> Seq.map defineFolderNode
             let methodMap = graph.methods |> Seq.map (fun m -> match m with Source s -> (s.id, m) | Computed c -> (c.id, m)) |> Map.ofSeq
             let artefactIsSourceMask = graph.artefacts |> Seq.map (artefactIsSource methodMap)
             let artefactNodeDefs = graph.artefacts |> Seq.map2 defineArtefactNode <| artefactIsSourceMask
             let methodNodeDefs = graph.methods |> Seq.choose (fun m-> match m with Source _ -> None | Computed c -> Some c) |> Seq.map defineMethodNode
-            let nodeDefs = Seq.append artefactNodeDefs methodNodeDefs |> Seq.append (seq { yield sourceContainer })
+            let nodeDefs = Seq.append artefactNodeDefs methodNodeDefs |> Seq.append folderNodeDefs //(seq { yield sourceContainer })
 
-            let edgeDefs = graph.artefacts |> Seq.collect defineEdges
+            //let edgeDefs = graph.artefacts |> Seq.collect defineEdges
+
+            let edgeDefs = (graph.artefacts, artefactIsSourceMask) ||> Seq.zip  |> Seq.collect (fun (art, isSource) -> defineEdgesMethodBased art isSource)
 
             printf "nodes:"
             nodeDefs |> Seq.iter (fun n -> printfn "%s" n.data.id.Value)
@@ -131,31 +196,82 @@ let styles =
     artefactCss.``background-color`` <- Some "gray"
     artefactStyle.style <- U2.Case1 artefactCss
 
+    let folderStyle = createEmpty<Stylesheet>
+    folderStyle.selector <- ".folder"
+    let folderCss = createEmpty<Css.Node>
+    folderCss.``background-color`` <- Some "green"
+    folderStyle.style <- U2.Case1 folderCss
+
     let methodStyle = createEmpty<Stylesheet>
     methodStyle.selector <- ".method"
     let methodCss = createEmpty<Css.Node>
     methodCss.``background-color`` <- Some "blue"
     methodStyle.style <- U2.Case1 methodCss
 
-    ResizeArray [| nodeStyle; containerStyle; artefactStyle; methodStyle; edgeStyle |]
+    ResizeArray [| nodeStyle; containerStyle; artefactStyle; methodStyle; folderStyle; edgeStyle |]
 
-let layout =
+let klayLayout =
     let layoutOpts = createEmpty<CytoscapeKlay.KlayLayoutOptions>
     layoutOpts.nodeDimensionsIncludeLabels <- true
     layoutOpts.name <- "klay"
+    //layoutOpts.avoidOverlap <- Some true
     let klayOpts = createEmpty<CytoscapeKlay.KlayOptions>
     klayOpts.direction <- Some CytoscapeKlay.Direction.Right
     klayOpts.layoutHierarchy <- Some true
-    klayOpts.nodePlacement <- Some CytoscapeKlay.NodePlacementStrategy.LinearSegments
+    klayOpts.nodePlacement <- Some CytoscapeKlay.NodePlacementStrategy.Simple
     klayOpts.nodeLayering <- Some CytoscapeKlay.NodeLayeringStrategy.NetworkSimplex
-    klayOpts.mergeHierarchyCrossingEdges <- Some true
-    klayOpts.thoroughness <- Some 100.0
+    //klayOpts.mergeHierarchyCrossingEdges <- Some true
+    klayOpts.edgeRouting <- Some CytoscapeKlay.EdgeRouting.Polyline
+    klayOpts.spacing <- Some 20.0
+    klayOpts.edgeSpacingFactor <- Some 0.3
+    klayOpts.fixedAlignment <- Some CytoscapeKlay.Alignment.Balanced
+    klayOpts.thoroughness <- Some 1000.0
+    klayOpts.aspectRatio <- Some 1.0
     layoutOpts.klay <- Some klayOpts
+    layoutOpts
+
+let coseBilkentLayout =
+    let layoutOpts = createEmpty<CytoscapeCoseBilkent.CoseBilkentLayoutOptions>
+    layoutOpts.nodeDimensionsIncludeLabels <- true
+    //layoutOpts.
+    layoutOpts.name <- "cose-bilkent"
+    layoutOpts.randomize <- Some false
+    layoutOpts
+
+let fCoseLayout =
+    let layoutOpts = createEmpty<CytoscapeFCose.FCoseLayoutOptions>
+    layoutOpts.name <- "fcose"
+    layoutOpts.quality <- Some CytoscapeFCose.Quality.Proof
+    layoutOpts.nodeDimensionsIncludeLabels <- Some true
+    layoutOpts.randomize <- Some false
+    layoutOpts.tile <- Some true
+    layoutOpts.fit <- Some true
+    layoutOpts.nodeRepulsion <- Some 40000.0
+    layoutOpts.gravity <- Some 2.0
+    layoutOpts.gravityCompound <- Some 5.0
+    layoutOpts.edgeElasticity <- Some 2.0
+    layoutOpts.numIter <- Some 20000.0
+    layoutOpts.sampleSize <- Some 100.0
+    layoutOpts.nodeSeparation <- Some 20.0
+    layoutOpts
+
+let colaLayout =
+    let layoutOpts = createEmpty<CytoscapeCola.ColaLayoutOptions>
+    layoutOpts.name <- "cola"
+    layoutOpts.animate <- Some true
+    layoutOpts.nodeDimensionsIncludeLabels <- Some true
+    layoutOpts.randomize <- Some false
+    layoutOpts.avoidOverlap <- Some true
+    layoutOpts.handleDisconnected <- Some true
+    let flow = createEmpty<CytoscapeCola.FlowOptions>
+    flow.axis <- CytoscapeCola.Axis.Y
+    flow.minSeparation <- Some 30.0
+    layoutOpts.flow <- Some flow
     layoutOpts
 
 let expandCollapseOptions =
     let opts = createEmpty<CytoscapeExpandCollapse.Options>
-    opts.layoutBy <- Some (upcast layout)
+    opts.layoutBy <- Some (upcast colaLayout)
     opts.undoable <- Some false
     opts
 
@@ -175,7 +291,7 @@ let private _cytoscape (props: CytoscapeReactProps) =
             opts.container <- Some (ref :?> HTMLElement) // ref is attached to a div, downcast is valid
             opts.elements <- Some (U4.Case2 (buildCytoscapeGraph props.graph))
             opts.style <- Some (U2.Case1 styles)
-            opts.layout <- Some (upcast layout)
+            opts.layout <- Some (upcast colaLayout)
             let cy = Cytoscape.cytoscape opts :?> CytoscapeExpandCollapse.CoreWithExpandCollapse // necessary setup to make
             // this downcast valid is done in Client.fs
             cyState.update (Some cy)

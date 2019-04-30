@@ -131,7 +131,7 @@ let loadGraph path = async {
                                         let foid = fullIDtoString cv.FirstOutputFullID
                                         Some (Shared.Computed {
                                             id = idForComputed cv
-                                            label = Some "Produce"
+                                            label = None
                                             inputs = cv.Inputs |> Seq.map (fun va -> idForArtefact va.Artefact) |> List.ofSeq
                                             outputs = cv.Outputs |> Seq.map (fun va -> idForArtefact va.Artefact) |> List.ofSeq
                                             command = cv.Command

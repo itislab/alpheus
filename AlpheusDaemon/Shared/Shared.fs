@@ -22,7 +22,7 @@ and ComputedVertex = {
     workingDirectory: string
 }
 and SourceVertex = {
-    id: string
+    id: VertexId
     label: string option
     artefact: VertexId
 }
