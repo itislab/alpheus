@@ -14,6 +14,9 @@
     <Compile Include="ReactCytoscape.fs" />
     <Compile Include="CytoscapeDagre.fs" />
     <Compile Include="CytoscapeKlay.fs" />
+    <Compile Include="CytoscapeCoseBilkent.fs" />
+    <Compile Include="CytoscapeFCose.fs" />
+    <Compile Include="CytoscapeCola.fs" />
     <Compile Include="CytoscapeExpandCollapse.fs" />
     <Compile Include="CytoscapeReact.fs" />
     <!--<Compile Include="../Shared/Shared.fs" />-->

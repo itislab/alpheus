@@ -1574,6 +1574,13 @@ core-util-is@~1.0.0:
   resolved "https://registry.yarnpkg.com/core-util-is/-/core-util-is-1.0.2.tgz#b5fd54220aa2bc5ab57aab7140c940754503c1a7"
   integrity sha1-tf1UIgqivFq1eqtxQMlAdUUDwac=
 
+cose-base@^1.0.0:
+  version "1.0.0"
+  resolved "https://registry.yarnpkg.com/cose-base/-/cose-base-1.0.0.tgz#a44197e835b30b2b5bf4ab7e9dd06e6201c8798c"
+  integrity sha512-f0HADhG7lnoa+rzzAHBMG5SfxHKDbXiGzwmjVzLNAw8DzqMEVZ86VZ0f8dCWBf8sy7L06S2StytVbqm9Hb5Qog==
+  dependencies:
+    layout-base "^1.0.0"
+
 create-ecdh@^4.0.0:
   version "4.0.3"
   resolved "https://registry.yarnpkg.com/create-ecdh/-/create-ecdh-4.0.3.tgz#c9111b6f33045c4697f144787f9254cdc77c45ff"
@@ -1675,6 +1682,18 @@ cyclist@~0.2.2:
   resolved "https://registry.yarnpkg.com/cyclist/-/cyclist-0.2.2.tgz#1b33792e11e914a2fd6d6ed6447464444e5fa640"
   integrity sha1-GzN5LhHpFKL9bW7WRHRkRE5fpkA=
 
+cytoscape-cola@^2.3.0:
+  version "2.3.0"
+  resolved "https://registry.yarnpkg.com/cytoscape-cola/-/cytoscape-cola-2.3.0.tgz#24104eaab46e0a88dfeedb02199610450525208d"
+  integrity sha512-xblxlCH8JXGLdH6XMUBJY3xBUJuL1rLy8bLMGvqkvoPHSbBfV+/klMWoqwervVKWOmFHPwUdihtxy8stG4RM5g==
+  dependencies:
+    webcola "^3.3.6"
+
+cytoscape-cose-bilkent@^4.0.0:
+  version "4.0.0"
+  resolved "https://registry.yarnpkg.com/cytoscape-cose-bilkent/-/cytoscape-cose-bilkent-4.0.0.tgz#5f0afbe5c55a7a026442b756ca388ce77c262967"
+  integrity sha1-Xwr75cVaegJkQrdWyjiM53wmKWc=
+
 cytoscape-dagre@^2.2.2:
   version "2.2.2"
   resolved "https://registry.yarnpkg.com/cytoscape-dagre/-/cytoscape-dagre-2.2.2.tgz#5f32a85c0ba835f167efee531df9e89ac58ff411"
@@ -1686,6 +1705,14 @@ cytoscape-expand-collapse@^3.1.2:
   version "3.1.2"
   resolved "https://registry.yarnpkg.com/cytoscape-expand-collapse/-/cytoscape-expand-collapse-3.1.2.tgz#b4dbbfad159723f6bf627b20bfb9a3ec7d0f2d29"
   integrity sha512-yClfo0z2IqEkhlOipUh85k1kJGSgxaSKs4e30KO1mDIXPKOnvL/iQhVXmNt9+KmuIGg9YtNt09P0j3F4BN3WsA==
+
+cytoscape-fcose@^1.0.0:
+  version "1.0.0"
+  resolved "https://registry.yarnpkg.com/cytoscape-fcose/-/cytoscape-fcose-1.0.0.tgz#fd91517a8d1f84aa487e95ffa34b525a0ae19a1b"
+  integrity sha512-tEVGs+Kivb8ddFcZV5TGxtqLdCydemdGUX/7droT+oT92SkeE+LEQ+qhvaFwSFFM7v1UKbZ3xnkBFi+EZDXCFg==
+  dependencies:
+    cose-base "^1.0.0"
+    numeric "1.2.6"
 
 cytoscape-klay@^3.1.2:
   version "3.1.2"
@@ -1709,6 +1736,29 @@ cytoscape@^3.5.3:
   dependencies:
     heap "^0.2.6"
     lodash.debounce "^4.0.8"
+
+d3-dispatch@1, d3-dispatch@^1.0.3:
+  version "1.0.5"
+  resolved "https://registry.yarnpkg.com/d3-dispatch/-/d3-dispatch-1.0.5.tgz#e25c10a186517cd6c82dd19ea018f07e01e39015"
+  integrity sha512-vwKx+lAqB1UuCeklr6Jh1bvC4SZgbSqbkGBLClItFBIYH4vqDJCA7qfoy14lXmJdnBOdxndAMxjCbImJYW7e6g==
+
+d3-drag@^1.0.4:
+  version "1.2.3"
+  resolved "https://registry.yarnpkg.com/d3-drag/-/d3-drag-1.2.3.tgz#46e206ad863ec465d88c588098a1df444cd33c64"
+  integrity sha512-8S3HWCAg+ilzjJsNtWW1Mutl74Nmzhb9yU6igspilaJzeZVFktmY6oO9xOh5TDk+BM2KrNFjttZNoJJmDnkjkg==
+  dependencies:
+    d3-dispatch "1"
+    d3-selection "1"
+
+d3-selection@1:
+  version "1.4.0"
+  resolved "https://registry.yarnpkg.com/d3-selection/-/d3-selection-1.4.0.tgz#ab9ac1e664cf967ebf1b479cc07e28ce9908c474"
+  integrity sha512-EYVwBxQGEjLCKF2pJ4+yrErskDnz5v403qvAid96cNdCMr8rmCYfY5RGzWz24mdIbxmDf6/4EAH+K9xperD5jg==
+
+d3-timer@^1.0.5:
+  version "1.0.9"
+  resolved "https://registry.yarnpkg.com/d3-timer/-/d3-timer-1.0.9.tgz#f7bb8c0d597d792ff7131e1c24a36dd471a471ba"
+  integrity sha512-rT34J5HnQUHhcLvhSB9GjCkN0Ddd5Y8nCwDBG2u6wQEeYxT/Lf51fTFFkldeib/sE/J0clIe0pnCfs6g/lRbyg==
 
 dagre@^0.8.2:
   version "0.8.4"
@@ -3133,6 +3183,11 @@ klayjs@^0.4.1:
   resolved "https://registry.yarnpkg.com/klayjs/-/klayjs-0.4.1.tgz#5bf9fadc7a3e44b94082bba501e7d803076dcfc2"
   integrity sha1-W/n63Ho+RLlAgrulAefYAwdtz8I=
 
+layout-base@^1.0.0:
+  version "1.0.0"
+  resolved "https://registry.yarnpkg.com/layout-base/-/layout-base-1.0.0.tgz#b355633be57ffa27d959dd24703e187ef83cdbc3"
+  integrity sha512-5wUQzvZxfC2qVOjPu1sIt/sw/BS4Q1S+HD9bU+EmMqT7j0GzQ2LjVVOxHEoGJ7UXpxMK600YECl4ZeHm/r8y/A==
+
 lcid@^2.0.0:
   version "2.0.0"
   resolved "https://registry.yarnpkg.com/lcid/-/lcid-2.0.0.tgz#6ef5d2df60e52f82eb228a4c373e8d1f397253cf"
@@ -3683,6 +3738,11 @@ number-is-nan@^1.0.0:
   version "1.0.1"
   resolved "https://registry.yarnpkg.com/number-is-nan/-/number-is-nan-1.0.1.tgz#097b602b53422a522c1afb8790318336941a011d"
   integrity sha1-CXtgK1NCKlIsGvuHkDGDNpQaAR0=
+
+numeric@1.2.6:
+  version "1.2.6"
+  resolved "https://registry.yarnpkg.com/numeric/-/numeric-1.2.6.tgz#765b02bef97988fcf880d4eb3f36b80fa31335aa"
+  integrity sha1-dlsCvvl5iPz4gNTrPza4D6MTNao=
 
 object-assign@^4.0.1, object-assign@^4.1.0, object-assign@^4.1.1:
   version "4.1.1"
@@ -5299,6 +5359,15 @@ wbuf@^1.1.0, wbuf@^1.7.3:
   integrity sha512-O84QOnr0icsbFGLS0O3bI5FswxzRr8/gHwWkDlQFskhSPryQXvrTMxjxGP4+iWYoauLoBvfDpkrOauZ+0iZpDA==
   dependencies:
     minimalistic-assert "^1.0.0"
+
+webcola@^3.3.6:
+  version "3.3.9"
+  resolved "https://registry.yarnpkg.com/webcola/-/webcola-3.3.9.tgz#a54cae07478f1b25968d280b0d4a369c0b4352b3"
+  integrity sha512-hjE23yiRU+7AGajxuDdUDW8txyMVgXHCW71erA0UVKYx0lruqs1o4QFQ0OSpSdNS6wlAwgk0IPxhuEiQq1MXfQ==
+  dependencies:
+    d3-dispatch "^1.0.3"
+    d3-drag "^1.0.4"
+    d3-timer "^1.0.5"
 
 webpack-cli@^3.1.2:
   version "3.3.0"

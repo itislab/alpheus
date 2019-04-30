@@ -14,6 +14,9 @@ open Elmish.HMR
 #endif
 
 Cytoscape.cytoscapeModuleImport.``use`` CytoscapeKlay.klay
+Cytoscape.cytoscapeModuleImport.``use`` CytoscapeCoseBilkent.coseBilkent
+Cytoscape.cytoscapeModuleImport.``use`` CytoscapeFCose.fCose
+Cytoscape.cytoscapeModuleImport.``use`` CytoscapeCola.cola
 CytoscapeExpandCollapse.expandCollapse.Invoke (Cytoscape.cytoscape, CytoscapeExpandCollapse.jquery)
 Program.mkProgram init update view
 #if DEBUG

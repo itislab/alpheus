@@ -6,11 +6,11 @@ open Cytoscape.Cytoscape
 
 let [<Import("default","cytoscape-dagre")>] dagre: Cytoscape.Ext = jsNative
 
-type [<StringEnum>] DagreRankDir =
+type [<StringEnum>] [<RequireQualifiedAccess>] DagreRankDir =
     | [<CompiledName("TB")>] TopToBottom
     | [<CompiledName("LR")>] LeftToRight
 
-type [<StringEnum>] DagreRanker =
+type [<StringEnum>] [<RequireQualifiedAccess>] DagreRanker =
     | [<CompiledName("network-simplex")>] NetworkSimplex
     | [<CompiledName("tight-tree")>] TightTree
     | [<CompiledName("longest-path")>] LongestPath
