@@ -258,7 +258,7 @@ let fCoseLayout =
 let colaLayout =
     let layoutOpts = createEmpty<CytoscapeCola.ColaLayoutOptions>
     layoutOpts.name <- "cola"
-    layoutOpts.animate <- Some false
+    layoutOpts.animate <- Some true
     layoutOpts.nodeDimensionsIncludeLabels <- Some true
     layoutOpts.randomize <- Some false
     layoutOpts.avoidOverlap <- Some true
