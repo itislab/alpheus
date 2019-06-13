@@ -202,7 +202,7 @@ type IntermediateGraphNode(methodVertex:DependencyGraph.ComputedVertex, experime
         seq { yield (results, null) }
 
 
-let buildStatusGraph experimentRoot (g:DependencyGraph.Graph) =    
+let buildGraph experimentRoot (g:DependencyGraph.Graph) =    
     let factory method : ComputationGraphNode =
         match method with
         |   ProducerVertex.Source(source) -> upcast SourceGraphNode(source.Artefact.Artefact,experimentRoot)

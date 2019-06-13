@@ -1,4 +1,4 @@
-﻿module ItisLab.Alpeus.GitIgnoreManager
+﻿module ItisLab.Alpheus.GitIgnoreManager
 
 open System.IO
 open System.Text
