@@ -2,6 +2,7 @@
 [![Build Status](https://travis-ci.org/itislab/alpheus.svg?branch=master)](https://travis-ci.org/itislab/alpheus)
 ![NuGet](https://img.shields.io/nuget/v/Alpheus-cli.svg)
 [![NuGet](https://img.shields.io/nuget/dt/Alpheus-cli.svg)](https://www.nuget.org/packages/Alpheus-cli/)
+[![Maintainability](https://api.codeclimate.com/v1/badges/ff72b44e452b087cbf89/maintainability)](https://codeclimate.com/github/itislab/alpheus/maintainability)
 ---
 
 A tool for organizing and managing computational experiments.
