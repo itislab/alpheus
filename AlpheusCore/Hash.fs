@@ -11,34 +11,42 @@ let hashToString (data : byte array) : HashString = System.BitConverter.ToString
 let createHashAlgorithm() : System.Security.Cryptography.HashAlgorithm =
     upcast System.Security.Cryptography.SHA512.Create()
 
-let hashFileAsync fullPath =
-    let readChunkSize = 100 * 1024 * 1024 //in Bytes
+/// Hashes the content of the stream by reading it by chunks of supplied size
+let hashStreamAsync chunkSizeBytes (stream:Stream) =    
     async {
         use hashAlg = createHashAlgorithm()
         // filename is not accounted for now, as well as attributes. Only file contents
         // let pathBytes = fname |> System.Text.Encoding.UTF8.GetBytes
         // sha.TransformBlock(pathBytes, 0, pathBytes.Length, pathBytes, 0) |> ignore
-        use f_stream = File.OpenRead fullPath
-        let bytesCount = f_stream.Length
-        let fullReads = (int)(bytesCount / (int64)readChunkSize)
-        let partialBlockSize = (int)(bytesCount % (int64)readChunkSize)
+        
+        let bytesCount = stream.Length
+        let fullReads = (int)(bytesCount / (int64)chunkSizeBytes)
+        let partialBlockSize = (int)(bytesCount % (int64)chunkSizeBytes)
         //TODO: check chunked hashing
         for i in 0..(fullReads-1) do                
-            let! contentBytes = f_stream.AsyncRead readChunkSize
-            let readBytes = hashAlg.TransformBlock(contentBytes,0,readChunkSize,contentBytes,0)
-            assert(readBytes = readChunkSize)
+            let! contentBytes = stream.AsyncRead chunkSizeBytes
+            let readBytes = hashAlg.TransformBlock(contentBytes,0,chunkSizeBytes,contentBytes,0)
+            assert(readBytes = chunkSizeBytes)
         if fullReads = 0 then
-            // according to documentation: "You must call the TransformBlock method before calling the TransformFinalBlock method. You must call both methods before you retrieve the final hash value. "
+            // according to documentation:
+            //   "You must call the TransformBlock method before calling the TransformFinalBlock method.
+            //    You must call both methods before you retrieve the final hash value. "
             let dummy = Array.zeroCreate<byte> 0
             hashAlg.TransformBlock(dummy,0,0,dummy,0) |> ignore
         let finalBytes = Array.zeroCreate<byte> partialBlockSize
         if partialBlockSize > 0 then
-            let! _ = f_stream.AsyncRead(finalBytes,0,partialBlockSize)                            
+            let! _ = stream.AsyncRead(finalBytes,0,partialBlockSize)                            
             ()
         let finalRead = hashAlg.TransformFinalBlock(finalBytes,0,partialBlockSize).Length
         assert(finalRead = partialBlockSize)
         return hashAlg.Hash
     }
+
+/// Hashes the content of the file supplied
+let hashFileAsync fullPath =
+    let readChunkSize = 100 * 1024 * 1024 //in Bytes
+    use f_stream = File.OpenRead fullPath
+    hashStreamAsync readChunkSize f_stream
 
 let rec hashDirectoryAsync (fullPath:string) =
     async {
