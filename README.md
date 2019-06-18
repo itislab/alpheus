@@ -1,8 +1,16 @@
 # Alpheus
-[![Build Status](https://travis-ci.org/itislab/alpheus.svg?branch=master)](https://travis-ci.org/itislab/alpheus)
+
+
+
+| Platform        | Build           |
+| ------------- |:-------------:|
+| Visual Studio 2019   | [![VS2019 Build Status](https://img.shields.io/appveyor/ci/dgrechka/alpheus.svg)](https://ci.appveyor.com/project/dgrechka/alpheus) |
+| Linux     | [![Linux Build Status](https://travis-ci.org/itislab/alpheus.svg?branch=master)](https://travis-ci.org/itislab/alpheus)  |
+
+[![Tests](https://img.shields.io/appveyor/tests/dgrechka/alpheus.svg)](https://ci.appveyor.com/project/dgrechka/alpheus/build/tests)
 ![NuGet](https://img.shields.io/nuget/v/Alpheus-cli.svg)
 [![NuGet](https://img.shields.io/nuget/dt/Alpheus-cli.svg)](https://www.nuget.org/packages/Alpheus-cli/)
-[![Maintainability](https://api.codeclimate.com/v1/badges/ff72b44e452b087cbf89/maintainability)](https://codeclimate.com/github/itislab/alpheus/maintainability)
+
 ---
 
 A tool for organizing and managing computational experiments.
