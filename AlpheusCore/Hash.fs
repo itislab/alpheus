@@ -11,18 +11,15 @@ let hashToString (data : byte array) : HashString = System.BitConverter.ToString
 let createHashAlgorithm() : System.Security.Cryptography.HashAlgorithm =
     upcast System.Security.Cryptography.SHA512.Create()
 
-/// Hashes the content of the stream by reading it by chunks of supplied size
+/// Hashes the content of the stream by reading it by chunks of supplied size till the end of the stream.
+/// Stream must have readable Length property
 let hashStreamAsync chunkSizeBytes (stream:Stream) =    
     async {
         use hashAlg = createHashAlgorithm()
-        // filename is not accounted for now, as well as attributes. Only file contents
-        // let pathBytes = fname |> System.Text.Encoding.UTF8.GetBytes
-        // sha.TransformBlock(pathBytes, 0, pathBytes.Length, pathBytes, 0) |> ignore
         
         let bytesCount = stream.Length
         let fullReads = (int)(bytesCount / (int64)chunkSizeBytes)
         let partialBlockSize = (int)(bytesCount % (int64)chunkSizeBytes)
-        //TODO: check chunked hashing
         for i in 0..(fullReads-1) do                
             let! contentBytes = stream.AsyncRead chunkSizeBytes
             let readBytes = hashAlg.TransformBlock(contentBytes,0,chunkSizeBytes,contentBytes,0)
@@ -43,10 +40,13 @@ let hashStreamAsync chunkSizeBytes (stream:Stream) =
     }
 
 /// Hashes the content of the file supplied
+/// Filename as well as attributes are ignored
 let hashFileAsync fullPath =
-    let readChunkSize = 100 * 1024 * 1024 //in Bytes
-    use f_stream = File.OpenRead fullPath
-    hashStreamAsync readChunkSize f_stream
+    async {
+        let readChunkSize = 100 * 1024 * 1024 //in Bytes
+        use f_stream = File.OpenRead fullPath
+        return! hashStreamAsync readChunkSize f_stream
+    }
 
 let rec hashDirectoryAsync (fullPath:string) =
     async {
@@ -89,7 +89,7 @@ let rec hashDirectoryAsync (fullPath:string) =
     }
 
 
-let hashDataAsync fullPath =
+let hashPathAsync fullPath =
     async {
             printfn "%s" (sprintf "Hashing %s ..." fullPath)
             if File.Exists fullPath then
@@ -103,7 +103,7 @@ let hashDataAsync fullPath =
     }
     
 /// optimization that caches the computed hashes into *.hash files
-let fastHashDataAsync (fullPath:string) =
+let fastHashPathAsync (fullPath:string) =
     let hashFilePath =
         let prefix =
             if fullPath.EndsWith(Path.DirectorySeparatorChar) then
@@ -112,7 +112,7 @@ let fastHashDataAsync (fullPath:string) =
         sprintf "%s.hash" prefix
     let hashAndSave() =            
         async {
-            let! hashStr = hashDataAsync fullPath
+            let! hashStr = hashPathAsync fullPath
             match hashStr with
             |   None -> return None
             |   Some(hashStr) ->

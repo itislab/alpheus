@@ -8,6 +8,19 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Content Include="data\folder_with_files\TextFile3.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="data\folder_with_files\subfolder\TextFile2.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="data\folder_with_files\subfolder\TextFile1.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="data\texturalData.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Compile Include="Utils.fs" />
     <Compile Include="Hashing.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>

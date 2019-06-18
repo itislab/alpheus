@@ -245,7 +245,7 @@ type Graph() =
                         // as there no alph file. We must create it now and fix current disk data version in it
                         // so calculating actual disk data version
                         // writing in expected versions
-                        let! calculatedVersion = Hash.fastHashDataAsync fullOutputPath
+                        let! calculatedVersion = Hash.fastHashPathAsync fullOutputPath
                         let versionedArtefact =
                             match calculatedVersion with
                             |   None -> 
@@ -336,7 +336,7 @@ type Graph() =
 let fillinActualHashesAsync (artefacts:ArtefactVertex seq) (experimentRoot: string) =
     async {
         let fullPaths = Seq.map (fun (a:ArtefactVertex) -> fullIDtoFullPath experimentRoot a.FullID) artefacts
-        let asyncs = Seq.map Hash.fastHashDataAsync fullPaths |> Array.ofSeq
+        let asyncs = Seq.map Hash.fastHashPathAsync fullPaths |> Array.ofSeq
         let! hashes = Async.Parallel asyncs
         Seq.iter2 (fun hash (art:ArtefactVertex) -> art.ActualHash <- hash ) hashes artefacts
     }

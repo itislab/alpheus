@@ -240,7 +240,7 @@ let saveAsync (artefactPath:string) storageName saveAll =
                     match loadResults with
                     |   None ->                                
                         // This is "source" file without .alph file created yet. creating an .alphfile for it                                                                                
-                        let! hashResult = Hash.fastHashDataAsync artefactPath
+                        let! hashResult = Hash.fastHashPathAsync artefactPath
                         match hashResult with
                         |   None -> return raise(InvalidDataException("The data to save does not exist"))
                         |   Some(version) ->
