@@ -9,7 +9,7 @@ open System.Threading.Tasks
 let toAsyncFact computation : Task = Async.StartAsTask computation :> _
 
 [<Fact>]
-let ``Hashing is consistent [short buffer]`` () =
+let ``Consistence [short buffer]`` () =
     async {
         let random1 = new Random(1)
         let shortBuffer = Array.zeroCreate<Byte> 1024

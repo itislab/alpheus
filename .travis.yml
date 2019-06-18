@@ -4,3 +4,5 @@ dotnet: 2.1
 script:
  - dotnet restore
  - dotnet build ./AlpheusCore/
+ - dotnet build ./AlpheusUnitTests
+ - dotnet test ./AlpheusUnitTests
