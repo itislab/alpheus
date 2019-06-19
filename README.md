@@ -1,6 +1,8 @@
 # Alpheus
 
+A tool for organizing and managing computational experiments.
 
+---
 
 | Platform        | Build           |
 | ------------- |:-------------:|
@@ -10,10 +12,6 @@
 [![Tests](https://img.shields.io/appveyor/tests/dgrechka/alpheus.svg)](https://ci.appveyor.com/project/dgrechka/alpheus/build/tests)
 ![NuGet](https://img.shields.io/nuget/v/Alpheus-cli.svg)
 [![NuGet](https://img.shields.io/nuget/dt/Alpheus-cli.svg)](https://www.nuget.org/packages/Alpheus-cli/)
-
----
-
-A tool for organizing and managing computational experiments.
 
 ## Installation
 You need to have [.Net Core SDK 2.1.300 or newer](https://dotnet.microsoft.com/learn/dotnet/hello-world-tutorial) installed.

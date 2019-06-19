@@ -46,13 +46,28 @@ let relIDtoString (fullID:RelativeArtefactID) =
     match fullID with
         |   RelativeArtefactID.ID s -> s
 
-let fullIDtoFullPath rootPath (fullID:ArtefactFullID) =
+/// Returns the full path to the artefact using the expereiment root folder and the full artefact ID
+let fullIDtoFullPath (rootPath:string) (fullID:ArtefactFullID) =
+    // some argument checks
+    if not (Path.IsPathFullyQualified rootPath) then
+        raise (Failure @"rootPath must be absolute fully qualified path")
     let s =
         match fullID with
         |   ArtefactFullID.ID s -> s
     Path.GetFullPath(Path.Combine(rootPath, s))
 
-let fullIDtoRelative rootPath (alphFileFullPath:string) (fullID:ArtefactFullID)  =
+/// Converts the full artefact ID to the relative ID with respect to some .alph file defined by .alph file's full path
+let fullIDtoRelative (rootPath:string) (alphFileFullPath:string) (fullID:ArtefactFullID)  =
+    // some argument checks
+    if not (Path.IsPathFullyQualified rootPath) then
+        raise (Failure @"rootPath must be absolute fully qualified path")
+    if not (Path.IsPathFullyQualified alphFileFullPath) then
+        raise (Failure @"alphFileFullPath must be absolute fully qualified path")
+    if not (alphFileFullPath.EndsWith(".alph")) then
+        raise (Failure @"alphFileFullPath must contain a path to some .alph file")
+    if not (alphFileFullPath.StartsWith(rootPath)) then
+        raise (Failure @"alphFile must be under the root path")
+
     let fullID = 
         match fullID with
         |   ArtefactFullID.ID s -> s
@@ -62,7 +77,16 @@ let fullIDtoRelative rootPath (alphFileFullPath:string) (fullID:ArtefactFullID) 
     let relID:RelativeArtefactID = RelativeArtefactID.ID(Path.GetRelativePath(fullAlphDir,artefactAbsPath))
     relID
 
-let relIDtoFullID rootPath (alphFileFullPath:string) (relID:RelativeArtefactID)  =
+/// Converts relative artefact ID (with respect to some alph file) to the full Artefact ID (with respect to some experiment root)
+let relIDtoFullID (rootPath:string) (alphFileFullPath:string) (relID:RelativeArtefactID)  =
+    // some argument checks
+    if not (Path.IsPathFullyQualified rootPath) then
+        raise (Failure @"rootPath must be absolute fully qualified path")
+    if not (Path.IsPathFullyQualified alphFileFullPath) then
+        raise (Failure @"alphFileFullPath must be absolute fully qualified path")
+    if not (alphFileFullPath.StartsWith(rootPath)) then
+        raise (Failure @"alphFile must be under the root path")
+    
     let relID = 
         match relID with
         |   RelativeArtefactID.ID s -> s

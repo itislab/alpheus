@@ -1,4 +1,4 @@
-module ItisLab.Alphues.Tests.Hashing
+module ItisLab.Alpheus.Tests.Hashing
 
 open System
 open Xunit
@@ -111,20 +111,8 @@ let ``Different directories result in different hashes`` () =
 
     } |> toAsyncFact
 
-/// Creates a temporary single use folder in constructor, deletes it in Dispose
-type SingleUseDirectoryTests() =
-    let tempName = System.Guid.NewGuid().ToString()
-    let path = System.IO.Path.Combine("data",tempName)
-    
-    do
-        System.IO.Directory.CreateDirectory(path) |> ignore
-
-    member s.Path with
-        get() = path
-
-    interface IDisposable with
-        member s.Dispose() =
-            System.IO.Directory.Delete(path,true)
+type FastHashTests()=
+    inherit SingleUseOneTimeDirectory()
 
     [<Fact>]
     member s.``Fast hash creates hash file for hashed file`` () =
@@ -154,7 +142,7 @@ type SingleUseDirectoryTests() =
         } |> toAsyncFact
 
     [<Fact>]
-    member s.``Fast hash respects up-to-date dot-hash file`` () =
+    member s.``Fast hash respects up-to-date dot-hash file for file artefact`` () =
         async {
             let path = System.IO.Path.Combine(s.Path,"file1.txt")
             let hashFilePath = path+".hash"
@@ -179,7 +167,7 @@ type SingleUseDirectoryTests() =
         } |> toAsyncFact
 
     [<Fact>]
-    member s.``Fast hash ignores stale dot-hash file`` () =
+    member s.``Fast hash ignores stale dot-hash file for file artefact`` () =
         async {
             let path = System.IO.Path.Combine(s.Path,"file1.txt")
             let hashFilePath = path+".hash"
@@ -205,6 +193,66 @@ type SingleUseDirectoryTests() =
         } |> toAsyncFact
 
     [<Fact>]
+    member s.``Fast hash respects up-to-date dot-hash file for directory artefact`` () =
+        async {
+            let dirPath = System.IO.Path.Combine(s.Path,"test1")
+            let subdirPath = System.IO.Path.Combine(dirPath,"subdir1")
+            let filePath = System.IO.Path.Combine(subdirPath,"text.txt")
+            let hashFilePath = dirPath+".hash"
+            Directory.CreateDirectory(dirPath) |> ignore
+            Directory.CreateDirectory(subdirPath) |> ignore
+            do! Async.AwaitTask(System.IO.File.WriteAllTextAsync(filePath,"Test content"))
+            // We need to wait to make .hash file-modification time to be later then original file modification time
+            do! Async.Sleep 100
+
+            // Writing 128 zeros to be used as expected hash value
+            let textBuilder = new System.Text.StringBuilder()
+            Seq.init 128 (=) |> Seq.iter (fun dummy -> textBuilder.Append('0') |> ignore)
+            let hashText = textBuilder.ToString()
+
+            System.IO.File.WriteAllText(hashFilePath,hashText)
+
+            let! hash1res = ItisLab.Alpheus.Hash.fastHashPathAsync dirPath            
+            match hash1res with
+            |   Some hash1 ->
+                Assert.Equal(hash1,hashText)
+            |   None ->
+                Assert.True(false,"Hash must be read from disk")
+
+        } |> toAsyncFact
+
+    [<Fact>]
+    member s.``Fast hash ignores stale dot-hash file for directory artefact`` () =
+        async {
+            let dirPath = System.IO.Path.Combine(s.Path,"test1")
+            let subdirPath = System.IO.Path.Combine(dirPath,"subdir1")
+            let filePath = System.IO.Path.Combine(subdirPath,"text.txt")
+            let hashFilePath = dirPath+".hash"
+            
+            // Writing 128 zeros to be used as precomputed hash value to be ignored
+            // as its creation time is before the original file creation time
+            let textBuilder = new System.Text.StringBuilder()
+            Seq.init 128 (=) |> Seq.iter (fun dummy -> textBuilder.Append('0') |> ignore)
+            let hashText = textBuilder.ToString()
+            System.IO.File.WriteAllText(hashFilePath,hashText)
+
+            // We need to wait to make .hash file-modification time to be before the original file modification time
+            do! Async.Sleep 100
+            Directory.CreateDirectory(dirPath) |> ignore
+            Directory.CreateDirectory(subdirPath) |> ignore
+            do! Async.AwaitTask(System.IO.File.WriteAllTextAsync(filePath,"Test content"))
+                
+            let! hash1res = ItisLab.Alpheus.Hash.fastHashPathAsync dirPath
+            match hash1res with
+            |   Some hash1 ->
+                Assert.NotEqual<string>(hash1,hashText)
+            |   None ->
+                Assert.True(false,"Hash must be read from disk")
+
+        } |> toAsyncFact
+
+
+    [<Fact>]
     member s.``Fast hash return None for not-exitent files`` () =
         async {
             let path = System.IO.Path.Combine(s.Path,"file1.txt")
@@ -217,5 +265,18 @@ type SingleUseDirectoryTests() =
                 Assert.True(true)
         } |> toAsyncFact
 
+    [<Fact>]
+    member s.``Fast hash return None for not-exitent files if dot-hash exists`` () =
+        async {
+            let path = System.IO.Path.Combine(s.Path,"file1.txt")
+            do! Async.AwaitTask(System.IO.File.WriteAllTextAsync(path+".hash","00000"))
+        
+            let! hash1res = ItisLab.Alpheus.Hash.fastHashPathAsync path     
+            match hash1res with
+            |   Some hash1 ->
+                Assert.True(false,"Hash is not expected to be read from disk")
+            |   None ->
+                Assert.True(true)
+        } |> toAsyncFact
 
     
