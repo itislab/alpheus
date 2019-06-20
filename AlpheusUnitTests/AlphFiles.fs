@@ -56,6 +56,10 @@ type AlphFileSerializationTests()=
             do! saveAsync fileArtefactAlphFile path
             
             let! loaded = alphFilePathToArtefactPathAsync path
-            Assert.Equal(loaded,Path.Combine(s.Path,@"test\"))
+            if isTestRuntimeWindows then 
+                Assert.Equal(loaded,Path.Combine(s.Path,@"test\"))
+            else
+                Assert.Equal(loaded,Path.Combine(s.Path,@"test/"))
+                
         } |> toAsyncFact
 

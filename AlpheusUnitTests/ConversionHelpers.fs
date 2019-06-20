@@ -15,7 +15,7 @@ let ``fullIDtoFullPath handles file artefact`` () =
     if isTestRuntimeWindows then
         Assert.Equal(fullPath,@"C:\dir1\test.txt")
     else
-        Assert.Equal(fullPath,@"/dir/test.txt")
+        Assert.Equal(fullPath,@"/dir1/test.txt")
 
 [<Fact>]
 let ``fullIDtoFullPath handles windows long id file artefact`` () =
