@@ -80,7 +80,8 @@ type DebuggingStream(name: string, target:Stream) =
         sprintf "write request offset %A origin %A" offset len |> trace
         target.Write(buffer,offset,len)
 
-    member s.Dispose() =
-        base.Dispose()
-        "Dispose" |> trace
-        target.Dispose()
+    interface IDisposable with
+        member s.Dispose() =
+            base.Dispose()
+            "Dispose" |> trace
+            target.Dispose()

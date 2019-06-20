@@ -28,7 +28,7 @@ let archiveDirFilesToStreamAsync (syncObj:obj) (totCount:int) (sharedcounter:int
         let fileFullPaths = Array.ofSeq fileFullPaths
         use archive = new ZipArchive(streamToWriteTo,ZipArchiveMode.Create,true)
         
-        let archivingDoneEvent = ManualResetEvent(false)
+        use archivingDoneEvent = new ManualResetEvent(false)
         let readConcurrency = 16       
         let archivingAgent = MailboxProcessor.Start(fun inbox -> async {
             let filenamesQ = System.Collections.Generic.Queue<string>()
@@ -95,8 +95,7 @@ let archiveDirFilesToStreamAsync (syncObj:obj) (totCount:int) (sharedcounter:int
         archivingAgent.Post(ExpectedFileCount(Array.length fileFullPaths))
         fileFullPaths |> Array.iter (fun name -> archivingAgent.Post(Filename name))            
         do! Async.AwaitTask (Task.Run(System.Action(fun () -> archivingDoneEvent.WaitOne() |> ignore)))
-        archivingDoneEvent.Dispose()
-
+        
         return ()
     }
 
@@ -136,8 +135,8 @@ let artefactFromArchiveStreamAsync (targetAbsPath:string) (streamToReadFrom:Stre
                 archive.ExtractToDirectory targetAbsPath
                 //printfn "archiver: decompressed %s" targetAbsPath
             with
-                | :? System.Exception as exc ->
-                    printfn "%A" exc  
+                | exc ->
+                    printfn "%A" exc
                     raise exc
             
     }

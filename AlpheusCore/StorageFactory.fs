@@ -53,7 +53,7 @@ let throttlingAgent limit =
             completeCounter <- completeCounter + 1
             // printfn "throttling: %d complete" (int (round((float completeCounter)/(float totCount)*100.0)))
             if completeCounter = totCount then
-                mre.Set()
+                mre.Set() |> ignore
         | Enqueue w ->
             // printfn "throttling: enqueued new work package"
             queue.Enqueue(w)

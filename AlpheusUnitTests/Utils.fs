@@ -18,8 +18,8 @@ type SingleUseOneTimeDirectory() =
         System.IO.Directory.CreateDirectory(path) |> ignore
 
     /// One-time single-use unique named directory to carry on tests within
-    member s.Path with
-        get() = path
+    member s.Path
+        with get() = path
 
     interface IDisposable with
         member s.Dispose() =

@@ -68,12 +68,13 @@ let configAddDirectoryStorageAsync experimentRoot storageName dirPath =
 let configAddAzureStorageAsync experimentRoot storageName accName accKey containerName =
     async {
         let! config = Config.openExperimentDirectoryAsync experimentRoot
-        let azureStorage = Config.Storage.Azure(
-            {
-                AccountName= accName
-                AccountKey = accKey
-                ContainerName = containerName
-            }
+        let azureStorage =
+            Config.Storage.Azure(
+                {
+                    AccountName= accName
+                    AccountKey = accKey
+                    ContainerName = containerName
+                }
         )
         let configFile =
             {
@@ -256,7 +257,7 @@ let saveAsync (artefactPath:string) storageName saveAll =
                     |   Some(alphFile) ->
                         return {
                                 alphFile with
-                                IsTracked = true
+                                    IsTracked = true
                         },artefactPath                             
                 }                                       
             do! AlphFiles.saveAsync alphFile alphFilePath

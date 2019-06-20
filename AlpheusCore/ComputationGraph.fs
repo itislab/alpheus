@@ -207,6 +207,7 @@ let buildGraph experimentRoot (g:DependencyGraph.Graph) =
         match method with
         |   ProducerVertex.Source(source) -> upcast SourceGraphNode(source.Artefact.Artefact,experimentRoot)
         |   ProducerVertex.Computed(computed) -> upcast IntermediateGraphNode(computed,experimentRoot)
+        |   ProducerVertex.NotSetYet -> invalidOp "Can't build computation graph when some of the producerVertex are not yet set"
     FlowGraphFactory.buildStatusGraph g factory
 
 let doComputations (g:FlowGraph<ComputationGraphNode>) = 

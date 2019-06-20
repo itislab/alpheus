@@ -10,6 +10,9 @@ open ItisLab.Alpheus
 
 let ts = TraceSource("Dependency Graph")
 
+// Disable warning on requiring to override GetHashCode in case of Equals overriding
+#nowarn "0346"
+
 type VersionedArtefact = {
     Artefact: ArtefactVertex
     Version: Hash.HashString
@@ -50,9 +53,15 @@ and ArtefactVertex(fullID:ArtefactFullID) =
         
     interface System.IComparable with
         member s.CompareTo(other) =
-            let typedOther:ArtefactVertex = downcast other
-            (AlphFiles.fullIDtoString s.FullID).CompareTo(AlphFiles.fullIDtoString typedOther.FullID)
+            match other with
+            | :? ArtefactVertex as otherArtefactVertex ->
+                (AlphFiles.fullIDtoString s.FullID).CompareTo(AlphFiles.fullIDtoString otherArtefactVertex.FullID)
+            |  _ -> invalidArg "other" "System.IComaprable.CompareTo must be called on the object of the same types"
 
+    override s.Equals(obj1:obj) =
+        // this override prevennts usage of System.ICOmparable for equaliry checks
+        Object.ReferenceEquals(s,obj1)
+       
     override s.ToString() =
         let version =
             match s.ActualHash with
@@ -106,6 +115,9 @@ and ComputedVertex(firstOutputFullID : ArtefactFullID) =
         member s.CompareTo(other) =
             let typedOther:ComputedVertex = downcast other
             (AlphFiles.fullIDtoString s.FirstOutputFullID).CompareTo(AlphFiles.fullIDtoString typedOther.FirstOutputFullID)
+
+    override s.Equals(obj1:obj) =
+        Object.ReferenceEquals(s,obj1)
 
 let artefactToAlphFile (artefact:ArtefactVertex) (alphFileFullPath:string) (experimentRoot:string): AlphFile =
     if not (Path.IsPathRooted alphFileFullPath) then

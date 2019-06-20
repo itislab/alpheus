@@ -101,6 +101,7 @@ let buildStatusGraph (g:DependencyGraph.Graph) =
         match method with
         |   DependencyGraph.Source(source) -> upcast SourceGraphNode(source.Artefact)
         |   DependencyGraph.Computed(computed) -> upcast NotSourceGraphNode(computed)
+        |   DependencyGraph.NotSetYet -> invalidArg "method" "All of the dependency graph nodes must be filled in before construction of status graph"
     FlowGraphFactory.buildStatusGraph g factory
         
 let printStatuses (g:FlowGraph<StatusGraphNode>) =
