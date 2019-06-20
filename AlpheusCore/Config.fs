@@ -113,17 +113,20 @@ let tryLocateExpereimentRoot path =
     //path can be either file, folder
     //it can exist or not exist
     let fullPath = Path.GetFullPath(path)
-    let splited = fullPath.Split([| Path.DirectorySeparatorChar; Path.AltDirectorySeparatorChar |])
+    let splited = fullPath.Split([| Path.DirectorySeparatorChar|])
     //handling Drive letters
-    let splited = Array.map (fun (s:string) -> if (s.Length=2) && s.EndsWith(Path.VolumeSeparatorChar) then s+"\\" else s) splited
+    // let splited = Array.map (fun (s:string) -> if (s.Length=2) && s.EndsWith(Path.VolumeSeparatorChar) then s+"\\" else s) splited
     let l1 = List.ofArray splited
-    let l2 = List.rev l1 // drive is the deepest element now
+    let l2 = List.rev l1 // drive (or unix root /) is the deepest element now (at the tail)
+    printfn "candidate list is %A" l2
     let rec locateList candidate_l =
         match candidate_l with
         |   [] -> None
         |   _::tail ->
             
             let elems = (serviceDir :: candidate_l) |> List.rev |> List.toArray |> Path.Combine
+            printfn "Checking existence of %s" elems
+
             if Directory.Exists(elems) then
                 Some((candidate_l |> List.rev |> List.toArray |> Path.Combine))
             else
