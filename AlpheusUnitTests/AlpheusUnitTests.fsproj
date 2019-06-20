@@ -24,6 +24,7 @@
     <Compile Include="Hashing.fs" />
     <Compile Include="ConversionHelpers.fs" />
     <Compile Include="AlphFiles.fs" />
+    <Compile Include="StorageTests.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 

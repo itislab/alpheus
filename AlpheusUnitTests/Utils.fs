@@ -6,7 +6,6 @@ open System
 // Ensure we match the return type xUnit.net is looking for
 let toAsyncFact computation : Task = Async.StartAsTask computation :> _
 
-[<AbstractClass>]
 /// Class that can be a parent to all tests classes that require single-use one-time unique named directory creation befor test
 /// and deletion after the test
 /// use .Path property to get the pass to the directory
