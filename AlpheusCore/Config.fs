@@ -49,15 +49,20 @@ let tryLoadConfigFileAsync filepath =
             return None
     }
 
+let saveConfigFileAsync configFile (filepath:string) =
+    async {
+        let serialized = JsonConvert.SerializeObject(configFile,Formatting.Indented)
+        use sw = new StreamWriter(filepath)
+        do! Async.AwaitTask(sw.WriteAsync(serialized))
+    }
+
 let saveConfigAsync config =
     async {
         let rootPath = config.RootPath
         let configFilePath = Path.Combine(rootPath, serviceDir,configFileName)
-        let serialized = JsonConvert.SerializeObject(config.ConfigFile,Formatting.Indented)
-        use sw = new StreamWriter(configFilePath)
-        do! Async.AwaitTask(sw.WriteAsync(serialized))
+        do! saveConfigFileAsync config.ConfigFile configFilePath
+        
     }
-
 
 let isExperimentDirectory rootPath = 
     let serviceFullPath = Path.Combine(rootPath,serviceDir)
@@ -120,7 +125,7 @@ let tryLocateExpereimentRoot path =
             
             let elems = (serviceDir :: candidate_l) |> List.rev |> List.toArray |> Path.Combine
             if Directory.Exists(elems) then
-                Some((candidate_l |> List.rev |> List.toArray |> Path.Combine)+Path.DirectorySeparatorChar.ToString())
+                Some((candidate_l |> List.rev |> List.toArray |> Path.Combine))
             else
                 locateList tail
     locateList l2

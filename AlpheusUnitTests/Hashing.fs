@@ -82,6 +82,19 @@ let ``The same file gives the same hash`` () =
     } |> toAsyncFact
 
 [<Fact>]
+let ``Consistency across alpheus versions and platforms`` () =
+    async {
+    let! hash1 = ItisLab.Alpheus.Hash.hashFileAsync @"data/texturalData.txt"
+
+    let str = ItisLab.Alpheus.Hash.hashToString hash1
+
+    // This test checks the consistency across alpheus version and across different platforms (where tests are executed)
+    // the following hardcoded hash value is calculated on windows
+    Assert.Equal(str,"3638496D6DDE8A6F0B7D6DE2E285B872AFD54FE8ED64951F20BFAA57225C5BC48DD59ACD6358745CEE6D677715755EBCA06CF11B6266880910CE5BBFC5ECF8AE")
+
+    } |> toAsyncFact
+
+[<Fact>]
 let ``Different files result in different hashes`` () =
     async {
     let! hash1 = ItisLab.Alpheus.Hash.hashFileAsync @"data/texturalData.txt"
