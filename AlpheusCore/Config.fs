@@ -114,20 +114,31 @@ let tryLocateExpereimentRoot path =
     //it can exist or not exist
     let fullPath = Path.GetFullPath(path)
     let splited = fullPath.Split([| Path.DirectorySeparatorChar|])
-    //handling Drive letters
-    // let splited = Array.map (fun (s:string) -> if (s.Length=2) && s.EndsWith(Path.VolumeSeparatorChar) then s+"\\" else s) splited
+    
     let l1 = List.ofArray splited
+    let isUnixRooted =
+        match l1 with
+        | ""::_ -> true // absolute rooted unix path (e.g. /home/user1/) after split contains empty first element
+        | _ -> false
     let l2 = List.rev l1 // drive (or unix root /) is the deepest element now (at the tail)
     printfn "candidate list is %A" l2
+
+    let stringOfReversedPathElements l =
+        let res = l |> List.rev |> List.toArray |> Path.Combine
+        // Path.Combine ignores empty elements, thus removes leading / in case of unix.
+        // Guarding against it
+        if isUnixRooted then "/"+res else res
+            
+
     let rec locateList candidate_l =
         match candidate_l with
         |   [] -> None
         |   _::tail ->
             
-            let elems = (serviceDir :: candidate_l) |> List.rev |> List.toArray |> Path.Combine
-            printfn "Checking existence of %s" elems
+            let toCheck = (serviceDir :: candidate_l) |> stringOfReversedPathElements
+            printfn "Checking existence of %s" toCheck
 
-            if Directory.Exists(elems) then
+            if Directory.Exists(toCheck) then
                 Some((candidate_l |> List.rev |> List.toArray |> Path.Combine))
             else
                 locateList tail
