@@ -24,3 +24,11 @@ type SingleUseOneTimeDirectory() =
     interface IDisposable with
         member s.Dispose() =
             System.IO.Directory.Delete(path,true)
+
+/// whether the tests are currently executed on Windows
+let isTestRuntimeWindows = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(Runtime.InteropServices.OSPlatform.Windows)
+
+/// The OS specific path that is the root on the testing runtime
+let testRuntimeRootPath =
+    if isTestRuntimeWindows then @"C:\" else "/"
+
