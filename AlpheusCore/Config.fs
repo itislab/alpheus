@@ -121,7 +121,7 @@ let tryLocateExpereimentRoot path =
         | ""::_ -> true // absolute rooted unix path (e.g. /home/user1/) after split contains empty first element
         | _ -> false
     let l2 = List.rev l1 // drive (or unix root /) is the deepest element now (at the tail)
-    printfn "candidate list is %A" l2
+    // printfn "candidate list is %A" l2
 
     let stringOfReversedPathElements l =
         let res = l |> List.rev |> List.toArray |> Path.Combine
@@ -136,10 +136,10 @@ let tryLocateExpereimentRoot path =
         |   _::tail ->
             
             let toCheck = (serviceDir :: candidate_l) |> stringOfReversedPathElements
-            printfn "Checking existence of %s" toCheck
+            // printfn "Checking existence of %s" toCheck
 
             if Directory.Exists(toCheck) then
-                Some((candidate_l |> List.rev |> List.toArray |> Path.Combine))
+                Some(candidate_l |> stringOfReversedPathElements)
             else
                 locateList tail
     locateList l2
