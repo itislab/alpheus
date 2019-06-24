@@ -159,7 +159,13 @@ let getStorageSaver (projectRoot:string)  storageDef =
                         let N = Array.length files
                         let counterSync = obj()
 
-                        let archiver = ArtefactArchiver.archiveDirFilesToStreamAsync counterSync N sharedCounter dirFullPath
+                        let fileCompleteCallback filename =
+                            lock counterSync (fun () ->
+                                incr sharedCounter
+                                printfn "%d/%d\t %s Done" sharedCounter.Value N filename
+                            ) 
+
+                        let archiver = ArtefactArchiver.archiveDirFilesToStreamAsync fileCompleteCallback dirFullPath
                         let bucketComps = Array.map2 archiver buckets bucketStreams
                         let concurrencyLevel = System.Environment.ProcessorCount*2
                         traceVerbose (sprintf "using %d concurrent archivers" concurrencyLevel)

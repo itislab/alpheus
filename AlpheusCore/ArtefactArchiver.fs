@@ -9,8 +9,8 @@ open ItisLab.Alpheus.DebuggingHelpers
 open System
 
 type ArchivingMessage =
-    | Filename of filename:string
-    | Filedata of filename:string*data:Stream
+    | LoadFileRequest of filename:string
+    | CompressRequest of filename:string*data:Stream
     | Done of filename:string
     | ExpectedFileCount of int
 
@@ -23,7 +23,7 @@ let archiveSingleFileToStreamAsync (fileAbsPath:string) (streamToWriteTo:Stream)
         return ()                            
     }
 
-let archiveDirFilesToStreamAsync (syncObj:obj) (totCount:int) (sharedcounter:int ref) (directoryFullPath:string) (fileFullPaths:string seq) (streamToWriteTo:Stream) =
+let archiveDirFilesToStreamAsync (fileCompleteCallback:string->unit) (directoryFullPath:string) (fileFullPaths:string seq) (streamToWriteTo:Stream) =
     async {        
         let fileFullPaths = Array.ofSeq fileFullPaths
         use archive = new ZipArchive(streamToWriteTo,ZipArchiveMode.Create,true)
@@ -41,16 +41,13 @@ let archiveDirFilesToStreamAsync (syncObj:obj) (totCount:int) (sharedcounter:int
                 // 1) handling message
                 let! msg = inbox.Receive()
                 match msg with
-                |   Filename fn -> filenamesQ.Enqueue fn                        
-                |   Filedata(name,stream) -> filedataQ.Enqueue (name,stream)
+                |   LoadFileRequest fn -> filenamesQ.Enqueue fn                        
+                |   CompressRequest(name,stream) -> filedataQ.Enqueue (name,stream)
                 |   Done name ->
                     decr reading // permit one more reading
                     decr archiving // permit archiving
                     incr processed
-                    lock syncObj (fun () ->
-                        incr sharedcounter
-                        printfn "%d/%d\t %s Done" sharedcounter.Value totCount name
-                    )                    
+                    fileCompleteCallback name                   
                 |   ExpectedFileCount count ->
                     totalFiles <- count                    
                     
@@ -69,7 +66,7 @@ let archiveDirFilesToStreamAsync (syncObj:obj) (totCount:int) (sharedcounter:int
                             fileStream.Dispose()
                             memStream.Seek(0L,SeekOrigin.Begin) |> ignore
                             //printfn "Read %s into memory" filePath
-                            inbox.Post(Filedata (filePath,memStream))
+                            inbox.Post(CompressRequest (filePath,memStream))
                         } |> Async.Start
                     if (filedataQ.Count>0 && archiving.Value<1) then
                         let filePath, memStream = filedataQ.Dequeue()
@@ -93,7 +90,7 @@ let archiveDirFilesToStreamAsync (syncObj:obj) (totCount:int) (sharedcounter:int
             })    
 
         archivingAgent.Post(ExpectedFileCount(Array.length fileFullPaths))
-        fileFullPaths |> Array.iter (fun name -> archivingAgent.Post(Filename name))            
+        fileFullPaths |> Array.iter (fun name -> archivingAgent.Post(LoadFileRequest name))            
         do! Async.AwaitTask (Task.Run(System.Action(fun () -> archivingDoneEvent.WaitOne() |> ignore)))
         
         return ()

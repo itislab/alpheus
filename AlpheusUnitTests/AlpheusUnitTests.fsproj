@@ -26,6 +26,7 @@
     <Compile Include="AlphFiles.fs" />
     <Compile Include="StorageTests.fs" />
     <Compile Include="Config.fs" />
+    <Compile Include="ArtefactArchiver.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 
