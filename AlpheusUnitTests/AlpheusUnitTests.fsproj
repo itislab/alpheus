@@ -20,13 +20,14 @@
     <Content Include="data\texturalData.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Compile Include="Utils.fs" />
-    <Compile Include="Hashing.fs" />
-    <Compile Include="ConversionHelpers.fs" />
-    <Compile Include="AlphFiles.fs" />
+    <Compile Include="TestUtils.fs" />
+    <Compile Include="HashingTests.fs" />
+    <Compile Include="ConversionHelpersTests.fs" />
+    <Compile Include="AlphFilesTests.fs" />
     <Compile Include="StorageTests.fs" />
-    <Compile Include="Config.fs" />
-    <Compile Include="ArtefactArchiver.fs" />
+    <Compile Include="ConfigTests.fs" />
+    <Compile Include="ArtefactArchiverTests.fs" />
+    <Compile Include="DependencyGraphTests.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 

@@ -11,6 +11,7 @@ open ItisLab.Alpheus
 let ts = TraceSource("Dependency Graph")
 
 // Disable warning on requiring to override GetHashCode in case of Equals overriding
+// As I want vertices to be alphnumerically sorted, but compared by reference
 #nowarn "0346"
 
 type VersionedArtefact = {
@@ -168,10 +169,10 @@ type Graph() =
     let mutable artefactVertices: Map<ArtefactFullID,ArtefactVertex> = Map.empty //FullID -> Vertex
 
     member s.Artefacts =
-        Map.toSeq artefactVertices |> Seq.map (fun t -> let id,a = t in a) |> Array.ofSeq
+        Map.toSeq artefactVertices |> Seq.map (fun t -> let _,a = t in a) |> Array.ofSeq
 
     member s.Methods =
-        Map.toSeq methodVertices |> Seq.map (fun t -> let id,m = t in m) |> Array.ofSeq
+        Map.toSeq methodVertices |> Seq.map (fun t -> let _,m = t in m) |> Array.ofSeq
 
     member s.ArtefactsCount =
         Map.count artefactVertices
@@ -187,6 +188,7 @@ type Graph() =
             artefactVertices <- Map.add fullID vertex artefactVertices
             vertex
     
+    /// Allocates an artefact if it is not allocated
     member s.AllocateSnapshotVertex (outputFullID) =
         if Map.containsKey outputFullID methodVertices then
             raise(InvalidOperationException(sprintf "attempt to allocate snapshot vertex \"%s\", but the vertex with this ID is already allocated" (AlphFiles.fullIDtoString outputFullID)))
