@@ -6,7 +6,6 @@ open ItisLab.Alpheus.AlphFiles
 open System
 open System.Diagnostics
 open ItisLab.Alpheus
-open ItisLab.Alpheus
 
 let ts = TraceSource("Dependency Graph")
 
@@ -203,9 +202,9 @@ type Graph() =
         match Map.tryFind firstOutputFullID methodVertices with
         |   Some(vertex) ->
             match vertex with
-            |   NotSetYet -> raise(InvalidOperationException("The vertex must not in the NotSetYet state"))
+            |   NotSetYet -> raise(InvalidOperationException("The vertex must not be in the NotSetYet state"))
             |   Computed(computed) -> computed
-            |   Source(_) -> raise(InvalidOperationException("The vertex must not in the Snapshot state"))
+            |   Source(_) -> raise(InvalidOperationException("The vertex must not be in the Snapshot state"))
         |   None ->
             let vertex = ComputedVertex(firstOutputFullID)
             methodVertices <- Map.add firstOutputFullID (Computed vertex) methodVertices
@@ -224,7 +223,7 @@ type Graph() =
 
     
     /// Adds a single method vertex to the graph
-    /// Outputs are artefact fullIDs
+    /// adding coresponding grpah connections
     member s.AddMethod (inputs: VersionedArtefact seq) (outputs: VersionedArtefact seq) =        
         let methodVertex = Seq.map (fun (x:VersionedArtefact) -> x.Artefact.FullID) outputs |> Seq.sort |> Seq.head |> s.GetOrAllocateComputeMethod
         Seq.iter (fun x -> s.ConnectArtefactAsOutput x (Computed methodVertex)) outputs

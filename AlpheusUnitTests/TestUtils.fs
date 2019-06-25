@@ -11,9 +11,12 @@ let toAsyncFact computation : Task = Async.StartAsTask computation :> _
 /// use .Path property to get the pass to the directory
 type SingleUseOneTimeDirectory() =
     let tempName = System.Guid.NewGuid().ToString()
-    let path = System.IO.Path.Combine("data",tempName)
+    let dir1 = System.IO.Path.Combine("data","singleTimeDirs")
+    let path = System.IO.Path.Combine(dir1,tempName)
     
     do
+        if not(System.IO.Directory.Exists(dir1)) then
+            System.IO.Directory.CreateDirectory(dir1) |> ignore  
         System.IO.Directory.CreateDirectory(path) |> ignore
 
     /// One-time single-use unique named directory to carry on tests within

@@ -28,6 +28,7 @@
     <Compile Include="ConfigTests.fs" />
     <Compile Include="ArtefactArchiverTests.fs" />
     <Compile Include="DependencyGraphTests.fs" />
+    <Compile Include="DependencyGraphDiskTests.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 
