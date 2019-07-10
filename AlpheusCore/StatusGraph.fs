@@ -8,10 +8,42 @@ open AlphFiles
 open System
 open ItisLab.Alpheus
 
+/// The file/directory on the local machine that correspond to the artefact
+type DataState =
+    /// Exists and stored in one of the storage
+    | Saved
+    /// Exists but is not stored in any storage
+    | Unsaved
+    /// Does not exist on disk
+    | Absent
+    /// In process of being created on disk
+    | InProgress
+
+type OutdatedReason =
+    |
+
+/// Computational part of the state
+type ComputationState =
+    /// Outdated and can't be computed as inputs are absent or not up to date
+    | InputsNotReady
+    /// Outdated and everything is ready for running the computation
+    | ReadyForComputation
+    /// Can be restored from one of the storages
+    | Restorable
+    /// In process of computing the file/directory
+    | Computing
+    /// In process of restoring the file/directory from the storage
+    | Restoring
+    /// Computed with non zero exit code and matches the expected version
+    | Failed
+    /// Computed with zero exit code and matches the expected version
+    | UpToDate
+
 type ArtefactStatus = {
     FullID: ArtefactFullID
-    IsOnDisk: bool
-    IsUpToDate: bool
+    DataState: DataState
+    ComputationState: ComputationState
+    /// Whether the artefact ever been saved
     IsTracked: bool
     ProducedVersionStorages: string list
     CurrentDiskVersionStorages: string list
@@ -24,20 +56,52 @@ type StatusGraphNode(depCount,outCount) =
     member s.OutputCount =
         outCount
 
+let createDataState (artefactVert:DependencyGraph.ArtefactVertex) =
+    let isOnDisk = artefactVert.ActualHash.IsSome
+    let state = 
+        if isOnDisk then  
+            // something is on disk
+            if List.isEmpty artefactVert.StoragesContainingActualHash then
+                Unsaved
+            else
+                Saved
+        else
+            Absent
+    isOnDisk,state
+
+
 type SourceGraphNode(orphanArtefact:DependencyGraph.VersionedArtefact) =
     inherit StatusGraphNode(0,1)
 
     override s.Execute(_, _) = //ignoring inputs and checkpoint.
         // Just utilizing parallel method computation feature of AngaraFlow to check the statuses of all method vertex
 
-        let isOnDisk = orphanArtefact.Artefact.ActualHash.IsSome
+        let isOnDisk,dataState = createDataState(orphanArtefact.Artefact)
+            
+        let compState = 
+            // source artefacts are either restorabe or up to date
+            if isOnDisk then
+                if orphanArtefact.Artefact.ActualHash.Value <> orphanArtefact.Version then
+                    if not (List.isEmpty orphanArtefact.StoragesContainingVersion) then
+                        Restorable
+                    else
+                        UpToDate
+                else
+                    UpToDate
+            else
+                if not (List.isEmpty orphanArtefact.StoragesContainingVersion) then
+                    Restorable
+                else
+                    invalidOp (sprintf "Source artefact does not exist on disk and is not restorable: %s" (fullIDtoString orphanArtefact.Artefact.FullID))
 
-        // source method is always up to date, thus succeeds                        
+                
+
+        // source method is always up to date or restorable, thus succeeds                        
         let result = {
             FullID= orphanArtefact.Artefact.FullID;
-            IsUpToDate = (not isOnDisk) || (orphanArtefact.Artefact.ActualHash.Value = orphanArtefact.Version);
-            IsOnDisk = isOnDisk;
             IsTracked = orphanArtefact.Artefact.IsTracked
+            DataState = dataState
+            ComputationState = compState
             ProducedVersionStorages = orphanArtefact.StoragesContainingVersion
             CurrentDiskVersionStorages = orphanArtefact.Artefact.StoragesContainingActualHash
         }
@@ -63,14 +127,29 @@ type NotSourceGraphNode(methodVertex:DependencyGraph.ComputedVertex) =
 
         let outputToStatus idx isUpToDate = 
             let output = outputsArray.[idx]
+            let isOnDisk,dataState = createDataState output.Artefact
+            let compState = 
+                let isNotReady (artStatus:ArtefactStatus) = 
+                    match artStatus.ComputationState with
+                    |   ComputationState.UpToDate -> false
+                    |   ComputationState.Failed -> true
+                    |   ComputationState.Restorable -> true
+                    |   ComputationState.Computing -> true
+                    |   ComputationState.InputsNotReady -> true
+                    |   ComputationState.ReadyForComputation -> true
+                    |   ComputationState.Restoring -> true
+                if List.exists isNotReady inputs then
+                    InputsNotReady
+                else
+                    if isOnDisk then
+                        if output.Artefact.ActualHash.Value = output.Version then
+                            // failed or upToDate
+
             {
                 FullID = output.Artefact.FullID
-                IsUpToDate = isUpToDate
-                IsOnDisk =
-                    match output.Artefact.ActualHash with
-                    |   None -> false
-                    |   Some(_) -> true
                 IsTracked = output.Artefact.IsTracked
+                DataState = dataState
+                ComputationState = compState
                 ProducedVersionStorages = output.StoragesContainingVersion
                 CurrentDiskVersionStorages = output.Artefact.StoragesContainingActualHash
             }
@@ -102,7 +181,7 @@ let buildStatusGraph (g:DependencyGraph.Graph) =
         |   DependencyGraph.Source(source) -> upcast SourceGraphNode(source.Artefact)
         |   DependencyGraph.Computed(computed) -> upcast NotSourceGraphNode(computed)
         |   DependencyGraph.NotSetYet -> invalidArg "method" "All of the dependency graph nodes must be filled in before construction of status graph"
-    FlowGraphFactory.buildStatusGraph g factory
+    FlowGraphFactory.buildFlowGraph g factory
         
 let printStatuses (g:FlowGraph<StatusGraphNode>) =
     let state = 

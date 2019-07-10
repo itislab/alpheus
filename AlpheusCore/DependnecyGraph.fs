@@ -1,4 +1,5 @@
-﻿module ItisLab.Alpheus.DependencyGraph
+﻿/// The module describe graph composed of artefact vertices and producer vertices
+module ItisLab.Alpheus.DependencyGraph
 
 open System.IO
 open System.Collections.Generic
@@ -30,10 +31,10 @@ and ArtefactVertex(fullID:ArtefactFullID) =
         // artefact ID can not end with / or \ even if it is directory
         //assert not (fullID.EndsWith(Path.DirectorySeparatorChar) || fullID.EndsWith(Path.AltDirectorySeparatorChar))    
     member s.FullID = fullID
-    member s.Input
+    member s.ProducedBy
         with get() = input
         and set v = input <- v
-    member s.Outputs = outputs
+    member s.UsedIn = outputs
     
     member s.AddOutput output =
         outputs <- Set.add output outputs
@@ -86,6 +87,7 @@ and ComputedVertex(firstOutputFullID : ArtefactFullID) =
     let mutable command: string = String.Empty
     let mutable workingDirectory: string = String.Empty
     let mutable doNotClean= false
+    let mutable exitCode: int option = None
     member s.FirstOutputFullID = firstOutputFullID    
     member s.Inputs
         with get() = inputs
@@ -93,6 +95,10 @@ and ComputedVertex(firstOutputFullID : ArtefactFullID) =
     member s.Outputs
         with get() = outputs
         and set v = outputs <- v
+    /// The exit code of the command invokation. If the command is not exited yet, the value is None
+    member s.ExitCode
+        with get() = exitCode
+        and set v = exitCode <-v
     /// This command can be executed to get the up to date versions of outputs
     member s.Command
         with get() = command
@@ -123,7 +129,7 @@ let artefactToAlphFile (artefact:ArtefactVertex) (alphFileFullPath:string) (expe
     if not (Path.IsPathRooted alphFileFullPath) then
         raise(ArgumentException(sprintf "artefactToAlphFile argument alphFileFullPath must contain rooted full path, but the following was received: %s" alphFileFullPath))
 
-    let methodVertex = artefact.Input
+    let methodVertex = artefact.ProducedBy
     // Fills in Signature field in compute section object with correct value       
     match methodVertex with
     |   ProducerVertex.Source(sourceVertex) -> 
@@ -154,6 +160,7 @@ let artefactToAlphFile (artefact:ArtefactVertex) (alphFileFullPath:string) (expe
                 WorkingDirectory = alphFileRelativeWorkingDir
                 Signature = String.Empty
                 OutputsCleanDisabled = computedVertex.DoNotCleanOutputs
+                ExitCode = computedVertex.ExitCode
             }
         let computeSection = { computeSection with Signature = getSignature computeSection}
         {
@@ -219,7 +226,7 @@ type Graph() =
                 computed.AddOutput(verArtefact)
             |   Source(snapshot) ->
                 snapshot.Artefact <- verArtefact
-            verArtefact.Artefact.Input <- method
+            verArtefact.Artefact.ProducedBy <- method
 
     
     /// Adds a single method vertex to the graph

@@ -110,6 +110,7 @@ type ComputeSection =  {
     Command: string    
     Signature: HashString
     OutputsCleanDisabled: bool
+    ExitCode: int option
 }
 
 type ArtefactType =
