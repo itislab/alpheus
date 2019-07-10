@@ -49,3 +49,19 @@ OPTIONS:
 
     help                  display this list of options.
 ```
+
+## Build
+
+Before building the code, you need to make sure the machine has the following tools installed:
+
+1. [.Net Core SDK 2.1.300 or newer](https://dotnet.microsoft.com/download)
+2. [Yarn](https://yarnpkg.com/) package manager.
+
+
+Clone the repository and run the following command in the root of the repository:
+
+```
+dotnet build
+```
+
+You can also open Alpheus.sln using Visual Studio 2019 (or newer) and build the solution.
