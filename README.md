@@ -66,3 +66,11 @@ dotnet build
 ```
 
 You can also open Alpheus.sln using Visual Studio 2019 (or newer) and build the solution.
+
+## Tests
+
+Run the following command in the root of the repository:
+
+```
+dotnet test
+```
