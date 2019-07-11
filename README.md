@@ -97,7 +97,7 @@ Now the root folder can be called the _experiment folder_.
 
 Experiment is a composition of _methods_ producing and consuming _artefacts_. Each method is a command line operation registered using the command `alpheus build`. An artefact is a file or a folder located within the experiment folder.
 
-For example, the following command registers a method which produces an output artefact `author.txt` by running command `whoami >> author.txt`:
+For example, the following command registers a method which produces an output artefact `author.txt` by running command `whoami > author.txt`:
 
 ```
 alpheus build -o "author.txt" "cmd /c whoami > author.txt"
