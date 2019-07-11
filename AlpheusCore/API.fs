@@ -199,7 +199,7 @@ let restoreAsync (artefactPath:string) =
                             (comp.Outputs |> Seq.find (fun o -> (idToFullID o.ID) = fullID)).Hash                                
                     let! config = Config.openExperimentDirectoryAsync experimentRoot
                     let checker = config.ConfigFile.Storage |> Map.toSeq |> StorageFactory.getPresenseChecker experimentRoot
-                    let! restoreSourcesResults = checker [| versionToRestore |]
+                    let! restoreSourcesResults = checker [| Some(versionToRestore) |]
                     let restoreSources = restoreSourcesResults.[0]
                     if List.length restoreSources = 0 then
                         printfn "%s:%s is not found in any registered storages" (AlphFiles.fullIDtoString fullID) (versionToRestore.Substring(0,6))

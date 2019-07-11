@@ -53,12 +53,12 @@ let ``ConnectArtefactAsInput actually connects the vertices``() =
     let versionedArtVertex : DependencyGraph.VersionedArtefact =
         {
             Artefact= artVertex
-            Version = "12345"
+            Version = Some "12345"
             StoragesContainingVersion = []
         }
 
     // before connecting
-    Assert.Equal(0,artVertex.Outputs.Count)
+    Assert.Equal(0,artVertex.UsedIn.Count)
     Assert.Equal(0,methodVertex.Inputs.Count)
     Assert.Equal(0,methodVertex.Outputs.Count)
 
@@ -67,12 +67,12 @@ let ``ConnectArtefactAsInput actually connects the vertices``() =
 
 
     // checking
-    Assert.Equal(1,artVertex.Outputs.Count)
+    Assert.Equal(1,artVertex.UsedIn.Count)
     Assert.Equal(1,methodVertex.Inputs.Count)
     Assert.Equal(0,methodVertex.Outputs.Count)
 
     Assert.Equal(versionedArtVertex, Seq.exactlyOne methodVertex.Inputs)
-    Assert.Equal(methodVertex, Seq.exactlyOne artVertex.Outputs)
+    Assert.Equal(methodVertex, Seq.exactlyOne artVertex.UsedIn)
 
 [<Fact>]
 let ``ConnectArtefactAsOutput actually connects the vertices``() =
@@ -85,14 +85,14 @@ let ``ConnectArtefactAsOutput actually connects the vertices``() =
     let versionedArtVertex : VersionedArtefact =
         {
             Artefact= artVertex
-            Version = "5345345"
+            Version = Some "5345345"
             StoragesContainingVersion = ["storage 1"]
         }
 
     let producerVertex = ProducerVertex.Computed methodVertex
 
     // before connecting
-    Assert.Equal(0,artVertex.Outputs.Count)
+    Assert.Equal(0,artVertex.UsedIn.Count)
     Assert.Equal(0,methodVertex.Inputs.Count)
     Assert.Equal(0,methodVertex.Outputs.Count)
 
@@ -100,11 +100,11 @@ let ``ConnectArtefactAsOutput actually connects the vertices``() =
     g.ConnectArtefactAsOutput versionedArtVertex producerVertex
 
     // testing
-    match artVertex.Input with
+    match artVertex.ProducedBy with
     |   Computed cv -> Assert.Equal(methodVertex,cv)
     |   _ -> Assert.True(false,"artefact input must be the computed vertex")
     Assert.Equal(1,methodVertex.Outputs.Count)
-    Assert.Equal(0,artVertex.Outputs.Count)
+    Assert.Equal(0,artVertex.UsedIn.Count)
     Assert.Equal(versionedArtVertex, Seq.exactlyOne methodVertex.Outputs)
 
 [<Fact>]
@@ -119,9 +119,9 @@ let ``AddMethod handles 2 inputs, 1 output``() =
     let art2 = g.GetOrAllocateArtefact art2Id
     let art3 = g.GetOrAllocateArtefact art3Id
 
-    let vart1 = {Artefact = art1; Version="1"; StoragesContainingVersion=[]}
-    let vart2 = {Artefact = art2; Version="2"; StoragesContainingVersion=[]}
-    let vart3 = {Artefact = art3; Version="3"; StoragesContainingVersion=[]}
+    let vart1 = {Artefact = art1; Version=Some "1"; StoragesContainingVersion=[]}
+    let vart2 = {Artefact = art2; Version=Some "2"; StoragesContainingVersion=[]}
+    let vart3 = {Artefact = art3; Version=Some  "3"; StoragesContainingVersion=[]}
 
     let compVertex = g.AddMethod [vart1;vart2] [vart3]
     let producerVertex = Computed compVertex
@@ -133,6 +133,6 @@ let ``AddMethod handles 2 inputs, 1 output``() =
     Assert.True(Set.contains vart1 compVertex.Inputs)
     Assert.True(Set.contains vart2 compVertex.Inputs)
 
-    Assert.Equal(producerVertex, art3.Input)
-    Assert.Equal(compVertex, Seq.exactlyOne art1.Outputs)
-    Assert.Equal(compVertex, Seq.exactlyOne art2.Outputs)
+    Assert.Equal(producerVertex, art3.ProducedBy)
+    Assert.Equal(compVertex, Seq.exactlyOne art1.UsedIn)
+    Assert.Equal(compVertex, Seq.exactlyOne art2.UsedIn)
