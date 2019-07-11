@@ -108,7 +108,7 @@ Note that this command doesn't actually run anything, but just creates `author.t
 Let the `scripts/count.py` script contains two arguments: input file and output file, and puts number of characters in the input file to the output file. The following command registers a method which runs the script for the `author.txt` and builds `count.txt`:
 
 ```
-alpheus build -o "count.txt" -d "author.txt" "python scripts/count.py author.txt count.txt"
+alpheus build -o "count.txt" -d "author.txt" -d "scripts/count.py" "python scripts/count.py author.txt count.txt"
 ```
 
 Note that we manifest that the new method depends on output of the first method, `author.txt`. This information is stored in the created file `count.txt.alph`. 
@@ -123,10 +123,19 @@ To compute an artefact, use `alpheus compute`. For instance, the following comma
 alpheus compute count.txt
 ```
 
-Alpheus builds the dependency graph of methods needed in order to produce the required file and then runs only those methods which have no up-to-date outputs. As a result, we get both `author.txt` and `count.txt`. It is up to you whether you want to commit these files to the git repository or push them to an external storage, or keep them just on the local machine. In the latter case, on other machines these files must be recomputed, if needed.
+Alpheus builds the dependency graph of methods needed in order to produce the required file and then runs only those methods which have no up-to-date outputs. Alpheus automatically determines changes in files/directories, so you don't need to worry if the output is consistent. As a result, we get both `author.txt` and `count.txt`. 
+
+It is up to you whether you want to commit these files to the git repository or push them to an external storage, or keep them just on the local machine. In the latter case, on other machines these files must be recomputed, if needed.
+
 
 ### Removing an artefact/method
 
 Just delete corresponding `*.alph` files. Note that you can break the dependencies by deleting artefacts required by other methods. In this case, the computation of those methods will fail.
+
+### Getting status of an experiment
+
+### Vector operations
+
+### Using external storage for artefacts
 
 
