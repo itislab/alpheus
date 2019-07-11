@@ -1,10 +1,31 @@
 # Alpheus
 
 A tool for organizing and managing computational experiments. Advantages:
+_todo: complete the list_
 
 - Builds a dependency graph of operations.
 - Incrementally computes only that data which were affected by a change.
 - Allows to reproduce the data.
+
+## Supports for standard tools and languges
+
+_todo_
+
+## Common worfklow
+
+_todo_: how the user builds the expemeriment, saves, shares. We recommend to start with adding and debugging scripts manually then register it in the dependency graph.
+
+## Migration from a bunch of scripts and data files
+
+_todo_: builds alpheus experiment when you already have a bunch of scripts and files.
+
+## Sharing and collaborating
+
+_todo_
+
+## Running in Cloud
+
+_todo_
 
 ---
 
