@@ -97,19 +97,24 @@ Now the root folder can be called the _experiment folder_.
 
 Experiment is a composition of _methods_ producing and consuming _artefacts_. Each method is a command line operation registered using the command `alpheus build`. An artefact is a file or a folder located within the experiment folder.
 
-For example, the following command registers a method which produces an output artefact `data/author.txt` by running command `whoami >> data/author.txt`:
+For example, the following command registers a method which produces an output artefact `author.txt` by running command `whoami >> author.txt`:
 
 ```
-alpheus build -o "data/author.txt" "whoami >> data/author.txt"
+alpheus build -o "author.txt" "whoami >> author.txt"
 ```
 
-Note that this command doesn't actually run anything, but just creates `data/author.txt.alph` file which describes how `data/author.txt` can be produced. When there are many methods, these description files allow to build a dependency graph for methods of the experiment.
+Note that this command doesn't actually run anything, but just creates `author.txt.alph` file which describes how `author.txt` can be produced. When there are many methods, these description files allow to build a dependency graph for methods of the experiment.
 
-Let the `scripts/count.py` script contains two arguments: input file and output file, and puts number of characters in the input file to the output file. The following command registers a method which runs the script for the `data/author.txt` and builds `data/count.txt`:
+Let the `scripts/count.py` script contains two arguments: input file and output file, and puts number of characters in the input file to the output file. The following command registers a method which runs the script for the `author.txt` and builds `count.txt`:
 
 ```
-alpheus build -o "data/count.txt" -d "data/author.txt" "scripts/count.py data/author.txt data/count.txt"
+alpheus build -o "count.txt" -d "author.txt" "scripts/count.py author.txt count.txt"
 ```
+
+Note that we manifest that the new method depends on output of the first method, `author.txt`. This information is stored in the created file `count.txt.alph`. 
+
+All `*.alph` files must be committed to the git repository, so the experiment workflow is shared.
+
 
 ### Computing an artefact
 
