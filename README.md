@@ -1,6 +1,10 @@
 # Alpheus
 
-A tool for organizing and managing computational experiments.
+A tool for organizing and managing computational experiments. Advantages:
+
+- Builds a dependency graph of operations.
+- Incrementally computes only that data which were affected by a change.
+- Allows to reproduce the data.
 
 ---
 
@@ -74,3 +78,40 @@ Run the following command in the root of the repository:
 ```
 dotnet test
 ```
+
+## Documentation
+
+### Initialization
+
+In the root folder of the experiment run the following command:
+
+```
+alpheus init
+```
+
+This creates new folder `.alpheus` with default settings described in `.alpheus/config.json`. This folder should be committed to the git repository.
+
+Now the root folder can be called the _experiment folder_.
+
+### Adding new method
+
+Experiment is a composition of _methods_ producing and consuming _artefacts_. Each method is a command line operation registered using the command `alpheus build`. An artefact is a file or a folder located within the experiment folder.
+
+For example, the following command registers a method which produces an output artefact `data/author.txt` by running command `whoami >> data/author.txt`:
+
+```
+alpheus build -o "data/author.txt" "whoami >> data/author.txt"
+```
+
+Note that this command doesn't actually run anything, but just creates `data/author.txt.alph` file which describes how `data/author.txt` can be produced. When there are many methods, these description files allow to build a dependency graph for methods of the experiment.
+
+Let the `scripts/count.py` script contains two arguments: input file and output file, and puts number of characters in the input file to the output file. The following command registers a method which runs the script for the `data/author.txt` and builds `data/count.txt`:
+
+```
+alpheus build -o "data/count.txt" -d "data/author.txt" "scripts/count.py data/author.txt data/count.txt"
+```
+
+### Computing an artefact
+
+### Removing a method
+
