@@ -125,5 +125,8 @@ alpheus compute count.txt
 
 Alpheus builds the dependency graph of methods needed in order to produce the required file and then runs only those methods which have no up-to-date outputs. As a result, we get both `author.txt` and `count.txt`. It is up to you whether you want to commit these files to the git repository or push them to an external storage, or keep them just on the local machine. In the latter case, on other machines these files must be recomputed, if needed.
 
-### Removing a method
+### Removing an artefact/method
+
+Just delete corresponding `*.alph` files. Note that you can break the dependencies by deleting artefacts required by other methods. In this case, the computation of those methods will fail.
+
 
