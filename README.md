@@ -7,7 +7,7 @@ _todo: complete the list_
 - Incrementally computes only that data which were affected by a change.
 - Allows to reproduce the data.
 
-## Supports for standard tools and languges
+## Support for standard tools and languages
 
 _todo_
 
