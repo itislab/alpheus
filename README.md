@@ -123,7 +123,7 @@ To compute an artefact, use `alpheus compute`. For instance, the following comma
 alpheus compute count.txt
 ```
 
-Alpheus builds the dependency graph of methods needed in order to produce the required file and then runs only those methods which have no up-to-date outputs. As a result, we get both `author.txt` and `count.txt`. It is up to you whether you want to commit this files to the repository or an external storage, or not. In the latter case, on other machines these files must be recomputed, if needed.
+Alpheus builds the dependency graph of methods needed in order to produce the required file and then runs only those methods which have no up-to-date outputs. As a result, we get both `author.txt` and `count.txt`. It is up to you whether you want to commit these files to the git repository or push them to an external storage, or keep them just on the local machine. In the latter case, on other machines these files must be recomputed, if needed.
 
 ### Removing a method
 
