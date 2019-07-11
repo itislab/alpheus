@@ -100,7 +100,7 @@ Experiment is a composition of _methods_ producing and consuming _artefacts_. Ea
 For example, the following command registers a method which produces an output artefact `author.txt` by running command `whoami >> author.txt`:
 
 ```
-alpheus build -o "author.txt" "whoami >> author.txt"
+alpheus build -o "author.txt" "cmd /c whoami > author.txt"
 ```
 
 Note that this command doesn't actually run anything, but just creates `author.txt.alph` file which describes how `author.txt` can be produced. When there are many methods, these description files allow to build a dependency graph for methods of the experiment.
@@ -108,15 +108,22 @@ Note that this command doesn't actually run anything, but just creates `author.t
 Let the `scripts/count.py` script contains two arguments: input file and output file, and puts number of characters in the input file to the output file. The following command registers a method which runs the script for the `author.txt` and builds `count.txt`:
 
 ```
-alpheus build -o "count.txt" -d "author.txt" "scripts/count.py author.txt count.txt"
+alpheus build -o "count.txt" -d "author.txt" "python scripts/count.py author.txt count.txt"
 ```
 
 Note that we manifest that the new method depends on output of the first method, `author.txt`. This information is stored in the created file `count.txt.alph`. 
 
 All `*.alph` files must be committed to the git repository, so the experiment workflow is shared.
 
-
 ### Computing an artefact
+
+To compute an artefact, use `alpheus compute`. For instance, the following command computes `count.txt`:
+
+```
+alpheus compute count.txt
+```
+
+Alpheus builds the dependency graph of methods needed in order to produce the required file and then runs only those methods which have no up-to-date outputs. As a result, we get both `author.txt` and `count.txt`.
 
 ### Removing a method
 
