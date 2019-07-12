@@ -28,7 +28,7 @@ let main argv =
         elif parseResults.Contains Config then
             let configArgs = parseResults.GetResult <@ Config @>
             let cwd = Directory.GetCurrentDirectory()
-            match Config.tryLocateExpereimentRoot cwd with
+            match Config.tryLocateExperimentRoot cwd with
                 |   None ->
                     printfn "The file you've specified is not under Alpheus experiment folder"
                     1

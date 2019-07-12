@@ -96,7 +96,7 @@ let idForMethod (method: ProducerVertex) =
 
 let loadGraph path = async {
     
-    match Config.tryLocateExpereimentRoot path with
+    match Config.tryLocateExperimentRoot path with
     | None ->
         globalState <- { graph = graphCouldNotLoad }
         failwith "COULD NOT LOAD GRAPH"

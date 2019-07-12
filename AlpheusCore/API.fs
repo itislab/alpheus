@@ -122,7 +122,7 @@ let compute (artefactPath:string) =
        printfn "Can't find .alph file \"%s\"" alphFilePath
        1
     else
-        match Config.tryLocateExpereimentRoot alphFilePath with
+        match Config.tryLocateExperimentRoot alphFilePath with
         |   None ->
             printfn "The file you've specified is not under Alpheus experiment folder"
             1
@@ -149,7 +149,7 @@ let status artefactPath =
        printfn "The alph file %s does not exist" alphFilePath
        1
     else
-        match Config.tryLocateExpereimentRoot alphFilePath with
+        match Config.tryLocateExperimentRoot alphFilePath with
         |   None ->
             printfn "The file you've specified is not under Alpheus experiment folder"
             1
@@ -175,7 +175,7 @@ let restoreAsync (artefactPath:string) =
                 artefactPath
             else
                 artefactPathToAlphFilePath artefactPath
-        match Config.tryLocateExpereimentRoot alphFilePath with
+        match Config.tryLocateExperimentRoot alphFilePath with
             |   None ->
                 printfn "The file/dir you've specified is not under Alpheus experiment folder"
                 return 1
@@ -221,7 +221,7 @@ let saveAsync (artefactPath:string) storageName saveAll =
         else
             artefactPathToAlphFilePath artefactPath
 
-    match Config.tryLocateExpereimentRoot alphFilePath with
+    match Config.tryLocateExperimentRoot alphFilePath with
         |   None ->
             printfn "The file/dir you've specified is not under Alpheus experiment folder"
             return 1

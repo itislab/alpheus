@@ -74,7 +74,7 @@ type ConfigSerialization()=
 
     [<Fact>]
     member s.``tryLocateExpereimentRoot finds nothing on unintialized dir``() = 
-        match tryLocateExpereimentRoot s.Path with
+        match tryLocateExperimentRoot s.Path with
         |   None -> Assert.True(true)
         |   Some(found) -> Assert.True(false, sprintf "tryLocateExpereimentRoot found the root where there is no root: %s" found)
 
@@ -90,7 +90,7 @@ type ConfigSerialization()=
 
             let! _ = createExperimentDirectoryAsync(dir1)
 
-            match tryLocateExpereimentRoot dir3 with
+            match tryLocateExperimentRoot dir3 with
             |   None -> Assert.True(false,"Failed to found the experiment root")
             |   Some(found) -> Assert.Equal(Path.GetFullPath(dir1),found)
         }   |> toAsyncFact
