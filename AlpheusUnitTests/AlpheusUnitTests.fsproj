@@ -20,6 +20,7 @@
     <Content Include="data\texturalData.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <Compile Include="MethodCommandSyntaxTests.fs" />
     <Compile Include="TestUtils.fs" />
     <Compile Include="HashingTests.fs" />
     <Compile Include="ConversionHelpersTests.fs" />
@@ -33,6 +34,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="FsCheck.Xunit" Version="2.14.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.0.1" />
     <PackageReference Include="xunit" Version="2.4.0" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.4.0" />

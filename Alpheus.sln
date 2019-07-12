@@ -11,7 +11,12 @@ Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Client", "AlpheusDaemon\Cli
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Alpheus.CLI", "Alpheus.CLI\Alpheus.CLI.fsproj", "{F17DCB91-78B7-441E-9CFB-7AF05CDAB699}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "AlpheusUnitTests", "AlpheusUnitTests\AlpheusUnitTests.fsproj", "{CFA06A11-9551-4C08-BD4D-64826298CE08}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "AlpheusUnitTests", "AlpheusUnitTests\AlpheusUnitTests.fsproj", "{CFA06A11-9551-4C08-BD4D-64826298CE08}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution items", "Solution items", "{11C4123F-810D-46CE-90E3-F6151573483C}"
+	ProjectSection(SolutionItems) = preProject
+		README.md = README.md
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

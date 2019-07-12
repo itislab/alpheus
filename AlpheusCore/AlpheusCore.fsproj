@@ -27,6 +27,8 @@
     <None Include="app.config" />
     <Compile Include="Hash.fs" />
     <Compile Include="AlphFiles.fs" />
+    <Compile Include="MethodCommand.fs" />
+    <Compile Include="Utils.fs" />
     <Compile Include="Storage.fs" />
     <Compile Include="StorageAzure.fs" />
     <Compile Include="StorageLocal.fs" />

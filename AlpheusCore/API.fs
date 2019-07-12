@@ -282,13 +282,21 @@ let saveAsync (artefactPath:string) storageName saveAll =
             return 0
     }
 
-/// Adds one more method vertex to the experiemnt graph
+
+
+
+
+/// Adds one more method vertex to the experiment graph
 let buildAsync experimentRoot deps outputs command doNotCleanOutputs =
-    let fullInputIDs = List.map (fun x -> ArtefactFullID.ID(Path.GetRelativePath(experimentRoot,x))) deps
-    let fullOutputIDs = List.map (fun x -> ArtefactFullID.ID(Path.GetRelativePath(experimentRoot,x))) outputs
-    traceVerbose(sprintf "full dependency IDs: %A" fullInputIDs)
-    traceVerbose(sprintf "full output IDs: %A" fullOutputIDs)
-    traceVerbose(sprintf "Command is \"%s\"" command)
+    let getId = Utils.getArtefactId experimentRoot
+    let fullInputIDs = List.map getId deps
+    let fullOutputIDs = List.map getId outputs
+    traceVerbose(sprintf "Dependencies: %A" fullInputIDs)
+    traceVerbose(sprintf "Outputs: %A" fullOutputIDs)
+    traceVerbose(sprintf "Command: \"%s\"" command)
+
+    command |> MethodCommand.validate (fullInputIDs.Length, fullOutputIDs.Length)
+
     async {
         let g = DependencyGraph.Graph()
         let inputVertices = List.map g.GetOrAllocateArtefact fullInputIDs
@@ -332,4 +340,4 @@ let buildAsync experimentRoot deps outputs command doNotCleanOutputs =
         let! dummy = List.map2 updateAlphFileAsync outputAlphPaths outputVertices |> Async.Parallel
 
         return ()
-        }
+    }
