@@ -7,5 +7,5 @@ open System
 
 let getArtefactId (experimentRoot: string) (artefactPath: string) =
     let relativePath = Path.GetRelativePath(experimentRoot, artefactPath)
-    if relativePath = artefactPath then raise (ArgumentException("The given artefact path is not under the experiment root"))
+    if (Path.IsPathRooted artefactPath) && relativePath = artefactPath then raise (ArgumentException("The given artefact path is not under the experiment root"))
     ArtefactFullID.ID relativePath

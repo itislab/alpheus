@@ -23,11 +23,13 @@ let run (buildArgs:ParseResults<BuildArgs>) =
         let allPathParams = List.append deps outputs
         let roots = List.map Config.tryLocateExpereimentRoot allPathParams |> List.distinct
         traceVerbose(sprintf "Found following experiment roots among the supplied artefact paths: %A" roots)
-        if List.length roots > 1 then
-            raise(ArgumentException("Not all of the artefacts (inputs, outputs) are under the same experiment root folder"))            
+        match List.length roots with
+        | 0 -> invalidArg "Neither input nor output artefact is specified" |> ignore
+        | 1 -> () // ok, single root
+        | _ -> raise(ArgumentException("Not all of the artefacts (inputs, outputs) are under the same experiment root folder"))            
 
         // generating leafs full alpheus path
-        let experimentRoot = (List.exactlyOne roots).Value
-        API.buildAsync experimentRoot deps outputs command doNotCleanOutputs |> Async.RunSynchronously
+        match List.exactlyOne roots with
+        | None -> invalidOp "Not an experiment folder: .alpheus"
+        | Some experimentRoot -> API.buildAsync experimentRoot deps outputs command doNotCleanOutputs |> Async.RunSynchronously
         0
-
