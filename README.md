@@ -1,5 +1,12 @@
 # Alpheus
 
+| Platform        | Build           |
+| ------------- |:-------------:|
+| Windows   | [![VS2019 Build Status](https://img.shields.io/appveyor/ci/dgrechka/alpheus.svg)](https://ci.appveyor.com/project/dgrechka/alpheus) |
+| Linux     | [![Linux Build Status](https://travis-ci.org/itislab/alpheus.svg?branch=master)](https://travis-ci.org/itislab/alpheus)  |
+
+
+
 A tool for organizing and managing computational experiments. Advantages:
 _todo: complete the list_
 
@@ -26,13 +33,6 @@ _todo_
 ## Running in Cloud
 
 _todo_
-
----
-
-| Platform        | Build           |
-| ------------- |:-------------:|
-| Visual Studio 2019   | [![VS2019 Build Status](https://img.shields.io/appveyor/ci/dgrechka/alpheus.svg)](https://ci.appveyor.com/project/dgrechka/alpheus) |
-| Linux     | [![Linux Build Status](https://travis-ci.org/itislab/alpheus.svg?branch=master)](https://travis-ci.org/itislab/alpheus)  |
 
 
 
