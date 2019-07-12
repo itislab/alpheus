@@ -5,6 +5,10 @@
 | Windows   | [![VS2019 Build Status](https://img.shields.io/appveyor/ci/dgrechka/alpheus.svg)](https://ci.appveyor.com/project/dgrechka/alpheus) |
 | Linux     | [![Linux Build Status](https://travis-ci.org/itislab/alpheus.svg?branch=master)](https://travis-ci.org/itislab/alpheus)  |
 
+[![codecov](https://codecov.io/gh/itislab/alpheus/branch/master/graph/badge.svg)](https://codecov.io/gh/itislab/alpheus)
+[![Tests](https://img.shields.io/appveyor/tests/dgrechka/alpheus.svg)](https://ci.appveyor.com/project/dgrechka/alpheus/build/tests)
+![NuGet](https://img.shields.io/nuget/v/Alpheus-cli.svg)
+[![NuGet](https://img.shields.io/nuget/dt/Alpheus-cli.svg)](https://www.nuget.org/packages/Alpheus-cli/)
 
 
 A tool for organizing and managing computational experiments. Advantages:
@@ -34,12 +38,6 @@ _todo_
 
 _todo_
 
-
-
-[![codecov](https://codecov.io/gh/itislab/alpheus/branch/master/graph/badge.svg)](https://codecov.io/gh/itislab/alpheus)
-[![Tests](https://img.shields.io/appveyor/tests/dgrechka/alpheus.svg)](https://ci.appveyor.com/project/dgrechka/alpheus/build/tests)
-![NuGet](https://img.shields.io/nuget/v/Alpheus-cli.svg)
-[![NuGet](https://img.shields.io/nuget/dt/Alpheus-cli.svg)](https://www.nuget.org/packages/Alpheus-cli/)
 
 ## Installation
 You need to have [.Net Core SDK 2.1.300 or newer](https://dotnet.microsoft.com/learn/dotnet/hello-world-tutorial) installed.
