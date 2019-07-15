@@ -11,32 +11,13 @@
 [![NuGet](https://img.shields.io/nuget/dt/Alpheus-cli.svg)](https://www.nuget.org/packages/Alpheus-cli/)
 
 
-A tool for organizing and managing computational experiments. Advantages:
+A tool for organizing and managing computation experiments. Advantages:
 _todo: complete the list_
 
 - Builds a dependency graph of operations.
 - Incrementally computes only that data which were affected by a change.
-- Allows to reproduce the data.
-
-## Support for standard tools and languages
-
-_todo_
-
-## Common worfklow
-
-_todo_: how the user builds the expemeriment, saves, shares. We recommend to start with adding and debugging scripts manually then register it in the dependency graph.
-
-## Migration from a bunch of scripts and data files
-
-_todo_: builds alpheus experiment when you already have a bunch of scripts and files.
-
-## Sharing and collaborating
-
-_todo_
-
-## Running in Cloud
-
-_todo_
+- Allows reproducing the data.
+- Allows using your usual tools and is based on folders/files.
 
 
 ## Installation
@@ -78,7 +59,7 @@ OPTIONS:
 Before building the code, you need to make sure the machine has the following tools installed:
 
 1. [.Net Core SDK 2.1.300 or newer](https://dotnet.microsoft.com/download)
-1. [Node.js](https://nodejs.org/) 4.0 or higher.
+1. [Node.js](https://nodejs.org/) 8.11.3 or higher.
 1. [Yarn](https://yarnpkg.com/) package manager.
 
 
@@ -119,7 +100,7 @@ Experiment is a composition of _methods_ producing and consuming _artefacts_. Ea
 For example, the following command registers a method which produces an output artefact `author.txt` by running command `whoami > author.txt`:
 
 ```
-alpheus build -o "author.txt" "cmd /c whoami > $in1"
+alpheus build -o "author.txt" "cmd /c whoami > $out1"
 ```
 
 Note that this command doesn't actually run anything, but just creates `author.txt.alph` file which describes how `author.txt` can be produced. When there are many methods, these description files allow to build a dependency graph for methods of the experiment.
@@ -158,3 +139,22 @@ Just delete corresponding `*.alph` files. Note that you can break the dependenci
 ### Using external storage for artefacts
 
 
+## Support for standard tools and languages
+
+_todo_
+
+## Common worfklow
+
+_todo_: how the user builds the expemeriment, saves, shares. We recommend to start with adding and debugging scripts manually then register it in the dependency graph.
+
+## Migration from a bunch of scripts and data files
+
+_todo_: builds alpheus experiment when you already have a bunch of scripts and files.
+
+## Sharing and collaborating
+
+_todo_
+
+## Running in Cloud
+
+_todo_
