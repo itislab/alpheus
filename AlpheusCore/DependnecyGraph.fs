@@ -206,7 +206,7 @@ type Graph() =
             raise(InvalidOperationException(sprintf "attempt to allocate snapshot vertex \"%s\", but the vertex with this ID is already allocated" (AlphFiles.fullIDtoString outputFullID)))
         else
             let artefact = s.GetOrAllocateArtefact(outputFullID)
-            let snapshotVertex = SourceVertex({Artefact = artefact; Version=None; StoragesContainingVersion=[]})
+            let snapshotVertex = SourceVertex({Artefact = artefact; Version=artefact.ActualHash; StoragesContainingVersion=[]})
             let vertex = Source(snapshotVertex)
             methodVertices <- Map.add outputFullID vertex methodVertices
             snapshotVertex
