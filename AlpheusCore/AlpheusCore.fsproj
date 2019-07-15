@@ -20,6 +20,7 @@
     <DebugType>Full</DebugType>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Logger.fs" />
     <Compile Include="DebuggingHelpers.fs" />
     <None Include="alpheus.cmd">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -28,16 +29,17 @@
     <Compile Include="Hash.fs" />
     <Compile Include="AlphFiles.fs" />
     <Compile Include="MethodCommand.fs" />
-    <Compile Include="Utils.fs" />
     <Compile Include="Storage.fs" />
     <Compile Include="StorageAzure.fs" />
     <Compile Include="StorageLocal.fs" />
     <Compile Include="Config.fs" />
     <Compile Include="ArtefactArchiver.fs" />
     <Compile Include="StorageFactory.fs" />
-    <Compile Include="DependnecyGraph.fs" />
+    <Compile Include="DependencyGraph.fs" />
     <Compile Include="FlowGraphFactory.fs" />
     <Compile Include="StatusGraph.fs" />
+    <Compile Include="ComputationContext.fs" />
+    <Compile Include="ExecuteCommand.fs" />
     <Compile Include="ComputationGraph.fs" />
     <Compile Include="GitIgnoreManager.fs" />
     <Compile Include="API.fs" />

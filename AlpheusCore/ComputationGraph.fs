@@ -13,26 +13,29 @@ open ItisLab.Alpheus.DependencyGraph
 let private getDepCount producerVertex =
     match producerVertex with
     | Source(_) -> 0
-    | Computed(c) -> c.Inputs.Count
+    | Command(c) -> c.Inputs.Count
 
 /// extracts the number of artefacts produced by the vertex
 let private getOutCount producerVertex =
     match producerVertex with
     | Source(_) -> 1
-    | Computed(c) -> c.Outputs.Count
+    | Command(c) -> c.Outputs.Count
 
-type ComputationGraphNode(producerVertex:ProducerVertex, experimentRoot:string) = 
+/// This type represents an Angara Flow method.
+/// Note that execution modifies the given vertex and it is Angara Flow execution runtime who controls
+/// the concurrency.
+type ComputationGraphNode(producerVertex:MethodVertex, experimentRoot:string) = 
     inherit ExecutableMethod(
         System.Guid.NewGuid(),
-        [ for i in 0..((getDepCount producerVertex) - 1) -> typeof<ArtefactFullID>] ,
-        [for i in 0..((getOutCount producerVertex) - 1) -> typeof<ArtefactFullID>])
+        List.init (getDepCount producerVertex) (fun _ -> typeof<ArtefactId>),
+        List.init (getDepCount producerVertex) (fun _ -> typeof<ArtefactId>))
 
     member s.VertexID =
         match producerVertex with
         |   Source(s) -> s.Artefact.Artefact.FullID
-        |   Computed(comp) -> (Seq.head comp.Outputs).Artefact.FullID // first output is used as vertex ID
+        |   Command(comp) -> (Seq.head comp.Outputs).Artefact.FullID // first output is used as vertex ID
 
-    override s.Execute(inputVersions, _) = // ignoring checkpoints
+    override s.Execute(_, _) = // ignoring checkpoints
         // we behave differently for source vertices and computed vertices            
         let outputVersions =
             match producerVertex with
@@ -75,11 +78,11 @@ type ComputationGraphNode(producerVertex:ProducerVertex, experimentRoot:string) 
                                 }                    
                             Async.RunSynchronously dumpComp
                 [sourceVertex.Artefact.Version]
-            |   Computed(comp) ->
+            |   Command(comp) ->
                 // if Angara.Flow calls execute, it means that the inputs are ready to be used in computation
   
                 let logVerbose str =
-                    printfn "Computation %20s:\t\t%s" (AlphFiles.fullIDtoString comp.FirstOutputFullID) str
+                    printfn "Computation %20s:\t\t%s" comp.MethodId str
 
                 //let inputVertices = methodVertex.Inputs |> Set.toList |> List.sortBy (fun x -> x.Artefact.FullID)
 
@@ -124,42 +127,13 @@ type ComputationGraphNode(producerVertex:ProducerVertex, experimentRoot:string) 
                         List.iter deletePath fullOutputPaths
 
                     // 2) executing a command
-                    let command = comp.Command.Trim()
-                    let program,args =
-                        match Seq.tryFindIndex (fun c -> Char.IsWhiteSpace(c)) command with
-                        |   Some(idx) -> command.Substring(0,idx),command.Substring(idx).Trim()
-                        |   None -> command,""
-                
-                    let streamPrinterAsync name (stream:StreamReader) = 
-                        async {
-                            do! Async.SwitchToNewThread()
-                            while not stream.EndOfStream do
-                                let! line = Async.AwaitTask(stream.ReadLineAsync())
-                                let annotatedLine = sprintf "[%40s]:\t%s" name line
-                                printfn "%s" annotatedLine                    
-                        }
-
-                    use p = new System.Diagnostics.Process()
-                
-
-                    p.StartInfo.FileName <- program
-                    p.StartInfo.Arguments <- args
-                    p.StartInfo.WorkingDirectory <- Path.GetFullPath(Path.Combine(experimentRoot, comp.WorkingDirectory))
-                    p.StartInfo.RedirectStandardError <- true
-                    p.StartInfo.RedirectStandardOutput <- true
-                    p.StartInfo.UseShellExecute <- false
-                    p.StartInfo.CreateNoWindow <- true
-                    logVerbose (sprintf "Executing \"%s %s\". Working dir is \"%s\"" program args p.StartInfo.WorkingDirectory)
-                    p.Start() |> ignore
-                            
-                    streamPrinterAsync (sprintf "%s [stdout]" (AlphFiles.fullIDtoString comp.FirstOutputFullID)) p.StandardOutput |> Async.Start
-                    streamPrinterAsync (sprintf "%s [stderr]"(AlphFiles.fullIDtoString comp.FirstOutputFullID)) p.StandardError |> Async.Start 
-                
-                    p.WaitForExit()            
+                    let output (s:string) = Console.WriteLine s
+                    let context : ComputationContext = { ExperimentRoot = experimentRoot; Output = output  }
+                    let exitCode = comp |> ExecuteCommand.runAndWait context 
 
                     // 3) upon 0 exit code hash the outputs
-                    if p.ExitCode <> 0 then
-                        raise(InvalidOperationException(sprintf "Process exited with exit code %d" p.ExitCode))
+                    if exitCode <> 0 then
+                        raise(InvalidOperationException(sprintf "Process exited with exit code %d" exitCode))
                     else
                         // 4a) hashing outputs disk content                
                         let hashComputeation = DependencyGraph.fillinActualHashesAsync (outputsArray |> Array.map (fun art -> art.Artefact)) experimentRoot

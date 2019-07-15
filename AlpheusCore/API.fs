@@ -130,7 +130,7 @@ let compute (artefactPath:string) =
             let statusAsync = async {
                 let! artefactPath = alphFilePathToArtefactPathAsync alphFilePath
 
-                let fullID = ArtefactFullID.ID(Path.GetRelativePath(experimentRoot, artefactPath))
+                let fullID = ArtefactId.ID(Path.GetRelativePath(experimentRoot, artefactPath))
             
                 let! g = buildDependencyGraphAsync experimentRoot fullID
                 
@@ -157,7 +157,7 @@ let status artefactPath =
             async {
                 let! artefactPath = alphFilePathToArtefactPathAsync alphFilePath
             
-                let fullID = ArtefactFullID.ID(Path.GetRelativePath(experimentRoot, artefactPath))
+                let fullID = ArtefactId.ID(Path.GetRelativePath(experimentRoot, artefactPath))
             
                 let! g = buildDependencyGraphAsync experimentRoot fullID
         
@@ -188,7 +188,7 @@ let restoreAsync (artefactPath:string) =
                 |   Some(alphFile) ->
                     let alphFileFullPath = Path.GetFullPath(alphFilePath)
                     let! artefactPath =  alphFilePathToArtefactPathAsync alphFilePath
-                    let fullID = AlphFiles.ArtefactFullID.ID(Path.GetRelativePath(experimentRoot, artefactPath))
+                    let fullID = AlphFiles.ArtefactId.ID(Path.GetRelativePath(experimentRoot, artefactPath))
                     let absFilePath = Path.GetFullPath(artefactPath)                                
                     let versionToRestore =
                         match alphFile.Origin with
@@ -202,11 +202,11 @@ let restoreAsync (artefactPath:string) =
                     let! restoreSourcesResults = checker [| Some(versionToRestore) |]
                     let restoreSources = restoreSourcesResults.[0]
                     if List.length restoreSources = 0 then
-                        printfn "%s:%s is not found in any registered storages" (AlphFiles.fullIDtoString fullID) (versionToRestore.Substring(0,6))
+                        printfn "%A:%s is not found in any registered storages" fullID (versionToRestore.Substring(0,6))
                         return 2
                     else
                         let restoreSource = List.head restoreSources
-                        traceVerbose (sprintf "Restoring %s:%s from %s storage" (AlphFiles.fullIDtoString fullID) (versionToRestore.Substring(0,6)) restoreSource)
+                        traceVerbose (sprintf "Restoring %A:%s from %s storage" fullID (versionToRestore.Substring(0,6)) restoreSource)
                         let restore = StorageFactory.getStorageRestore experimentRoot (Map.find restoreSource config.ConfigFile.Storage)
                         do! restore fullID versionToRestore
                         return 0
@@ -262,7 +262,7 @@ let saveAsync (artefactPath:string) storageName saveAll =
                 }                                       
             do! AlphFiles.saveAsync alphFile alphFilePath
                     
-            let fullID = ArtefactFullID.ID(Path.GetRelativePath(experimentRoot, artefactPath))
+            let fullID = ArtefactId.ID(Path.GetRelativePath(experimentRoot, artefactPath))
             
             let! g = buildDependencyGraphAsync experimentRoot fullID                                                                                    
                     
@@ -282,13 +282,9 @@ let saveAsync (artefactPath:string) storageName saveAll =
             return 0
     }
 
-
-
-
-
 /// Adds one more method vertex to the experiment graph
 let buildAsync experimentRoot deps outputs command doNotCleanOutputs =
-    let getId = Utils.getArtefactId experimentRoot
+    let getId = ArtefactId.Create experimentRoot
     let fullInputIDs = List.map getId deps
     let fullOutputIDs = List.map getId outputs
     traceVerbose(sprintf "Dependencies: %A" fullInputIDs)

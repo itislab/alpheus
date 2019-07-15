@@ -21,9 +21,9 @@ type VersionedArtefact = {
     StoragesContainingVersion: string list
     }
 
-and ArtefactVertex(fullID:ArtefactFullID) =    
-    let mutable input : ProducerVertex option = None
-    let mutable outputs : Set<ComputedVertex> = Set.empty
+and ArtefactVertex(fullID:ArtefactId) =    
+    let mutable input : MethodVertex option = None
+    let mutable outputs : Set<CommandLineVertex> = Set.empty
     let mutable isTracked = false
     let mutable storagesContainingActialHash = []
     let mutable actualHash : Hash.HashString option = None // None means that file/dir does not exist on disk
@@ -57,7 +57,7 @@ and ArtefactVertex(fullID:ArtefactFullID) =
         member s.CompareTo(other) =
             match other with
             | :? ArtefactVertex as otherArtefactVertex ->
-                (AlphFiles.fullIDtoString s.FullID).CompareTo(AlphFiles.fullIDtoString otherArtefactVertex.FullID)
+                s.FullID.ToString().CompareTo(otherArtefactVertex.FullID.ToString())
             |  _ -> invalidArg "other" "System.IComaprable.CompareTo must be called on the object of the same types"
 
     override s.Equals(obj1:obj) =
@@ -69,25 +69,35 @@ and ArtefactVertex(fullID:ArtefactFullID) =
             match s.ActualHash with
             |   None -> "not exist"
             |   Some(hash) -> hash.Substring(0,6)
-        sprintf "Artefact(%s|%s)" (AlphFiles.fullIDtoString s.FullID) version
-and ProducerVertex =
+        sprintf "Artefact(%s|%s)" (s.FullID.ToString()) version
+and MethodVertex =
     /// The vertex produces single artefact out of void
     |   Source of SourceVertex
     /// The vertex corresponds to invocation of single CLI command
-    |   Computed of ComputedVertex
-and SourceVertex(artefact:VersionedArtefact) =
+    |   Command of CommandLineVertex
+    with 
+        member x.MethodId : MethodId =
+            match x with
+            | Source src -> src.MethodId
+            | Command cmd -> cmd.MethodId
+
+and SourceVertex(methodId: MethodId, artefact:VersionedArtefact) =
     let mutable artefact : VersionedArtefact = artefact    
     member s.Artefact
         with get() = artefact
         and set v = artefact <- v
-and ComputedVertex(firstOutputFullID : ArtefactFullID) =
+    member s.MethodId = methodId
+
+/// Represents a method defined as a command line.
+and CommandLineVertex(methodId : MethodId) =
     let mutable inputs : Set<VersionedArtefact> = Set.empty
     let mutable outputs : Set<VersionedArtefact> = Set.empty
     let mutable command: string = String.Empty
     let mutable workingDirectory: string = String.Empty
     let mutable doNotClean = false
     let mutable commandExitCode: int option = None
-    member s.FirstOutputFullID = firstOutputFullID    
+
+    member s.MethodId = methodId    
     member s.Inputs
         with get() = inputs
         and set v = inputs <- v
@@ -119,8 +129,8 @@ and ComputedVertex(firstOutputFullID : ArtefactFullID) =
         outputs <- Set.add output outputs
     interface System.IComparable with
         member s.CompareTo(other) =
-            let typedOther:ComputedVertex = downcast other
-            (AlphFiles.fullIDtoString s.FirstOutputFullID).CompareTo(AlphFiles.fullIDtoString typedOther.FirstOutputFullID)
+           let typedOther:CommandLineVertex = downcast other
+           s.MethodId.CompareTo(typedOther.MethodId)
 
     override s.Equals(obj1:obj) =
         Object.ReferenceEquals(s,obj1)
@@ -132,7 +142,7 @@ let artefactToAlphFile (artefact:ArtefactVertex) (alphFileFullPath:string) (expe
     let methodVertex = artefact.ProducedBy
     // Fills in Signature field in compute section object with correct value       
     match methodVertex with
-    |   ProducerVertex.Source(sourceVertex) ->
+    |   MethodVertex.Source(sourceVertex) ->
             let expectedVersion =
                 match sourceVertex.Artefact.Version with
                 |   Some(v) -> v
@@ -146,7 +156,7 @@ let artefactToAlphFile (artefact:ArtefactVertex) (alphFileFullPath:string) (expe
                 Origin = Snapshot snapshotSection
                 IsTracked = sourceVertex.Artefact.Artefact.IsTracked
             }            
-    |   ProducerVertex.Computed(computedVertex) ->
+    |   MethodVertex.Command(computedVertex) ->
         // dependency graph contains all paths relative to project root
         // alpheus files contains all paths relative to alph file
         let fullIDtoRelative = AlphFiles.fullIDtoRelative experimentRoot alphFileFullPath
@@ -177,8 +187,15 @@ let artefactToAlphFile (artefact:ArtefactVertex) (alphFileFullPath:string) (expe
 
 /// Alpheus dependencies graph
 type Graph() = 
-    let mutable methodVertices : Map<ArtefactFullID,ProducerVertex> = Map.empty //FirstOutputFullID -> Vertex
-    let mutable artefactVertices: Map<ArtefactFullID,ArtefactVertex> = Map.empty //FullID -> Vertex
+    // todo: these collections are populated non-atomically and cause misleading
+    let mutable methodVertices : Map<MethodId,MethodVertex> = Map.empty
+    let mutable artefactVertices: Map<ArtefactId,ArtefactVertex> = Map.empty 
+    
+    let getMethodId (outputs: ArtefactId seq) = 
+        outputs
+        |> Seq.map(fun o -> o.ToString())
+        |> Seq.sort
+        |> Seq.head
 
     member s.Artefacts =
         Map.toSeq artefactVertices |> Seq.map (fun t -> let _,a = t in a) |> Array.ofSeq
@@ -201,32 +218,34 @@ type Graph() =
             vertex
     
     /// Allocates an artefact if it is not allocated
-    member s.AllocateSnapshotVertex (outputFullID) =
-        if Map.containsKey outputFullID methodVertices then
-            raise(InvalidOperationException(sprintf "attempt to allocate snapshot vertex \"%s\", but the vertex with this ID is already allocated" (AlphFiles.fullIDtoString outputFullID)))
+    member s.AllocateSourceMethod (outputId: ArtefactId) =
+        let methodId = getMethodId (seq{ yield outputId })
+        if Map.containsKey methodId methodVertices then
+            raise(InvalidOperationException(sprintf "attempt to allocate new source vertex \"%s\", but the vertex with this ID is already allocated" methodId))
         else
-            let artefact = s.GetOrAllocateArtefact(outputFullID)
-            let snapshotVertex = SourceVertex({Artefact = artefact; Version=None; StoragesContainingVersion=[]})
-            let vertex = Source(snapshotVertex)
-            methodVertices <- Map.add outputFullID vertex methodVertices
-            snapshotVertex
+            let artefact = s.GetOrAllocateArtefact(outputId)
+            let source = SourceVertex(methodId, {Artefact = artefact; Version = artefact.ActualHash; StoragesContainingVersion=[]})
+            let vertex = Source(source)
+            methodVertices <- Map.add methodId vertex methodVertices
+            source
     
-    member s.GetOrAllocateComputeMethod (firstOutputFullID:ArtefactFullID) =
-        match Map.tryFind firstOutputFullID methodVertices with
+    member s.GetOrAllocateCommandLineMethod (methodId: MethodId) = // todo: shouldn't be public since allows to use any method id
+        match Map.tryFind methodId methodVertices with
         |   Some(vertex) ->
             match vertex with
-            |   Computed(computed) -> computed
-            |   Source(_) -> raise(InvalidOperationException("The vertex must not be in the Snapshot state"))
+            |   Command(computed) -> computed
+            |   Source(_) -> raise(InvalidOperationException("The vertex with the given id already exists and has different type"))
         |   None ->
-            let vertex = ComputedVertex(firstOutputFullID)
-            methodVertices <- Map.add firstOutputFullID (Computed vertex) methodVertices
+            let vertex = CommandLineVertex methodId
+            methodVertices <- Map.add methodId (Command vertex) methodVertices
             vertex
-    member s.ConnectArtefactAsInput (verArtefact:VersionedArtefact) (method:ComputedVertex) =
+
+    member s.ConnectArtefactAsInput (verArtefact:VersionedArtefact) (method:CommandLineVertex) =
             verArtefact.Artefact.RegisterAsInput(method)
             method.AddInput(verArtefact)
-    member s.ConnectArtefactAsOutput (verArtefact:VersionedArtefact) (method:ProducerVertex) =
+    member s.ConnectArtefactAsOutput (verArtefact:VersionedArtefact) (method:MethodVertex) =
             match method with
-            |   Computed(computed) ->
+            |   Command(computed) ->
                 computed.AddOutput(verArtefact)
             |   Source(snapshot) ->
                 snapshot.Artefact <- verArtefact
@@ -236,8 +255,9 @@ type Graph() =
     /// Adds a single method vertex to the graph
     /// adding coresponding grpah connections
     member s.AddMethod (inputs: VersionedArtefact seq) (outputs: VersionedArtefact seq) =        
-        let methodVertex = Seq.map (fun (x:VersionedArtefact) -> x.Artefact.FullID) outputs |> Seq.sort |> Seq.head |> s.GetOrAllocateComputeMethod
-        Seq.iter (fun x -> s.ConnectArtefactAsOutput x (Computed methodVertex)) outputs
+        let methodId = getMethodId (outputs |> Seq.map (fun o -> o.Artefact.FullID))
+        let methodVertex = s.GetOrAllocateCommandLineMethod methodId
+        Seq.iter (fun x -> s.ConnectArtefactAsOutput x (Command methodVertex)) outputs
         Seq.iter (fun x -> s.ConnectArtefactAsInput x methodVertex) inputs
         methodVertex
             
@@ -255,7 +275,7 @@ type Graph() =
                 // to process a vertex A means 1) to allocate verteces for direct A's producer method and it's direct inputs; 2) connect them 3) Enqueue them to be processed
                 let dequeuedArtefact = queue.Dequeue()
                 if not (Set.contains dequeuedArtefact processedOutputs) then
-                    let fullOutputPath = Path.GetFullPath(Path.Combine(experimentRootPath,AlphFiles.fullIDtoString dequeuedArtefact.FullID))
+                    let fullOutputPath = dequeuedArtefact.FullID.GetFullPath(experimentRootPath)
                     let alphFileFullPath = artefactPathToAlphFilePath fullOutputPath
                    
                     let getFullID = relIDtoFullID experimentRootPath alphFileFullPath
@@ -263,9 +283,9 @@ type Graph() =
                     match alphFileLoadResult with
                     |   None -> 
                         // Absence of .alph file means that the artefact is initial (not produced)
-                        // Thus it has snapshot producer method vertex (no inputs)
-                        // 1) allocation a method vertex
-                        let vertex = s.AllocateSnapshotVertex(dequeuedArtefact.FullID)
+                        // Thus it corresponds to a source vertex (no inputs)
+                        // 1) allocating a method vertex
+                        let vertex = s.AllocateSourceMethod(dequeuedArtefact.FullID)
                         // as there no alph file. We must create it now and fix current disk data version in it
                         // so calculating actual disk data version
                         // writing in expected versions
@@ -291,7 +311,7 @@ type Graph() =
                         |   DataOrigin.Snapshot(snapshot) ->
                             // Snapshot in .alph file means that is was snapshoted, thus Tracked
                             // 1) allocation a method vertex
-                            let vertex = s.AllocateSnapshotVertex(dequeuedArtefact.FullID)
+                            let vertex = s.AllocateSourceMethod(dequeuedArtefact.FullID)
 
                             match snapshot.Type with
                             |   FileArtefact -> assert(not (isFullIDDirectory dequeuedArtefact.FullID))
@@ -311,22 +331,9 @@ type Graph() =
                             // 1) allocation a method vertex
                             let allOutputsIDs = Array.map (fun x -> x.ID) computeSection.Outputs
                             let allOutputFullIDs = Array.map getFullID allOutputsIDs
-                            let allOutputVertices = Array.map s.GetOrAllocateArtefact allOutputFullIDs                            
-                            
-                            // writing in expected versions
-                            let allOutputsHashes = Array.map (fun x -> Some x.Hash) computeSection.Outputs                            
-                            let versionedOutputs =
-                                Array.map2
-                                    (fun (v:ArtefactVertex) hash -> {Artefact=v; Version=hash; StoragesContainingVersion = []})
-                                    allOutputVertices allOutputsHashes |> Array.sortBy (fun x -> x.Artefact.FullID)
-                            let firstOutputFullID = allOutputFullIDs.[0]
-
-                            let versionedOutputSet = Set.ofArray versionedOutputs
-
-                            let methodVertex = s.GetOrAllocateComputeMethod firstOutputFullID  
-
+                            let methodId = getMethodId allOutputFullIDs
+                            let methodVertex = s.GetOrAllocateCommandLineMethod methodId
                             methodVertex.DoNotCleanOutputs <- computeSection.OutputsCleanDisabled
-
                             methodVertex.Command <- computeSection.Command
                             
                             let expRootRelatedWorkingDir =
@@ -337,12 +344,20 @@ type Graph() =
                             methodVertex.WorkingDirectory <- expRootRelatedWorkingDir
 
                             //outputs match check
+                            // writing in expected versions
+                            let allOutputsHashes = Array.map (fun x -> Some x.Hash) computeSection.Outputs 
+                            let allOutputVertices = Array.map s.GetOrAllocateArtefact allOutputFullIDs  
+                            let versionedOutputs =
+                                Array.map2
+                                    (fun (v:ArtefactVertex) hash -> {Artefact=v; Version=hash; StoragesContainingVersion = []})
+                                    allOutputVertices allOutputsHashes |> Array.sortBy (fun x -> x.Artefact.FullID)
+                            let versionedOutputSet = Set.ofArray versionedOutputs
                             if methodVertex.Outputs.Count > 0 then
                                 if methodVertex.Outputs <> versionedOutputSet then
                                     raise(InvalidOperationException(sprintf "different methods produce the same output artefact in the graph: 1) %A 2) %A" methodVertex.Outputs allOutputFullIDs))                                
                             else
                                 // 2a) connect the method vertex to the outputs
-                                Array.iter (fun a -> s.ConnectArtefactAsOutput a (Computed methodVertex)) versionedOutputs                                
+                                Array.iter (fun a -> s.ConnectArtefactAsOutput a (Command methodVertex)) versionedOutputs                                
                             // 2b) connect inputs to the vertex
                             if methodVertex.Inputs.Count = 0 then
                                 let allInputsIDs = Array.map (fun x -> x.ID) computeSection.Inputs
@@ -380,7 +395,7 @@ let fillinArtefactContainingStoragesAsync (artefacts:ArtefactVertex seq) (getCon
     }
 
 /// fills up Inputs and Outputs of methods with the information about the storages that contain the mentioned versions
-let fillinMethodEdgeContainingStoragesAsync (methods:ProducerVertex seq) (getContainingStorageNames: ((Hash.HashString option) array -> Async<(string list) array>)) =
+let fillinMethodEdgeContainingStoragesAsync (methods:MethodVertex seq) (getContainingStorageNames: ((Hash.HashString option) array -> Async<(string list) array>)) =
     async {
         let methodsArray = Array.ofSeq methods
         // gathering versions
@@ -388,7 +403,7 @@ let fillinMethodEdgeContainingStoragesAsync (methods:ProducerVertex seq) (getCon
         let extractExpectedVersions method =
             match method with
             |   Source(sourceVertex) -> seq { yield sourceVertex.Artefact}
-            |   Computed(computedVertex) ->
+            |   Command(computedVertex) ->
                 seq {
                     yield! computedVertex.Inputs;
                     yield! computedVertex.Outputs
@@ -407,7 +422,7 @@ let fillinMethodEdgeContainingStoragesAsync (methods:ProducerVertex seq) (getCon
         let iterator vertex =
             match vertex with
             |   Source(sourceVertex) -> sourceVertex.Artefact <- updateVersionedArtefact sourceVertex.Artefact
-            |   Computed(computedVertex) ->
+            |   Command(computedVertex) ->
                     computedVertex.Inputs <- updateSet computedVertex.Inputs
                     computedVertex.Outputs <- updateSet computedVertex.Outputs
 

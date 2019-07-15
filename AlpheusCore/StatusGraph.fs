@@ -9,7 +9,7 @@ open System
 open ItisLab.Alpheus
 
 type ArtefactStatus = {
-    FullID: ArtefactFullID
+    FullID: ArtefactId
     IsOnDisk: bool
     IsUpToDate: bool
     IsTracked: bool
@@ -44,11 +44,11 @@ type SourceGraphNode(orphanArtefact:DependencyGraph.VersionedArtefact) =
 
         seq{ yield [result :> Artefact], null }
 
-type NotSourceGraphNode(methodVertex:DependencyGraph.ComputedVertex) =
+type NotSourceGraphNode(methodVertex:DependencyGraph.CommandLineVertex) =
     inherit StatusGraphNode(methodVertex.Inputs.Count, methodVertex.Outputs.Count)
 
     member s.FirstOutputID =
-        methodVertex.FirstOutputFullID
+        methodVertex.MethodId
 
     override s.Execute(inputs, _) = //ignoring checkpoint.
         let inputs = inputs |> List.map (fun x -> x:?> ArtefactStatus)
@@ -101,7 +101,7 @@ let buildStatusGraph (g:DependencyGraph.Graph) =
     let factory method : StatusGraphNode =
         match method with
         |   DependencyGraph.Source(source) -> upcast SourceGraphNode(source.Artefact)
-        |   DependencyGraph.Computed(computed) -> upcast NotSourceGraphNode(computed)
+        |   DependencyGraph.Command(computed) -> upcast NotSourceGraphNode(computed)
     FlowGraphFactory.buildGraph g factory
         
 let printStatuses (g:FlowGraph<StatusGraphNode>) =
@@ -148,7 +148,7 @@ let printStatuses (g:FlowGraph<StatusGraphNode>) =
             Seq.init N (fun idx -> Control.outputScalar(vertex,idx) finalState ) |> Seq.map statusToStr
 
         let outdatedArtefacts = finalState.Graph.Structure.Vertices |> Set.toSeq |> Seq.collect getVertexOutdatedOutputs
-        let allArtefactStatuses = finalState.Graph.Structure.Vertices |> Set.toSeq |> Seq.collect getVertexOutputStatusStrings |> Seq.sortBy fst |> Seq.map (fun x -> let id,status = x in sprintf "%10s:\t%s" (fullIDtoString id) status)
+        let allArtefactStatuses = finalState.Graph.Structure.Vertices |> Set.toSeq |> Seq.collect getVertexOutputStatusStrings |> Seq.sortBy fst |> Seq.map (fun x -> let id,status = x in sprintf "%10A:\t%s" id status)
         let statuses = String.Join("\n\t", allArtefactStatuses)
         printfn "Statuses:\n\t%s" statuses
         0

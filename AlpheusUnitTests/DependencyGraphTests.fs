@@ -11,7 +11,7 @@ open ItisLab.Alpheus.DependencyGraph
 [<Fact>]
 let ``GetOrAllocateArtefact returns single vertex for the same artefact ID`` () =
     let g = DependencyGraph.Graph()
-    let ident = ItisLab.Alpheus.AlphFiles.ArtefactFullID.ID  @"dir1/testfile.txt"
+    let ident = ItisLab.Alpheus.AlphFiles.ArtefactId.ID  @"dir1/testfile.txt"
     let vertex1 = g.GetOrAllocateArtefact ident
     let vertex2 = g.GetOrAllocateArtefact ident
     Assert.Equal(vertex1,vertex2)
@@ -27,17 +27,17 @@ let ``DependencyGraph is emplty initially``() =
 [<Fact>]
 let ``GetOrAllocateComputeMethod returns single vertex for the same artefact ID`` () =
     let g = DependencyGraph.Graph()
-    let ident = ItisLab.Alpheus.AlphFiles.ArtefactFullID.ID  @"dir1/testfile.txt"
-    let vertex1 = g.GetOrAllocateComputeMethod ident
-    let vertex2 = g.GetOrAllocateComputeMethod ident
+    let ident = (ItisLab.Alpheus.AlphFiles.ArtefactId.ID  @"dir1/testfile.txt").ToString()
+    let vertex1 = g.GetOrAllocateCommandLineMethod ident
+    let vertex2 = g.GetOrAllocateCommandLineMethod ident
     Assert.Equal(vertex1,vertex2)
 
 [<Fact>]
 let ``AllocateSnapshotVertex creates single vertex`` () =
     let g = DependencyGraph.Graph()
-    let ident = ItisLab.Alpheus.AlphFiles.ArtefactFullID.ID  @"dir1/testfile.txt"
-    let vertex1 = g.AllocateSnapshotVertex ident
-    let producerVertex = ProducerVertex.Source vertex1
+    let ident = ItisLab.Alpheus.AlphFiles.ArtefactId.ID  @"dir1/testfile.txt"
+    let vertex1 = g.AllocateSourceMethod ident
+    let producerVertex = MethodVertex.Source vertex1
     
     Assert.Equal(1,g.ArtefactsCount) // as AllocateSnapshotVertex allocates artefact if it is not allocated
     Assert.Equal(1,g.MethodsCount)
@@ -46,10 +46,10 @@ let ``AllocateSnapshotVertex creates single vertex`` () =
 [<Fact>]
 let ``ConnectArtefactAsInput actually connects the vertices``() =
     let g = DependencyGraph.Graph()
-    let artId = ItisLab.Alpheus.AlphFiles.ArtefactFullID.ID  @"dir1/testfile.txt"
-    let methodId = ItisLab.Alpheus.AlphFiles.ArtefactFullID.ID @"dir1/testfile.txt2"
+    let artId = ItisLab.Alpheus.AlphFiles.ArtefactId.ID  @"dir1/testfile.txt"
+    let methodId = (ItisLab.Alpheus.AlphFiles.ArtefactId.ID @"dir1/testfile.txt2").ToString()
     let artVertex = g.GetOrAllocateArtefact artId
-    let methodVertex = g.GetOrAllocateComputeMethod methodId
+    let methodVertex = g.GetOrAllocateCommandLineMethod methodId
     let versionedArtVertex : DependencyGraph.VersionedArtefact =
         {
             Artefact= artVertex
@@ -77,10 +77,10 @@ let ``ConnectArtefactAsInput actually connects the vertices``() =
 [<Fact>]
 let ``ConnectArtefactAsOutput actually connects the vertices``() =
     let g = DependencyGraph.Graph()
-    let artId = ItisLab.Alpheus.AlphFiles.ArtefactFullID.ID  @"dir1/testfile.txt"
+    let artId = ItisLab.Alpheus.AlphFiles.ArtefactId.ID  @"dir1/testfile.txt"
 
     let artVertex = g.GetOrAllocateArtefact artId
-    let methodVertex = g.GetOrAllocateComputeMethod artId
+    let methodVertex = g.GetOrAllocateCommandLineMethod (artId.ToString())
     
     let versionedArtVertex : VersionedArtefact =
         {
@@ -89,7 +89,7 @@ let ``ConnectArtefactAsOutput actually connects the vertices``() =
             StoragesContainingVersion = ["storage 1"]
         }
 
-    let producerVertex = ProducerVertex.Computed methodVertex
+    let producerVertex = MethodVertex.Command methodVertex
 
     // before connecting
     Assert.Equal(0,artVertex.UsedIn.Count)
@@ -101,7 +101,7 @@ let ``ConnectArtefactAsOutput actually connects the vertices``() =
 
     // testing
     match artVertex.ProducedBy with
-    |   Computed cv -> Assert.Equal(methodVertex,cv)
+    |   Command cv -> Assert.Equal(methodVertex,cv)
     |   _ -> Assert.True(false,"artefact input must be the computed vertex")
     Assert.Equal(1,methodVertex.Outputs.Count)
     Assert.Equal(0,artVertex.UsedIn.Count)
@@ -109,9 +109,9 @@ let ``ConnectArtefactAsOutput actually connects the vertices``() =
 
 [<Fact>]
 let ``AddMethod handles 2 inputs, 1 output``() =
-    let art1Id = ItisLab.Alpheus.AlphFiles.ArtefactFullID.ID  @"dir1/testfile1.txt"
-    let art2Id = ItisLab.Alpheus.AlphFiles.ArtefactFullID.ID  @"dir1/testfile2.txt"
-    let art3Id = ItisLab.Alpheus.AlphFiles.ArtefactFullID.ID  @"dir1/testfile3.txt"
+    let art1Id = ItisLab.Alpheus.AlphFiles.ArtefactId.ID  @"dir1/testfile1.txt"
+    let art2Id = ItisLab.Alpheus.AlphFiles.ArtefactId.ID  @"dir1/testfile2.txt"
+    let art3Id = ItisLab.Alpheus.AlphFiles.ArtefactId.ID  @"dir1/testfile3.txt"
 
     let g = DependencyGraph.Graph()
 
@@ -124,7 +124,7 @@ let ``AddMethod handles 2 inputs, 1 output``() =
     let vart3 = {Artefact = art3; Version=Some  "3"; StoragesContainingVersion=[]}
 
     let compVertex = g.AddMethod [vart1;vart2] [vart3]
-    let producerVertex = Computed compVertex
+    let producerVertex = Command compVertex
 
     Assert.Equal(1,compVertex.Outputs.Count)
     Assert.Equal(2,compVertex.Inputs.Count)

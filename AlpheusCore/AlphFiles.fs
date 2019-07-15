@@ -6,19 +6,29 @@ open Hash
 open System
 open ItisLab.Alpheus
 
-/// Path relative to the project root (directory delimiter is always / even on windows)
-/// Trailing slash indicates that the artifact is folder
-type ArtefactFullID =
-    ID of string
+type MethodId = string
 
-let isFullIDDirectory (fullID:ArtefactFullID) =
+/// Path relative to the project root (directory delimiter is always '/' even on windows).
+/// Trailing slash indicates that the artefact is folder.
+type ArtefactId =
+    ID of string
+    with 
+    override x.ToString() = match x with ID id -> id
+    member x.GetFullPath (experimentRoot: string) = Path.GetFullPath(Path.Combine(experimentRoot, x.ToString()))
+    static member Create (experimentRoot: string) (artefactPath: string) =
+        let relativePath = Path.GetRelativePath(experimentRoot, artefactPath)
+        if (Path.IsPathRooted artefactPath) && relativePath = artefactPath then raise (ArgumentException("The given artefact path is not under the experiment root"))
+        ArtefactId.ID relativePath
+
+let isFullIDDirectory (fullID:ArtefactId) =
     match fullID with
-    |   ArtefactFullID.ID s -> s.EndsWith(Path.DirectorySeparatorChar)
+    |   ArtefactId.ID s -> s.EndsWith(Path.DirectorySeparatorChar)
 
 /// Path relative to some .alph file (directory delimiter is always / even on windows)
 /// Trailing slash indicates that the artifact is folder
 type RelativeArtefactID = 
     ID of string
+    with override x.ToString() = match x with ID id -> id
 
 let isRelativeIDDirectory (relID:RelativeArtefactID) =
     match relID with
@@ -38,25 +48,17 @@ let isRelativeIDDirectory (relID:RelativeArtefactID) =
 //  string[] paths = { @"d:\archives", "2001", "media", @"images\" };
 //  Path.Combine(paths) returns d:\archives\2001\media\images\                            <----- '\' at the end is NOT striped
 
-let fullIDtoString (fullID:ArtefactFullID) =
-    match fullID with
-        |   ArtefactFullID.ID s -> s
-
-let relIDtoString (fullID:RelativeArtefactID) =
-    match fullID with
-        |   RelativeArtefactID.ID s -> s
-
 /// Returns the full path to the artefact using the expereiment root folder and the full artefact ID
-let fullIDtoFullPath (rootPath:string) (fullID:ArtefactFullID) =
+let fullIDtoFullPath (rootPath:string) (fullID:ArtefactId) =
     // some argument checks
     if not (Path.IsPathFullyQualified rootPath) then
         raise (Failure @"rootPath must be absolute fully qualified path")
-    let s = fullID |> fullIDtoString
+    let s = fullID.ToString()
     let s2 = s.Replace('/',Path.DirectorySeparatorChar) // conversion to OS specific directory delimiter
     Path.GetFullPath(Path.Combine(rootPath, s2))
 
 /// Converts the full artefact ID to the relative ID with respect to some .alph file defined by .alph file's full path
-let fullIDtoRelative (rootPath:string) (alphFileFullPath:string) (fullID:ArtefactFullID)  =
+let fullIDtoRelative (rootPath:string) (alphFileFullPath:string) (fullID:ArtefactId)  =
     // some argument checks
     if not (Path.IsPathFullyQualified rootPath) then
         raise (Failure @"rootPath must be absolute fully qualified path")
@@ -67,7 +69,7 @@ let fullIDtoRelative (rootPath:string) (alphFileFullPath:string) (fullID:Artefac
     if not (alphFileFullPath.StartsWith(rootPath)) then
         raise (Failure @"alphFile must be under the root path")
 
-    let s = fullIDtoString fullID
+    let s = fullID.ToString()
     let s2 = s.Replace('/',Path.DirectorySeparatorChar) // conversion to OS specific directory delimiter
     let artefactAbsPath = Path.GetFullPath(Path.Combine(rootPath,s2))    
     let fullAlphDir = Path.GetDirectoryName(alphFileFullPath)
@@ -87,14 +89,14 @@ let relIDtoFullID (rootPath:string) (alphFileFullPath:string) (relID:RelativeArt
     if not (alphFileFullPath.StartsWith(rootPath)) then
         raise (Failure @"alphFile must be under the root path")
     
-    let s = relIDtoString relID
+    let s = relID.ToString()
     let s2 = s.Replace('/',Path.DirectorySeparatorChar) // conversion to OS specific directory delimiter
     let alphDir = Path.GetDirectoryName(alphFileFullPath)
     let absPath = Path.GetFullPath(Path.Combine(alphDir,s2))
 
     let expRootRelPath = Path.GetRelativePath(rootPath, absPath)
     let unifiedFullIdStr = expRootRelPath.Replace(Path.DirectorySeparatorChar,'/') // conversion back to unified directory separator
-    let fullID:ArtefactFullID = ArtefactFullID.ID(unifiedFullIdStr)
+    let fullID:ArtefactId = ArtefactId.ID(unifiedFullIdStr)
     fullID
 
 type VersionedArtefact = {
@@ -195,7 +197,7 @@ let getSignature (computeSection:ComputeSection) =
     addHash computeSection.Command 
     addHash computeSection.WorkingDirectory
     let hashArtefact art =
-        addHash (relIDtoString art.ID)
+        addHash (art.ID.ToString())
         addHash art.Hash
     Seq.iter hashArtefact (Seq.append computeSection.Inputs  computeSection.Outputs)
     sha.TransformFinalBlock(Array.zeroCreate<byte> 0,0,0) |> ignore
