@@ -113,8 +113,8 @@ let loadGraph path = async {
                 { 
                     ArtefactVertex.id = id
                     label = Some (formatCaption id)
-                    source = (idForMethod art.Input)
-                    dependants = art.Outputs |> Seq.map idForComputed |> List.ofSeq
+                    source = (idForMethod art.ProducedBy)
+                    dependants = art.UsedIn |> Seq.map idForComputed |> List.ofSeq
                 })
             |> List.ofSeq
         let methodNodes = depGraph.Methods

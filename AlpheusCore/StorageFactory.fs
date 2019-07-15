@@ -81,10 +81,15 @@ let getPresenseChecker (projectRoot:string) (storages:(string*Config.Storage) se
         let (name:string),storageDef = pair
         
         let storage = createStorage projectRoot storageDef
-        let check (versions:Hash.HashString seq) =
+        let check (versions:(Hash.HashString option) seq) =
             async {
                 let versionsArray = Array.ofSeq versions
-                let! isInStorage = versionsArray |> Array.map storage.IsInStorageAsync |> Async.Parallel
+                let saveCheck v =                     
+                    match v with
+                    |   None -> async { return ArtefactType.Absent}
+                    |   Some(ver) -> storage.IsInStorageAsync ver
+                        
+                let! isInStorage = versionsArray |> Array.map saveCheck |> Async.Parallel
                 let mapper checkResult =
                     match checkResult with
                     |   ArtefactType.SingleFile -> Some(name)
@@ -94,7 +99,7 @@ let getPresenseChecker (projectRoot:string) (storages:(string*Config.Storage) se
                 return namedResults
             }
         check
-    let check (versions:Hash.HashString array) =
+    let check (versions:(Hash.HashString option) array) =
         async {            
             let N = Array.length versions
             let checkers = Seq.map singleStorageChecker storages |> Array.ofSeq

@@ -9,206 +9,208 @@ open Angara.Execution
 open Angara.States
 open ItisLab.Alpheus.DependencyGraph
 
-type ComputedArtefact = {
-    FullID: ArtefactFullID
-    Hash: HashString
-}
+/// extracts the number of input artefacts used in producer vertex
+let private getDepCount producerVertex =
+    match producerVertex with
+    | Source(_) -> 0
+    | Computed(c) -> c.Inputs.Count
 
-[<AbstractClass>]
-type ComputationGraphNode(depCount,outCount) = 
-    inherit ExecutableMethod(System.Guid.NewGuid(), [ for i in 0..(depCount-1) -> typeof<ComputedArtefact>] , [for i in 0..(outCount-1) -> typeof<ComputedArtefact>])
-    
-type SourceGraphNode(orphanArtefact:DependencyGraph.ArtefactVertex, experimentRoot:string) =
-    inherit ComputationGraphNode(0,1)
+/// extracts the number of artefacts produced by the vertex
+let private getOutCount producerVertex =
+    match producerVertex with
+    | Source(_) -> 1
+    | Computed(c) -> c.Outputs.Count
 
-    override s.Execute(_, _) = //ignoring inputs and checkpoint.
-        // Utilizing parallel method computation feature of AngaraFlow to update the statuses of all method vertex if needed
-        let hash =
-            match orphanArtefact.ActualHash with
-            |   None -> raise(InvalidOperationException("Source artefact must be on disk"))
-            |   Some(actualHash) ->
-                // dumping actual hash as expected
-                let computation = 
-                    async {
-                        let artefactFullPath = fullIDtoFullPath experimentRoot orphanArtefact.FullID
-                        let artefactType =
-                            if artefactFullPath.EndsWith(Path.DirectorySeparatorChar) then DirectoryArtefact else FileArtefact
-                        let alphFileFullPath = artefactPathToAlphFilePath artefactFullPath
-                        let! alphLoadResults = AlphFiles.tryLoadAsync alphFileFullPath
-                        
-                        
-                        match alphLoadResults with
-                        |   None ->
-                            // if the .alph is absent, simply returning the hash of the referenced file/dir
-                            return actualHash
-                        |   Some(alphFile) ->
-                            // but if the .alph file is present, we need to update it's version during the execution
-                            let snapshotSection = 
-                                {
-                                    Type = artefactType
-                                    Version = actualHash
-                                }
-                            let alphFile =
-                                {
-                                    alphFile with
-                                        Origin = Snapshot snapshotSection
-                                }
-                            do! AlphFiles.saveAsync alphFile alphFileFullPath
-                            return actualHash
-                    }
-                Async.RunSynchronously computation            
-        seq{ yield [{FullID = orphanArtefact.FullID; Hash = hash} :> Artefact], null }
+type ComputationGraphNode(producerVertex:ProducerVertex, experimentRoot:string) = 
+    inherit ExecutableMethod(
+        System.Guid.NewGuid(),
+        [ for i in 0..((getDepCount producerVertex) - 1) -> typeof<ArtefactFullID>] ,
+        [for i in 0..((getOutCount producerVertex) - 1) -> typeof<ArtefactFullID>])
 
-type IntermediateGraphNode(methodVertex:DependencyGraph.ComputedVertex, experimentRoot:string) =
-    inherit ComputationGraphNode(methodVertex.Inputs.Count, methodVertex.Outputs.Count)
+    member s.VertexID =
+        match producerVertex with
+        |   Source(s) -> s.Artefact.Artefact.FullID
+        |   Computed(comp) -> (Seq.head comp.Outputs).Artefact.FullID // first output is used as vertex ID
 
-    member s.FirstOutputID =
-        methodVertex.FirstOutputFullID
-
-    override s.Execute(inputs, _) = //ignoring checkpoint.        
-        let logVerbose str =
-            printfn "Computation %20s:\t\t%s" (AlphFiles.fullIDtoString methodVertex.FirstOutputFullID) str
-
-        let actualInputs = inputs |> List.map (fun x -> x:?> ComputedArtefact) |> List.sortBy (fun x -> x.FullID)
-        let inputVertices = methodVertex.Inputs |> Set.toList |> List.sortBy (fun x -> x.Artefact.FullID)
-
-        if List.exists2 (fun (art:ComputedArtefact) (inp:DependencyGraph.VersionedArtefact) -> art.FullID <> inp.Artefact.FullID) actualInputs inputVertices then
-            raise(InvalidOperationException("Expected and actual vertex inputs are inconsistent. This is Alpheus error."))
-        
-        let outputsArray = methodVertex.Outputs |> Set.toArray //the order is important here (the internal ordering of the set)
-
-        // intermediate graph node is actually a command execution
-        // First, we need to decide whether the computation can be bypassed (the node is up to date) or the computation must be invoked               
-
-
-        let doComputation =       
-            if List.exists2 (fun (art:ComputedArtefact) (inp:DependencyGraph.VersionedArtefact) -> art.Hash <> inp.Version) actualInputs inputVertices then
-                // input versions differ
-                true
-            else                    
-                // NOTE: signature is checked during the .alph file reading
-                // if it is invalid, output versions are empty
-                let isVersionMismatch expected actual =
-                    // printfn "output current %A expected %s" actual expected
-                    match actual with
-                    |   None -> true // if actual file is missing we do need to do recomputation
-                    |   Some(actual) -> expected <> actual
-                Array.exists (fun (output:DependencyGraph.VersionedArtefact) -> isVersionMismatch output.Version output.Artefact.ActualHash) outputsArray
-        
-        if doComputation then
-            // We need to do computation            
-            // 1) deleting outputs if they exist            
-            // 2) execute external command
-            // 3) upon 0 exit code hash the outputs
-            // 5) fill in corresponding method vertex (to fix propper versions)
-            // 4) write alph files for outputs
-
-            // 1) Deleting outputs
-            if not methodVertex.DoNotCleanOutputs then
-                let deletePath (path:string) =
-                    if path.EndsWith(Path.DirectorySeparatorChar) then
-                        if Directory.Exists path then
-                            Directory.Delete(path,true)
+    override s.Execute(inputVersions, _) = // ignoring checkpoints
+        // we behave differently for source vertices and computed vertices            
+        let outputVersions =
+            match producerVertex with
+            |   Source(sourceVertex) ->
+                // source vertex can always produce output
+                let expectedVersion = sourceVertex.Artefact.Version
+                match sourceVertex.Artefact.Artefact.ActualHash with
+                |   None ->
+                    // The artefact does not exist on disk
+                    // This may be OK in case the specified version is contained available in storages
+                    if sourceVertex.Artefact.StoragesContainingVersion.IsEmpty then
+                        invalidOp "The source artefact must either exist on local disk or be restorable from storage"
                     else
-                        if File.Exists path then
-                            File.Delete path
-                let fullOutputPaths = Seq.map (fun (x:DependencyGraph.VersionedArtefact) -> AlphFiles.fullIDtoFullPath experimentRoot x.Artefact.FullID) methodVertex.Outputs |> List.ofSeq
-                List.iter deletePath fullOutputPaths
+                        // we don't need to save alph file as
+                        // 1) not tracked artefacts does not initially have alph file and do not need them
+                        // 2) tracked artefact already have alph files on disk
+                        ()
+                |   Some(diskVersion) ->
+                        // if alph file exists on disk (e.g. isTracked), we need to resave it to update the expected version
+                        if sourceVertex.Artefact.Artefact.IsTracked then
+                            let dumpComp = 
+                                async {
+                                    let artefactFullPath = fullIDtoFullPath experimentRoot sourceVertex.Artefact.Artefact.FullID
+                                    let artefactType =
+                                        if isFullIDDirectory sourceVertex.Artefact.Artefact.FullID then DirectoryArtefact else FileArtefact
+                                    let alphFileFullPath = artefactPathToAlphFilePath artefactFullPath
+                                    // but if the .alph file is present, we need to update it's version during the execution
+                                    let snapshotSection = 
+                                        {
+                                            Type = artefactType
+                                            Version = diskVersion
+                                        }
+                                    let alphFile = artefactToAlphFile sourceVertex.Artefact.Artefact artefactFullPath experimentRoot
+                                    let alphFile =
+                                        {
+                                            alphFile with
+                                                Origin = Snapshot snapshotSection
+                                        }
+                                    do! AlphFiles.saveAsync alphFile alphFileFullPath
+                                }                    
+                            Async.RunSynchronously dumpComp
+                [sourceVertex.Artefact.Version]
+            |   Computed(comp) ->
+                // if Angara.Flow calls execute, it means that the inputs are ready to be used in computation
+  
+                let logVerbose str =
+                    printfn "Computation %20s:\t\t%s" (AlphFiles.fullIDtoString comp.FirstOutputFullID) str
 
-            // 2) executing a command
-            let command = methodVertex.Command.Trim()
-            let program,args =
-                match Seq.tryFindIndex (fun c -> Char.IsWhiteSpace(c)) command with
-                |   Some(idx) -> command.Substring(0,idx),command.Substring(idx).Trim()
-                |   None -> command,""
-            
-            let streamPrinterAsync name (stream:StreamReader) = 
-                async {
-                    do! Async.SwitchToNewThread()
-                    while not stream.EndOfStream do
-                        let! line = Async.AwaitTask(stream.ReadLineAsync())
-                        let annotatedLine = sprintf "[%40s]:\t%s" name line
-                        printfn "%s" annotatedLine                    
-                }
+                //let inputVertices = methodVertex.Inputs |> Set.toList |> List.sortBy (fun x -> x.Artefact.FullID)
 
-            use p = new System.Diagnostics.Process()
-            
+                let outputsArray = comp.Outputs |> Set.toArray //the order is important here (the internal ordering of the set is used)
 
-            p.StartInfo.FileName <- program
-            p.StartInfo.Arguments <- args
-            p.StartInfo.WorkingDirectory <- Path.GetFullPath(Path.Combine(experimentRoot, methodVertex.WorkingDirectory))
-            p.StartInfo.RedirectStandardError <- true
-            p.StartInfo.RedirectStandardOutput <- true
-            p.StartInfo.UseShellExecute <- false
-            p.StartInfo.CreateNoWindow <- true
-            logVerbose (sprintf "Executing \"%s %s\". Working dir is \"%s\"" program args p.StartInfo.WorkingDirectory)
-            p.Start() |> ignore
+                // intermediate graph node is actually a command execution
+                // First, we need to decide whether the computation can be bypassed (the node is up to date) or the computation must be invoked               
+
+                /// versions present and match
+                let versionsMatch v1 v2 =
+                    match v1,v2 with
+                    |   Some(vv1),Some(vv2) -> vv1 = vv2
+                    |   None,Some(_) | Some(_),None | None,None -> false
+
+                let doComputation =
+                    // NOTE: signature is checked during the .alph file reading
+                    // if it is invalid, output versions are empty
+                    let isArtefactAvailable (art:VersionedArtefact) =
+                        (versionsMatch art.Version art.Artefact.ActualHash) || (not art.StoragesContainingVersion.IsEmpty)
+                       
+                    // if any of the outputs is unavailable, we have to run the computation
+                    not(Array.forall isArtefactAvailable outputsArray)
                         
-            streamPrinterAsync (sprintf "%s [stdout]" (AlphFiles.fullIDtoString methodVertex.FirstOutputFullID)) p.StandardOutput |> Async.Start
-            streamPrinterAsync (sprintf "%s [stderr]"(AlphFiles.fullIDtoString methodVertex.FirstOutputFullID)) p.StandardError |> Async.Start 
-            
-            p.WaitForExit()            
+                if doComputation then
+                    // We need to do computation            
+                    // 1) deleting outputs if they exist            
+                    // 2) execute external command
+                    // 3) upon 0 exit code hash the outputs
+                    // 4) fill in corresponding method vertex (to fix propper versions)
+                    // 5) write alph files for outputs
 
-            // 3) upon 0 exit code hash the outputs
-            if p.ExitCode <> 0 then
-                raise(InvalidOperationException(sprintf "Process exited with exit code %d"p.ExitCode))
-            else
-                // hashing outputs disk content                
-                let hashComputeation = DependencyGraph.fillinActualHashesAsync (outputsArray |> Array.map (fun art -> art.Artefact)) experimentRoot
-                logVerbose (sprintf "Calculated successfully. Calculating output hashes")
-                Async.RunSynchronously hashComputeation
+                    // 1) Deleting outputs
+                    if not comp.DoNotCleanOutputs then
+                        let deletePath (path:string) =
+                            if path.EndsWith(Path.DirectorySeparatorChar) then
+                                if Directory.Exists path then
+                                    Directory.Delete(path,true)
+                            else
+                                if File.Exists path then
+                                    File.Delete path
+                        let fullOutputPaths = Seq.map (fun (x:DependencyGraph.VersionedArtefact) -> AlphFiles.fullIDtoFullPath experimentRoot x.Artefact.FullID) comp.Outputs |> List.ofSeq
+                        List.iter deletePath fullOutputPaths
+
+                    // 2) executing a command
+                    let command = comp.Command.Trim()
+                    let program,args =
+                        match Seq.tryFindIndex (fun c -> Char.IsWhiteSpace(c)) command with
+                        |   Some(idx) -> command.Substring(0,idx),command.Substring(idx).Trim()
+                        |   None -> command,""
                 
-                // updating dependency versions in dependency graph
-                let updateVersions (artefacts:Set<DependencyGraph.VersionedArtefact>) =
-                    let updateVersion (art:DependencyGraph.VersionedArtefact) = 
-                        let newVersion = 
-                            match art.Artefact.ActualHash with
-                            | Some(version) -> version
-                            | None ->
-                                printfn "WARNING: Artefact %s was not produced by the command supposed to create it" (fullIDtoString art.Artefact.FullID)
-                                String.Empty
-                        {
-                            art with                                
-                                Version = newVersion
+                    let streamPrinterAsync name (stream:StreamReader) = 
+                        async {
+                            do! Async.SwitchToNewThread()
+                            while not stream.EndOfStream do
+                                let! line = Async.AwaitTask(stream.ReadLineAsync())
+                                let annotatedLine = sprintf "[%40s]:\t%s" name line
+                                printfn "%s" annotatedLine                    
                         }
-                    Set.map updateVersion artefacts
-                methodVertex.Inputs <- updateVersions methodVertex.Inputs
-                methodVertex.Outputs <- updateVersions methodVertex.Outputs
 
-                // dumping updated alph files to disk
-                let diskDumpComputation = 
-                    async {                        
-                        let fullIDToFullAlphPath versionedArtefact =
-                            let fullArtefactPath = fullIDtoFullPath experimentRoot versionedArtefact.Artefact.FullID
-                            artefactPathToAlphFilePath fullArtefactPath
-                        let outputAlphfilePaths = Array.map fullIDToFullAlphPath outputsArray
+                    use p = new System.Diagnostics.Process()
+                
 
-                        let updateAlphFileAsync (alphFilePath:string) artefact =
-                            async {
-                                let alphFileFullPath = Path.GetFullPath(alphFilePath)
-                                let alphFile = DependencyGraph.artefactToAlphFile artefact.Artefact alphFileFullPath experimentRoot
-                                do! AlphFiles.saveAsync alphFile alphFilePath
-                            }
+                    p.StartInfo.FileName <- program
+                    p.StartInfo.Arguments <- args
+                    p.StartInfo.WorkingDirectory <- Path.GetFullPath(Path.Combine(experimentRoot, comp.WorkingDirectory))
+                    p.StartInfo.RedirectStandardError <- true
+                    p.StartInfo.RedirectStandardOutput <- true
+                    p.StartInfo.UseShellExecute <- false
+                    p.StartInfo.CreateNoWindow <- true
+                    logVerbose (sprintf "Executing \"%s %s\". Working dir is \"%s\"" program args p.StartInfo.WorkingDirectory)
+                    p.Start() |> ignore
                             
-                        let alphUpdatesComputations = Array.map2 updateAlphFileAsync outputAlphfilePaths outputsArray
-                        let! _ = Async.Parallel alphUpdatesComputations
-                        return ()
-                    }
-                Async.RunSynchronously diskDumpComputation 
-                logVerbose "Outputs metadata saved"
-        else
-                logVerbose "skipping as up to date"
-        let results = methodVertex.Outputs |> Set.toSeq |> Seq.map (fun (output:DependencyGraph.VersionedArtefact) -> {FullID=output.Artefact.FullID; Hash = output.Version} :> Artefact) |> List.ofSeq
-        seq { yield (results, null) }
+                    streamPrinterAsync (sprintf "%s [stdout]" (AlphFiles.fullIDtoString comp.FirstOutputFullID)) p.StandardOutput |> Async.Start
+                    streamPrinterAsync (sprintf "%s [stderr]"(AlphFiles.fullIDtoString comp.FirstOutputFullID)) p.StandardError |> Async.Start 
+                
+                    p.WaitForExit()            
+
+                    // 3) upon 0 exit code hash the outputs
+                    if p.ExitCode <> 0 then
+                        raise(InvalidOperationException(sprintf "Process exited with exit code %d" p.ExitCode))
+                    else
+                        // 4a) hashing outputs disk content                
+                        let hashComputeation = DependencyGraph.fillinActualHashesAsync (outputsArray |> Array.map (fun art -> art.Artefact)) experimentRoot
+                        logVerbose (sprintf "Calculated successfully. Calculating output hashes")
+                        Async.RunSynchronously hashComputeation
+                    
+                        // 4b) updating dependency versions in dependency graph
+                        let updateVersions (artefacts:Set<DependencyGraph.VersionedArtefact>) =
+                            let updateVersion (art:DependencyGraph.VersionedArtefact) = 
+                                {
+                                    art with                                
+                                        Version = art.Artefact.ActualHash
+                                }
+                            Set.map updateVersion artefacts
+                        comp.Inputs <- updateVersions comp.Inputs
+                        comp.Outputs <- updateVersions comp.Outputs
+            
+                        // 5) dumping updated alph files to disk
+                        let diskDumpComputation = 
+                            async {                        
+                                let fullIDToFullAlphPath versionedArtefact =
+                                    let fullArtefactPath = fullIDtoFullPath experimentRoot versionedArtefact.Artefact.FullID
+                                    artefactPathToAlphFilePath fullArtefactPath
+                                let outputAlphfilePaths = Array.map fullIDToFullAlphPath outputsArray
+
+                                let updateAlphFileAsync (alphFilePath:string) artefact =
+                                    async {
+                                        let alphFileFullPath = Path.GetFullPath(alphFilePath)
+                                        let alphFile = DependencyGraph.artefactToAlphFile artefact.Artefact alphFileFullPath experimentRoot
+                                        do! AlphFiles.saveAsync alphFile alphFilePath
+                                    }
+                                
+                                let alphUpdatesComputations = Array.map2 updateAlphFileAsync outputAlphfilePaths outputsArray
+                                let! _ = Async.Parallel alphUpdatesComputations
+                                return ()
+                            }
+                        Async.RunSynchronously diskDumpComputation 
+                        logVerbose "Outputs metadata saved"
+                else
+                    logVerbose "skipping as up to date"
+                comp.Outputs |> Set.toSeq |> Seq.map (fun (output:DependencyGraph.VersionedArtefact) -> output.Version) |> List.ofSeq
+ 
+        let outputCasted = List.map (fun x -> x :> Artefact) outputVersions
+        seq{ yield outputCasted, null }
+
+
 
 
 let buildGraph experimentRoot (g:DependencyGraph.Graph) =    
-    let factory method : ComputationGraphNode =
-        match method with
-        |   ProducerVertex.Source(source) -> upcast SourceGraphNode(source.Artefact.Artefact,experimentRoot)
-        |   ProducerVertex.Computed(computed) -> upcast IntermediateGraphNode(computed,experimentRoot)
-        |   ProducerVertex.NotSetYet -> invalidOp "Can't build computation graph when some of the producerVertex are not yet set"
-    FlowGraphFactory.buildStatusGraph g factory
+    let factory method : ComputationGraphNode = ComputationGraphNode(method,experimentRoot)
+    FlowGraphFactory.buildGraph g factory
 
 let doComputations (g:FlowGraph<ComputationGraphNode>) = 
     let state  = 

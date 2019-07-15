@@ -57,9 +57,9 @@ type SampleExperiment() =
         // connecting artefacts with methods
         // actual dependency links are created here
         let source1 = DependencyGraph.Source(g.AllocateSnapshotVertex fullArtIds.[0])
-        artefacts.[0].Input <- source1
+        artefacts.[0].ProducedBy <- source1
         let source2 = DependencyGraph.Source(g.AllocateSnapshotVertex fullArtIds.[1])
-        artefacts.[1].Input <- source2
+        artefacts.[1].ProducedBy <- source2
         let method3 = g.AddMethod [versionedArtefacts.[0]; versionedArtefacts.[1]] [versionedArtefacts.[2]]
         let method4 = g.AddMethod [versionedArtefacts.[0]; versionedArtefacts.[1]] [versionedArtefacts.[3]]
         let method5 = g.AddMethod [versionedArtefacts.[2]; versionedArtefacts.[3]] [versionedArtefacts.[4]]

@@ -35,7 +35,7 @@ type SourceGraphNode(orphanArtefact:DependencyGraph.VersionedArtefact) =
         // source method is always up to date, thus succeeds                        
         let result = {
             FullID= orphanArtefact.Artefact.FullID;
-            IsUpToDate = (not isOnDisk) || (orphanArtefact.Artefact.ActualHash.Value = orphanArtefact.Version);
+            IsUpToDate = (not isOnDisk) || (orphanArtefact.Artefact.ActualHash.Value = orphanArtefact.Version.Value);
             IsOnDisk = isOnDisk;
             IsTracked = orphanArtefact.Artefact.IsTracked
             ProducedVersionStorages = orphanArtefact.StoragesContainingVersion
@@ -78,9 +78,10 @@ type NotSourceGraphNode(methodVertex:DependencyGraph.ComputedVertex) =
         let outdatedResult = seq { yield (List.init methodVertex.Outputs.Count (fun i -> outputToStatus i false:> Artefact) , null) }
 
         let isVersionMismatch expected actual =
-            match actual with
-            |   None -> false // if actual file is missing. That's OK. There is no version mismatch
-            |   Some(actual) -> expected <> actual
+            match expected,actual with
+            |   _,None -> false // if actual file is missing. That's OK. There is no version mismatch
+            |   Some(expected),Some(actual) -> expected <> actual
+            |   _,None -> raise(NotImplementedException("need to define behavior"))
 
         // checking a)
         if List.exists (fun i -> not i.IsUpToDate) inputs then
@@ -101,8 +102,7 @@ let buildStatusGraph (g:DependencyGraph.Graph) =
         match method with
         |   DependencyGraph.Source(source) -> upcast SourceGraphNode(source.Artefact)
         |   DependencyGraph.Computed(computed) -> upcast NotSourceGraphNode(computed)
-        |   DependencyGraph.NotSetYet -> invalidArg "method" "All of the dependency graph nodes must be filled in before construction of status graph"
-    FlowGraphFactory.buildStatusGraph g factory
+    FlowGraphFactory.buildGraph g factory
         
 let printStatuses (g:FlowGraph<StatusGraphNode>) =
     let state = 

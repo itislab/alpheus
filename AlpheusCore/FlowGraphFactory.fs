@@ -4,7 +4,7 @@ open Angara.Graph
 open System
 
 /// builds an Angara Flow graph from Dependency graph, transforming dependency node in behavior specidic flow nodes using supplied factories
-let buildStatusGraph<'Node when 'Node :> IVertex and 'Node:comparison> (g:DependencyGraph.Graph) (nodeFactory: DependencyGraph.ProducerVertex -> 'Node)=        
+let buildGraph<'Node when 'Node :> IVertex and 'Node:comparison> (g:DependencyGraph.Graph) (nodeFactory: DependencyGraph.ProducerVertex -> 'Node)=        
 
     let registerArtefactRelatedMethods (artefact:DependencyGraph.ArtefactVertex) graph allocatedNodes=
         // Every artefact has a producer (source or non-source method)
@@ -12,14 +12,13 @@ let buildStatusGraph<'Node when 'Node :> IVertex and 'Node:comparison> (g:Depend
         let producerMethod, graph, allocatedNodes =
             match Map.tryFind artefact.FullID allocatedNodes with
             |   None ->
-                let node = nodeFactory artefact.Input
+                let node = nodeFactory artefact.ProducedBy
                 let allocatedNodes = Map.add artefact.FullID node allocatedNodes
                 node,(FlowGraph.add node graph), allocatedNodes
             |   Some(preallocated) ->
                 preallocated,graph,allocatedNodes
         let outputPortIndex = 
-            match artefact.Input with                        
-            |   DependencyGraph.ProducerVertex.NotSetYet -> raise(InvalidOperationException("NotYetSet vertex detected"))
+            match artefact.ProducedBy with                        
             |   DependencyGraph.ProducerVertex.Source _ ->   0 // source artefacts are always have 0 out port index
             |   DependencyGraph.ProducerVertex.Computed(computed) ->
                 // There is intermediate producer method, checking whether we have already added it or not yet                                    
@@ -33,7 +32,6 @@ let buildStatusGraph<'Node when 'Node :> IVertex and 'Node:comparison> (g:Depend
             
             // determining current method input port
             match method with
-            |   DependencyGraph.ProducerVertex.NotSetYet -> raise(InvalidOperationException("NotYetSet vertex detected"))
             |   DependencyGraph.ProducerVertex.Source _ ->  raise(InvalidOperationException("Source method can't be among artefact outputs"))                
             |   DependencyGraph.ProducerVertex.Computed(consumer) ->
                 // There is intermediate producer method, checking whether we have already added it or not yet                                    
@@ -50,7 +48,7 @@ let buildStatusGraph<'Node when 'Node :> IVertex and 'Node:comparison> (g:Depend
                 
                 let graph = FlowGraph.connect (producerMethod,outputPortIndex) (node,consumerInputPort) graph
                 (graph, allocatedNodes)
-        Seq.fold folder (graph,allocatedNodes) (artefact.Outputs |> Seq.map (fun computed -> DependencyGraph.ProducerVertex.Computed(computed)))
+        Seq.fold folder (graph,allocatedNodes) (artefact.UsedIn |> Seq.map (fun computed -> DependencyGraph.ProducerVertex.Computed(computed)))
     
     let registering_folder acc artefact =    
         let graph, allocatedNodes = acc
