@@ -5,7 +5,7 @@ open System.IO
 
 type ComputationContext =
     { ExperimentRoot: string
-      Output: string -> unit
+      Print: string -> unit
     } with
     /// Makes an absolute path for the given path relative to the experiment root.
     member x.GetAbsolutePath (relativePath:string) = 

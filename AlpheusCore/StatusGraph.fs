@@ -34,7 +34,7 @@ type SourceGraphNode(orphanArtefact:DependencyGraph.VersionedArtefact) =
 
         // source method is always up to date, thus succeeds                        
         let result = {
-            FullID= orphanArtefact.Artefact.FullID;
+            FullID= orphanArtefact.Artefact.Id;
             IsUpToDate = (not isOnDisk) || (orphanArtefact.Artefact.ActualHash.Value = orphanArtefact.Version.Value);
             IsOnDisk = isOnDisk;
             IsTracked = orphanArtefact.Artefact.IsTracked

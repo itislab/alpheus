@@ -44,3 +44,16 @@ type MethodCommandSyntaxTests()=
     [<InlineData("cmd /c $in1 $in2 $in4 $out10 $out2", 4, 9)>]
     member s.``Method command validation fails in case of incorrect reference numbers``(command:string, inputs: int, outputs: int) = 
         Assert.Throws(typeof<ArgumentException>, fun () -> command |> MethodCommand.validate (inputs, outputs))
+
+    [<Theory>]
+    [<InlineData("start", "start", "")>]
+    [<InlineData("  start\t ", "start", "")>]
+    [<InlineData("start  a b c d ", "start", "a b c d")>]
+    [<InlineData("\"start  a b c d ", "\"start  a b c d", "")>]
+    [<InlineData("\"start \" \"a\"", "\"start \"", "\"a\"")>]
+    [<InlineData("\" ", "\"", "")>]
+    [<InlineData(" \"c:\my scripts\script runner.exe\"  \"a b\" c 'd.exe' >> \"/c/data/output.txt/\" ", "\"c:\my scripts\script runner.exe\"", "\"a b\" c 'd.exe' >> \"/c/data/output.txt/\"")>]
+    member s.``Splitting command line into a program and its arguments`` (commandLine:string) (expectedProgram:string) (expectedArgs:string) =
+        let (program, args) = MethodCommand.split commandLine
+        Assert.Equal(expectedProgram, program)
+        Assert.Equal(expectedArgs, args)

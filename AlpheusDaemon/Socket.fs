@@ -85,7 +85,7 @@ let formatCaption (label: string) =
     if cutLabel.Length > 11 then cutLabel.Substring(0, 12) + "\n" + cutLabel.Substring(12) else cutLabel
 
 let methodIdPrefix = "5F3E69FF"
-let idForArtefact (art: ArtefactVertex) = art.FullID.ToString()
+let idForArtefact (art: ArtefactVertex) = art.Id.ToString()
 let idForSource (source: SourceVertex) = methodIdPrefix + (idForArtefact source.Artefact.Artefact)
 let idForComputed (computed: CommandLineVertex) = methodIdPrefix + computed.MethodId
 let idForMethod (method: MethodVertex) =

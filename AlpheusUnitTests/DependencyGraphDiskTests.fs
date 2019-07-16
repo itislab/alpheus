@@ -141,7 +141,7 @@ type SampleExperiment() =
             let artefact = g.GetOrAllocateArtefact fullArtIds.[4]
             let! resultingVertices = g.LoadDependenciesAsync [artefact] rootPath
 
-            let resultingIDs = Seq.map (fun (x:DependencyGraph.ArtefactVertex) -> x.FullID) resultingVertices |> Set.ofSeq
+            let resultingIDs = Seq.map (fun (x:DependencyGraph.ArtefactVertex) -> x.Id) resultingVertices |> Set.ofSeq
 
             Assert.Equal(5,resultingVertices.Count)
             Assert.Equal<ArtefactId>(resultingIDs,Set.ofSeq fullArtIds)

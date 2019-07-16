@@ -2,6 +2,7 @@
 
 open System
 open System.Text.RegularExpressions
+open ItisLab.Alpheus.Logger
 open AlphFiles
 
 let private regexInput = Regex("\$in(\d+)");
@@ -23,3 +24,21 @@ let validate (inputCount: int, outputCount: int) (command: string) =
     if wrongInputs.Length > 0 then raise (ArgumentException("Command contains incorrect input indices"))
     if wrongOutputs.Length > 0 then raise (ArgumentException("Command contains incorrect output indices"))
     
+
+/// Splits the given command string to a pair of the program name and args.
+let split (command:string) =
+    let command = command.Trim()
+    let q = "\""
+    if command.Length > 2 && command.StartsWith(q) then
+        let pos = command.IndexOf(q, 1)
+        if pos < 0 then logWarning LogCategory.Execution (sprintf "Command line has missing closing quotes: %s" command)
+        if pos > 0 && pos < command.Length - 1 then
+            (command.Substring(0, pos+1).Trim(), command.Substring(pos+1).Trim())
+        else
+            (command, "")
+    else
+       let pos = command.IndexOf(" ")
+       if pos > 0 && pos < command.Length - 1 then
+            (command.Substring(0, pos+1).Trim(), command.Substring(pos+1).Trim())
+       else
+            (command, "")

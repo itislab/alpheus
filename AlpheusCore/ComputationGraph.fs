@@ -32,8 +32,8 @@ type ComputationGraphNode(producerVertex:MethodVertex, experimentRoot:string) =
 
     member s.VertexID =
         match producerVertex with
-        |   Source(s) -> s.Artefact.Artefact.FullID
-        |   Command(comp) -> (Seq.head comp.Outputs).Artefact.FullID // first output is used as vertex ID
+        |   Source(s) -> s.Artefact.Artefact.Id
+        |   Command(comp) -> (Seq.head comp.Outputs).Artefact.Id // first output is used as vertex ID
 
     override s.Execute(_, _) = // ignoring checkpoints
         // we behave differently for source vertices and computed vertices            
@@ -58,9 +58,9 @@ type ComputationGraphNode(producerVertex:MethodVertex, experimentRoot:string) =
                         if sourceVertex.Artefact.Artefact.IsTracked then
                             let dumpComp = 
                                 async {
-                                    let artefactFullPath = fullIDtoFullPath experimentRoot sourceVertex.Artefact.Artefact.FullID
+                                    let artefactFullPath = fullIDtoFullPath experimentRoot sourceVertex.Artefact.Artefact.Id
                                     let artefactType =
-                                        if isFullIDDirectory sourceVertex.Artefact.Artefact.FullID then DirectoryArtefact else FileArtefact
+                                        if isFullIDDirectory sourceVertex.Artefact.Artefact.Id then DirectoryArtefact else FileArtefact
                                     let alphFileFullPath = artefactPathToAlphFilePath artefactFullPath
                                     // but if the .alph file is present, we need to update it's version during the execution
                                     let snapshotSection = 
@@ -123,13 +123,15 @@ type ComputationGraphNode(producerVertex:MethodVertex, experimentRoot:string) =
                             else
                                 if File.Exists path then
                                     File.Delete path
-                        let fullOutputPaths = Seq.map (fun (x:DependencyGraph.VersionedArtefact) -> AlphFiles.fullIDtoFullPath experimentRoot x.Artefact.FullID) comp.Outputs |> List.ofSeq
+                        let fullOutputPaths = Seq.map (fun (x:DependencyGraph.VersionedArtefact) -> AlphFiles.fullIDtoFullPath experimentRoot x.Artefact.Id) comp.Outputs |> List.ofSeq
                         List.iter deletePath fullOutputPaths
 
                     // 2) executing a command
-                    let output (s:string) = Console.WriteLine s
-                    let context : ComputationContext = { ExperimentRoot = experimentRoot; Output = output  }
-                    let exitCode = comp |> ExecuteCommand.runAndWait context 
+                    let print (s:string) = Console.WriteLine s
+                    let input idx = comp.Inputs.[idx].Artefact.Id.GetFullPath(experimentRoot)
+                    let output idx = comp.Outputs.[idx].Artefact.Id.GetFullPath(experimentRoot)
+                    let context : ComputationContext = { ExperimentRoot = experimentRoot; Print = print  }
+                    let exitCode = comp |> ExecuteCommand.runAndWait context (input, output) 
 
                     // 3) upon 0 exit code hash the outputs
                     if exitCode <> 0 then
@@ -141,21 +143,15 @@ type ComputationGraphNode(producerVertex:MethodVertex, experimentRoot:string) =
                         Async.RunSynchronously hashComputeation
                     
                         // 4b) updating dependency versions in dependency graph
-                        let updateVersions (artefacts:Set<DependencyGraph.VersionedArtefact>) =
-                            let updateVersion (art:DependencyGraph.VersionedArtefact) = 
-                                {
-                                    art with                                
-                                        Version = art.Artefact.ActualHash
-                                }
-                            Set.map updateVersion artefacts
-                        comp.Inputs <- updateVersions comp.Inputs
-                        comp.Outputs <- updateVersions comp.Outputs
+                        let updateVersion (art:DependencyGraph.VersionedArtefact) = 
+                            { art with Version = art.Artefact.ActualHash }
+                        comp.UpdateArtefacts updateVersion
             
                         // 5) dumping updated alph files to disk
                         let diskDumpComputation = 
                             async {                        
                                 let fullIDToFullAlphPath versionedArtefact =
-                                    let fullArtefactPath = fullIDtoFullPath experimentRoot versionedArtefact.Artefact.FullID
+                                    let fullArtefactPath = fullIDtoFullPath experimentRoot versionedArtefact.Artefact.Id
                                     artefactPathToAlphFilePath fullArtefactPath
                                 let outputAlphfilePaths = Array.map fullIDToFullAlphPath outputsArray
 
@@ -174,7 +170,7 @@ type ComputationGraphNode(producerVertex:MethodVertex, experimentRoot:string) =
                         logVerbose "Outputs metadata saved"
                 else
                     logVerbose "skipping as up to date"
-                comp.Outputs |> Set.toSeq |> Seq.map (fun (output:DependencyGraph.VersionedArtefact) -> output.Version) |> List.ofSeq
+                comp.Outputs |> Seq.map (fun (output:DependencyGraph.VersionedArtefact) -> output.Version) |> List.ofSeq
  
         let outputCasted = List.map (fun x -> x :> Artefact) outputVersions
         seq{ yield outputCasted, null }

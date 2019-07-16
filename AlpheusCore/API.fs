@@ -277,7 +277,7 @@ let saveAsync (artefactPath:string) storageName saveAll =
                 config.ConfigFile.Storage |> Map.toSeq |> Seq.filter (fun pair -> let k,_ = pair in k=storageName) |> Seq.map snd |> Seq.head
                     
             let save = StorageFactory.getStorageSaver experimentRoot storageToSaveTo
-            let saveDescriptors = artefactsToSave |> Array.map (fun art -> (fullIDtoFullPath experimentRoot art.FullID),art.ActualHash.Value)
+            let saveDescriptors = artefactsToSave |> Array.map (fun art -> (fullIDtoFullPath experimentRoot art.Id),art.ActualHash.Value)
             let! _ = save saveDescriptors
             return 0
     }
