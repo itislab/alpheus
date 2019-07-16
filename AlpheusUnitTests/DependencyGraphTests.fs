@@ -130,8 +130,8 @@ let ``AddMethod handles 2 inputs, 1 output``() =
     Assert.Equal(2,compVertex.Inputs.Count)
 
     Assert.Equal(vart3, Seq.exactlyOne compVertex.Outputs)
-    Assert.True(Set.contains vart1 compVertex.Inputs)
-    Assert.True(Set.contains vart2 compVertex.Inputs)
+    Assert.True(Seq.contains vart1 compVertex.Inputs)
+    Assert.True(Seq.contains vart2 compVertex.Inputs)
 
     Assert.Equal(producerVertex, art3.ProducedBy)
     Assert.Equal(compVertex, Seq.exactlyOne art1.UsedIn)

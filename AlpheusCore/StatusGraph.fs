@@ -59,12 +59,11 @@ type NotSourceGraphNode(methodVertex:DependencyGraph.CommandLineVertex) =
         // b) one of the inputs hash does not match
         // c) one of the output hashes does nor match        
 
-        let outputsArray = methodVertex.Outputs |> Set.toArray
-
+        let outputs = methodVertex.Outputs
         let outputToStatus idx isUpToDate = 
-            let output = outputsArray.[idx]
+            let output = outputs.[idx]
             {
-                FullID = output.Artefact.FullID
+                FullID = output.Artefact.Id
                 IsUpToDate = isUpToDate
                 IsOnDisk =
                     match output.Artefact.ActualHash with

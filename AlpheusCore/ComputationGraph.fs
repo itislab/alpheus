@@ -86,7 +86,7 @@ type ComputationGraphNode(producerVertex:MethodVertex, experimentRoot:string) =
 
                 //let inputVertices = methodVertex.Inputs |> Set.toList |> List.sortBy (fun x -> x.Artefact.FullID)
 
-                let outputsArray = comp.Outputs |> Set.toArray //the order is important here (the internal ordering of the set is used)
+                let outputs = comp.Outputs // the order is important here
 
                 // intermediate graph node is actually a command execution
                 // First, we need to decide whether the computation can be bypassed (the node is up to date) or the computation must be invoked               
@@ -104,7 +104,7 @@ type ComputationGraphNode(producerVertex:MethodVertex, experimentRoot:string) =
                         (versionsMatch art.Version art.Artefact.ActualHash) || (not art.StoragesContainingVersion.IsEmpty)
                        
                     // if any of the outputs is unavailable, we have to run the computation
-                    not(Array.forall isArtefactAvailable outputsArray)
+                    not(Seq.forall isArtefactAvailable outputs)
                         
                 if doComputation then
                     // We need to do computation            
@@ -138,7 +138,7 @@ type ComputationGraphNode(producerVertex:MethodVertex, experimentRoot:string) =
                         raise(InvalidOperationException(sprintf "Process exited with exit code %d" exitCode))
                     else
                         // 4a) hashing outputs disk content                
-                        let hashComputeation = DependencyGraph.fillinActualHashesAsync (outputsArray |> Array.map (fun art -> art.Artefact)) experimentRoot
+                        let hashComputeation = DependencyGraph.fillinActualHashesAsync (outputs |> Seq.map (fun art -> art.Artefact)) experimentRoot
                         logVerbose (sprintf "Calculated successfully. Calculating output hashes")
                         Async.RunSynchronously hashComputeation
                     
@@ -153,7 +153,7 @@ type ComputationGraphNode(producerVertex:MethodVertex, experimentRoot:string) =
                                 let fullIDToFullAlphPath versionedArtefact =
                                     let fullArtefactPath = fullIDtoFullPath experimentRoot versionedArtefact.Artefact.Id
                                     artefactPathToAlphFilePath fullArtefactPath
-                                let outputAlphfilePaths = Array.map fullIDToFullAlphPath outputsArray
+                                let outputAlphfilePaths = Seq.map fullIDToFullAlphPath outputs |> Seq.toArray
 
                                 let updateAlphFileAsync (alphFilePath:string) artefact =
                                     async {
@@ -162,7 +162,7 @@ type ComputationGraphNode(producerVertex:MethodVertex, experimentRoot:string) =
                                         do! AlphFiles.saveAsync alphFile alphFilePath
                                     }
                                 
-                                let alphUpdatesComputations = Array.map2 updateAlphFileAsync outputAlphfilePaths outputsArray
+                                let alphUpdatesComputations = Seq.map2 updateAlphFileAsync outputAlphfilePaths outputs
                                 let! _ = Async.Parallel alphUpdatesComputations
                                 return ()
                             }
