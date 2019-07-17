@@ -57,3 +57,17 @@ type MethodCommandSyntaxTests()=
         let (program, args) = MethodCommand.split commandLine
         Assert.Equal(expectedProgram, program)
         Assert.Equal(expectedArgs, args)
+
+    [<Theory>]
+    [<MemberData("SubstituteData")>]
+    member s.``Subsitution of $in/$out in a command line`` (commandLine:string) (inputs:string[]) (outputs:string[]) (expectedResult:string) =
+        let get (array:string[]) idx = array.[idx-1]
+        let result = commandLine |> MethodCommand.substitute (get inputs, get outputs)
+        Assert.Equal(expectedResult, result)
+
+    static member SubstituteData : obj[][] = 
+        [| [| "start"; [||]; [||]; "start" |];
+           [| "start $in1 $out1"; [|"c:\data\x.csv"|]; [|"c:\data\output"|]; "start c:\data\x.csv c:\data\output" |];
+           [| "start $in1 $$in2 >> $out1 \"$out2\""; [|"/usr/data/x.csv"; "username"|]; [|"/usr/data/y.csv"; "hat"|]; "start /usr/data/x.csv $username >> /usr/data/y.csv \"hat\"" |]
+        |]
+        

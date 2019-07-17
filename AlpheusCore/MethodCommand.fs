@@ -7,6 +7,7 @@ open AlphFiles
 
 let private regexInput = Regex("\$in(\d+)");
 let private regexOutput = Regex("\$out(\d+)");
+let private regexAny = Regex("\$(in|out)(\d+)");
 
 /// Returns two sets of referenced indices, one for dependencies and one for outputs.
 let parseReferences (command:string) =    
@@ -23,7 +24,15 @@ let validate (inputCount: int, outputCount: int) (command: string) =
     let wrongOutputs = outputs |> Seq.filter(fun ref -> ref < 1 || ref > outputCount) |> Seq.toArray
     if wrongInputs.Length > 0 then raise (ArgumentException("Command contains incorrect input indices"))
     if wrongOutputs.Length > 0 then raise (ArgumentException("Command contains incorrect output indices"))
-    
+
+/// Replaces placeholders (e.g. $in1 or $out2) with the actual values.
+let substitute (input: int -> string, output: int -> string) (command: string) =
+    let replacement (m:Match) =
+        let i = Int32.Parse m.Groups.[2].Value
+        let get = if m.Groups.[1].Value = "in" then input else output
+        get i
+    let evaluator = MatchEvaluator(replacement)
+    regexAny.Replace(command, evaluator);
 
 /// Splits the given command string to a pair of the program name and args.
 let split (command:string) =
