@@ -11,7 +11,9 @@
 [![NuGet](https://img.shields.io/nuget/dt/Alpheus-cli.svg)](https://www.nuget.org/packages/Alpheus-cli/)
 
 
-A tool for organizing and managing computational experiments. Advantages:
+A tool for organizing and managing computational experiments. Reproducible research is a way of conducting research allowing to get a provenance of any result and be able to compute it again. Alpheus forces a researcher to follow this way.
+
+Advantages:
 _todo: complete the list_
 
 - Builds a dependency graph of operations.
