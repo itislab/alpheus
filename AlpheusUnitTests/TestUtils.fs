@@ -34,3 +34,20 @@ let isTestRuntimeWindows = System.Runtime.InteropServices.RuntimeInformation.IsO
 let testRuntimeRootPath =
     if isTestRuntimeWindows then @"C:\" else "/"
 
+/// runs the command in Unix Shell
+/// Useful for setting file permissions, etc.
+let execUnixShellcommand (command:string) =
+    let escapedArgs = command.Replace("\"", "\\\"");
+
+    let startInfo =  System.Diagnostics.ProcessStartInfo()
+    
+    // startInfo.RedirectStandardOutput <- true
+    startInfo.UseShellExecute <- false
+    startInfo.CreateNoWindow <- true
+    startInfo.WindowStyle <- System.Diagnostics.ProcessWindowStyle.Hidden
+    startInfo.FileName <- "/bin/sh"
+    startInfo.Arguments <- sprintf "-c \"%s\"" escapedArgs
+    
+    let p = System.Diagnostics.Process.Start(startInfo)
+    p.WaitForExit();
+    p.ExitCode

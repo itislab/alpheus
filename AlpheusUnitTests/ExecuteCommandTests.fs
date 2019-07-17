@@ -22,7 +22,12 @@ type FileCopingTests()=
     member s.``Running local executable``() =
         async {
             let localExecutable =
-                if isTestRuntimeWindows then "copy.cmd" else "copy.sh"
+                if isTestRuntimeWindows then
+                    "copy.cmd"
+                else
+                    // to be runnable on Unix we need to set executable flag on the script
+                    Assert.Equal(0,execUnixShellcommand "chmod a+x data/copy.sh")
+                    "copy.sh"
             let wd = Path.GetFullPath(Path.Combine(s.Path,"../../")) // this is "data" dir.
             // Test checks that the executable is searched here,
             // and that executable's working directory is set properly
