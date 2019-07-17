@@ -3,10 +3,13 @@
 let internal showVerbose = true
 
 type LogCategory =
+    /// To be used in tests for logging.
     | Test 
-    | Debug
+    /// To be used in the Alpheus command line tool.
     | CLI 
+    /// To be used in the Alpheus graph execution system.
     | Execution
+    /// To be used in the Alpheus storage system.
     | Storage
 
 let logVerbose (category: LogCategory) (message:string) =
