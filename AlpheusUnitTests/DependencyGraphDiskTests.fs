@@ -19,7 +19,7 @@ type SampleExperiment() =
             @"dir3/dir5/test5.txt"
         |]
 
-    let fullArtIds = Array.map ItisLab.Alpheus.AlphFiles.ArtefactFullID.ID artIdsStr
+    let fullArtIds = Array.map ItisLab.Alpheus.AlphFiles.ArtefactId.ID artIdsStr
 
     let rootPath = Path.GetFullPath(``base``.Path)
 
@@ -56,10 +56,9 @@ type SampleExperiment() =
 
         // connecting artefacts with methods
         // actual dependency links are created here
-        let source1 = DependencyGraph.Source(g.AllocateSnapshotVertex fullArtIds.[0])
+        let source1 = DependencyGraph.Source(g.AllocateSourceMethod fullArtIds.[0])
         artefacts.[0].ProducedBy <- source1
-        
-        let source2 = DependencyGraph.Source(g.AllocateSnapshotVertex fullArtIds.[1])
+        let source2 = DependencyGraph.Source(g.AllocateSourceMethod fullArtIds.[1])
         artefacts.[1].ProducedBy <- source2
         let method3 = g.AddMethod [versionedArtefacts.[0]; versionedArtefacts.[1]] [versionedArtefacts.[2]]
         let method4 = g.AddMethod [versionedArtefacts.[0]; versionedArtefacts.[1]] [versionedArtefacts.[3]]
@@ -142,9 +141,9 @@ type SampleExperiment() =
             let artefact = g.GetOrAllocateArtefact fullArtIds.[4]
             let! resultingVertices = g.LoadDependenciesAsync [artefact] rootPath
 
-            let resultingIDs = Seq.map (fun (x:DependencyGraph.ArtefactVertex) -> x.FullID) resultingVertices |> Set.ofSeq
+            let resultingIDs = Seq.map (fun (x:DependencyGraph.ArtefactVertex) -> x.Id) resultingVertices |> Set.ofSeq
 
             Assert.Equal(5,resultingVertices.Count)
-            Assert.Equal<ArtefactFullID>(resultingIDs,Set.ofSeq fullArtIds)
+            Assert.Equal<ArtefactId>(resultingIDs,Set.ofSeq fullArtIds)
         } |> toAsyncFact
 

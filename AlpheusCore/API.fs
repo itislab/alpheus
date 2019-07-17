@@ -122,7 +122,7 @@ let compute (artefactPath:string) =
        printfn "Can't find .alph file \"%s\"" alphFilePath
        1
     else
-        match Config.tryLocateExpereimentRoot alphFilePath with
+        match Config.tryLocateExperimentRoot alphFilePath with
         |   None ->
             printfn "The file you've specified is not under Alpheus experiment folder"
             1
@@ -130,7 +130,7 @@ let compute (artefactPath:string) =
             let statusAsync = async {
                 let! artefactPath = alphFilePathToArtefactPathAsync alphFilePath
 
-                let fullID = ArtefactFullID.ID(Path.GetRelativePath(experimentRoot, artefactPath))
+                let fullID = ArtefactId.ID(Path.GetRelativePath(experimentRoot, artefactPath))
             
                 let! g = buildDependencyGraphAsync experimentRoot fullID
                 
@@ -149,7 +149,7 @@ let status artefactPath =
        printfn "The alph file %s does not exist" alphFilePath
        1
     else
-        match Config.tryLocateExpereimentRoot alphFilePath with
+        match Config.tryLocateExperimentRoot alphFilePath with
         |   None ->
             printfn "The file you've specified is not under Alpheus experiment folder"
             1
@@ -157,7 +157,7 @@ let status artefactPath =
             async {
                 let! artefactPath = alphFilePathToArtefactPathAsync alphFilePath
             
-                let fullID = ArtefactFullID.ID(Path.GetRelativePath(experimentRoot, artefactPath))
+                let fullID = ArtefactId.ID(Path.GetRelativePath(experimentRoot, artefactPath))
             
                 let! g = buildDependencyGraphAsync experimentRoot fullID
         
@@ -175,7 +175,7 @@ let restoreAsync (artefactPath:string) =
                 artefactPath
             else
                 artefactPathToAlphFilePath artefactPath
-        match Config.tryLocateExpereimentRoot alphFilePath with
+        match Config.tryLocateExperimentRoot alphFilePath with
             |   None ->
                 printfn "The file/dir you've specified is not under Alpheus experiment folder"
                 return 1
@@ -188,7 +188,7 @@ let restoreAsync (artefactPath:string) =
                 |   Some(alphFile) ->
                     let alphFileFullPath = Path.GetFullPath(alphFilePath)
                     let! artefactPath =  alphFilePathToArtefactPathAsync alphFilePath
-                    let fullID = AlphFiles.ArtefactFullID.ID(Path.GetRelativePath(experimentRoot, artefactPath))
+                    let fullID = AlphFiles.ArtefactId.ID(Path.GetRelativePath(experimentRoot, artefactPath))
                     let absFilePath = Path.GetFullPath(artefactPath)                                
                     let versionToRestore =
                         match alphFile.Origin with
@@ -202,11 +202,11 @@ let restoreAsync (artefactPath:string) =
                     let! restoreSourcesResults = checker [| Some(versionToRestore) |]
                     let restoreSources = restoreSourcesResults.[0]
                     if List.length restoreSources = 0 then
-                        printfn "%s:%s is not found in any registered storages" (AlphFiles.fullIDtoString fullID) (versionToRestore.Substring(0,6))
+                        printfn "%A:%s is not found in any registered storages" fullID (versionToRestore.Substring(0,6))
                         return 2
                     else
                         let restoreSource = List.head restoreSources
-                        traceVerbose (sprintf "Restoring %s:%s from %s storage" (AlphFiles.fullIDtoString fullID) (versionToRestore.Substring(0,6)) restoreSource)
+                        traceVerbose (sprintf "Restoring %A:%s from %s storage" fullID (versionToRestore.Substring(0,6)) restoreSource)
                         let restore = StorageFactory.getStorageRestore experimentRoot (Map.find restoreSource config.ConfigFile.Storage)
                         do! restore fullID versionToRestore
                         return 0
@@ -221,7 +221,7 @@ let saveAsync (artefactPath:string) storageName saveAll =
         else
             artefactPathToAlphFilePath artefactPath
 
-    match Config.tryLocateExpereimentRoot alphFilePath with
+    match Config.tryLocateExperimentRoot alphFilePath with
         |   None ->
             printfn "The file/dir you've specified is not under Alpheus experiment folder"
             return 1
@@ -262,7 +262,7 @@ let saveAsync (artefactPath:string) storageName saveAll =
                 }                                       
             do! AlphFiles.saveAsync alphFile alphFilePath
                     
-            let fullID = ArtefactFullID.ID(Path.GetRelativePath(experimentRoot, artefactPath))
+            let fullID = ArtefactId.ID(Path.GetRelativePath(experimentRoot, artefactPath))
             
             let! g = buildDependencyGraphAsync experimentRoot fullID                                                                                    
                     
@@ -277,18 +277,22 @@ let saveAsync (artefactPath:string) storageName saveAll =
                 config.ConfigFile.Storage |> Map.toSeq |> Seq.filter (fun pair -> let k,_ = pair in k=storageName) |> Seq.map snd |> Seq.head
                     
             let save = StorageFactory.getStorageSaver experimentRoot storageToSaveTo
-            let saveDescriptors = artefactsToSave |> Array.map (fun art -> (fullIDtoFullPath experimentRoot art.FullID),art.ActualHash.Value)
+            let saveDescriptors = artefactsToSave |> Array.map (fun art -> (fullIDtoFullPath experimentRoot art.Id),art.ActualHash.Value)
             let! _ = save saveDescriptors
             return 0
     }
 
-/// Adds one more method vertex to the experiemnt graph
+/// Adds one more method vertex to the experiment graph
 let buildAsync experimentRoot deps outputs command doNotCleanOutputs =
-    let fullInputIDs = List.map (fun x -> ArtefactFullID.ID(Path.GetRelativePath(experimentRoot,x))) deps
-    let fullOutputIDs = List.map (fun x -> ArtefactFullID.ID(Path.GetRelativePath(experimentRoot,x))) outputs
-    traceVerbose(sprintf "full dependency IDs: %A" fullInputIDs)
-    traceVerbose(sprintf "full output IDs: %A" fullOutputIDs)
-    traceVerbose(sprintf "Command is \"%s\"" command)
+    let getId = ArtefactId.Create experimentRoot
+    let fullInputIDs = List.map getId deps
+    let fullOutputIDs = List.map getId outputs
+    traceVerbose(sprintf "Dependencies: %A" fullInputIDs)
+    traceVerbose(sprintf "Outputs: %A" fullOutputIDs)
+    traceVerbose(sprintf "Command: \"%s\"" command)
+
+    command |> MethodCommand.validate (fullInputIDs.Length, fullOutputIDs.Length)
+
     async {
         let g = DependencyGraph.Graph()
         let inputVertices = List.map g.GetOrAllocateArtefact fullInputIDs
@@ -332,4 +336,4 @@ let buildAsync experimentRoot deps outputs command doNotCleanOutputs =
         let! dummy = List.map2 updateAlphFileAsync outputAlphPaths outputVertices |> Async.Parallel
 
         return ()
-        }
+    }

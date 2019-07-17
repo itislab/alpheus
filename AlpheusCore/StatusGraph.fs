@@ -9,7 +9,7 @@ open System
 open ItisLab.Alpheus
 
 type ArtefactStatus = {
-    FullID: ArtefactFullID
+    FullID: ArtefactId
     IsOnDisk: bool
     IsUpToDate: bool
     IsTracked: bool
@@ -34,7 +34,7 @@ type SourceGraphNode(orphanArtefact:DependencyGraph.VersionedArtefact) =
 
         // source method is always up to date, thus succeeds                        
         let result = {
-            FullID= orphanArtefact.Artefact.FullID;
+            FullID= orphanArtefact.Artefact.Id;
             IsUpToDate = (not isOnDisk) || (orphanArtefact.Artefact.ActualHash.Value = orphanArtefact.Version.Value);
             IsOnDisk = isOnDisk;
             IsTracked = orphanArtefact.Artefact.IsTracked
@@ -44,11 +44,11 @@ type SourceGraphNode(orphanArtefact:DependencyGraph.VersionedArtefact) =
 
         seq{ yield [result :> Artefact], null }
 
-type NotSourceGraphNode(methodVertex:DependencyGraph.ComputedVertex) =
+type NotSourceGraphNode(methodVertex:DependencyGraph.CommandLineVertex) =
     inherit StatusGraphNode(methodVertex.Inputs.Count, methodVertex.Outputs.Count)
 
     member s.FirstOutputID =
-        methodVertex.FirstOutputFullID
+        methodVertex.MethodId
 
     override s.Execute(inputs, _) = //ignoring checkpoint.
         let inputs = inputs |> List.map (fun x -> x:?> ArtefactStatus)
@@ -59,12 +59,11 @@ type NotSourceGraphNode(methodVertex:DependencyGraph.ComputedVertex) =
         // b) one of the inputs hash does not match
         // c) one of the output hashes does nor match        
 
-        let outputsArray = methodVertex.Outputs |> Set.toArray
-
+        let outputs = methodVertex.Outputs
         let outputToStatus idx isUpToDate = 
-            let output = outputsArray.[idx]
+            let output = outputs.[idx]
             {
-                FullID = output.Artefact.FullID
+                FullID = output.Artefact.Id
                 IsUpToDate = isUpToDate
                 IsOnDisk =
                     match output.Artefact.ActualHash with
@@ -101,7 +100,7 @@ let buildStatusGraph (g:DependencyGraph.Graph) =
     let factory method : StatusGraphNode =
         match method with
         |   DependencyGraph.Source(source) -> upcast SourceGraphNode(source.Artefact)
-        |   DependencyGraph.Computed(computed) -> upcast NotSourceGraphNode(computed)
+        |   DependencyGraph.Command(computed) -> upcast NotSourceGraphNode(computed)
     FlowGraphFactory.buildGraph g factory
         
 let printStatuses (g:FlowGraph<StatusGraphNode>) =
@@ -148,7 +147,7 @@ let printStatuses (g:FlowGraph<StatusGraphNode>) =
             Seq.init N (fun idx -> Control.outputScalar(vertex,idx) finalState ) |> Seq.map statusToStr
 
         let outdatedArtefacts = finalState.Graph.Structure.Vertices |> Set.toSeq |> Seq.collect getVertexOutdatedOutputs
-        let allArtefactStatuses = finalState.Graph.Structure.Vertices |> Set.toSeq |> Seq.collect getVertexOutputStatusStrings |> Seq.sortBy fst |> Seq.map (fun x -> let id,status = x in sprintf "%10s:\t%s" (fullIDtoString id) status)
+        let allArtefactStatuses = finalState.Graph.Structure.Vertices |> Set.toSeq |> Seq.collect getVertexOutputStatusStrings |> Seq.sortBy fst |> Seq.map (fun x -> let id,status = x in sprintf "%10A:\t%s" id status)
         let statuses = String.Join("\n\t", allArtefactStatuses)
         printfn "Statuses:\n\t%s" statuses
         0

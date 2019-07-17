@@ -85,18 +85,18 @@ let formatCaption (label: string) =
     if cutLabel.Length > 11 then cutLabel.Substring(0, 12) + "\n" + cutLabel.Substring(12) else cutLabel
 
 let methodIdPrefix = "5F3E69FF"
-let idForArtefact (art: ArtefactVertex) = fullIDtoString art.FullID
+let idForArtefact (art: ArtefactVertex) = art.Id.ToString()
 let idForSource (source: SourceVertex) = methodIdPrefix + (idForArtefact source.Artefact.Artefact)
-let idForComputed (computed: ComputedVertex) = methodIdPrefix + (fullIDtoString computed.FirstOutputFullID)
-let idForMethod (method: ProducerVertex) =
+let idForComputed (computed: CommandLineVertex) = methodIdPrefix + computed.MethodId
+let idForMethod (method: MethodVertex) =
     match method with
     | Source s -> idForSource s
-    | Computed cv -> idForComputed cv
+    | Command cv -> idForComputed cv
     | NotSetYet -> failwith "Invalid method vertex state" 
 
 let loadGraph path = async {
     
-    match Config.tryLocateExpereimentRoot path with
+    match Config.tryLocateExperimentRoot path with
     | None ->
         globalState <- { graph = graphCouldNotLoad }
         failwith "COULD NOT LOAD GRAPH"
@@ -104,7 +104,7 @@ let loadGraph path = async {
         let allAlphFiles = Directory.GetFiles(experimentRoot, "*.alph", SearchOption.AllDirectories)
         let! artefactPaths = allAlphFiles |> Array.map alphFilePathToArtefactPathAsync |> Async.Parallel
         let relPaths = artefactPaths |> Array.map (fun fn -> Path.GetRelativePath(experimentRoot, fn))
-        let artefactIDs = relPaths |> Seq.map ArtefactFullID.ID |> List.ofSeq
+        let artefactIDs = relPaths |> Seq.map ArtefactId.ID |> List.ofSeq
         let! depGraph = buildDependencyGraphAsync experimentRoot artefactIDs
         let artefactNodes =
             depGraph.Artefacts
@@ -127,8 +127,8 @@ let loadGraph path = async {
                                             label = None
                                             artefact = idForArtefact s.Artefact.Artefact
                                         })
-                                    | Computed cv ->
-                                        let foid = fullIDtoString cv.FirstOutputFullID
+                                    | Command cv ->
+                                        let foid = cv.MethodId
                                         Some (Shared.Computed {
                                             id = idForComputed cv
                                             label = None

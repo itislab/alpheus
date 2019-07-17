@@ -1,57 +1,52 @@
 ﻿module ItisLab.Alpheus.FlowGraphFactory
 
 open Angara.Graph
-open System
 
-/// builds an Angara Flow graph from Dependency graph, transforming dependency node in behavior specidic flow nodes using supplied factories
-let buildGraph<'Node when 'Node :> IVertex and 'Node:comparison> (g:DependencyGraph.Graph) (nodeFactory: DependencyGraph.ProducerVertex -> 'Node)=        
+/// builds an Angara Flow graph from the dependency graph, transforming dependency nodes in behavior-specific flow nodes using the supplied factory
+let buildGraph<'Node when 'Node :> IVertex and 'Node:comparison> (g:DependencyGraph.Graph) (nodeFactory: DependencyGraph.MethodVertex -> 'Node)=     
 
-    let registerArtefactRelatedMethods (artefact:DependencyGraph.ArtefactVertex) graph allocatedNodes=
+    /// Creates new or returns an existing flow graph node corresponding to the given dependency graph vertex.
+    let addOrGetNode (method: DependencyGraph.MethodVertex) flowGraph methodNodeMap =
+        match methodNodeMap |> Map.tryFind method.MethodId with
+        | Some node -> node, flowGraph, methodNodeMap
+        | None ->
+            let node = nodeFactory method
+            let newMap = methodNodeMap |> Map.add method.MethodId node
+            let newGraph = flowGraph |> FlowGraph.add node
+            node, newGraph, newMap
+
+    let registerArtefactRelatedMethods (artefact:DependencyGraph.ArtefactVertex) graph methodNodeMap =
         // Every artefact has a producer (source or non-source method)
         // getting (allocating if needed) it
-        let producerMethod, graph, allocatedNodes =
-            match Map.tryFind artefact.FullID allocatedNodes with
-            |   None ->
-                let node = nodeFactory artefact.ProducedBy
-                let allocatedNodes = Map.add artefact.FullID node allocatedNodes
-                node,(FlowGraph.add node graph), allocatedNodes
-            |   Some(preallocated) ->
-                preallocated,graph,allocatedNodes
+        let producerNode, graph, methodNodeMap = addOrGetNode artefact.ProducedBy graph methodNodeMap
         let outputPortIndex = 
             match artefact.ProducedBy with                        
-            |   DependencyGraph.ProducerVertex.Source _ ->   0 // source artefacts are always have 0 out port index
-            |   DependencyGraph.ProducerVertex.Computed(computed) ->
+            |   DependencyGraph.MethodVertex.Source _ -> 0 // source artefacts are always have 0 out port index
+            |   DependencyGraph.MethodVertex.Command(computed) ->
                 // There is intermediate producer method, checking whether we have already added it or not yet                                    
                 // Determining the producer port number that outputs the current artefact
                 Seq.findIndex (fun (va:DependencyGraph.VersionedArtefact) -> va.Artefact = artefact) computed.Outputs                
         
         // the artefact may be used in some other methods as input.
         // connecting these consumer methods with the producer of current artefact
-        let folder acc method =
-            let graph, allocatedNodes = acc            
-            
+        let connectWithConsumer (graph, methodNodeMap) consumer =
             // determining current method input port
-            match method with
-            |   DependencyGraph.ProducerVertex.Source _ ->  raise(InvalidOperationException("Source method can't be among artefact outputs"))                
-            |   DependencyGraph.ProducerVertex.Computed(consumer) ->
-                // There is intermediate producer method, checking whether we have already added it or not yet                                    
+            match consumer with
+            |   DependencyGraph.MethodVertex.Source _ -> invalidOp "The artefact is used as an input of the source method"              
+            |   DependencyGraph.MethodVertex.Command(command) ->
+                // There is an intermediate producer method, we're checking whether we have already added it or not                                    
                 // Determining the producer port number that outputs the current artefact                
-                let consumerInputPort = Seq.findIndex (fun (va:DependencyGraph.VersionedArtefact) -> va.Artefact = artefact) consumer.Inputs
-                // getting or allocating consumer node
+                let consumerInputPort = command.Inputs |> Seq.findIndex (fun (va:DependencyGraph.VersionedArtefact) -> va.Artefact = artefact) 
+                let consumerNode, graph, methodNodeMap = addOrGetNode consumer graph methodNodeMap
+                let graph = graph |> FlowGraph.connect (producerNode,outputPortIndex) (consumerNode,consumerInputPort) 
+                (graph, methodNodeMap)
 
-                let node,graph,allocatedNodes =
-                    match Map.tryFind consumer.FirstOutputFullID allocatedNodes with
-                    |   None ->
-                        let node = nodeFactory method
-                        node, (FlowGraph.add node graph), (Map.add consumer.FirstOutputFullID node allocatedNodes)
-                    |   Some(node) -> node, graph,allocatedNodes
-                
-                let graph = FlowGraph.connect (producerMethod,outputPortIndex) (node,consumerInputPort) graph
-                (graph, allocatedNodes)
-        Seq.fold folder (graph,allocatedNodes) (artefact.UsedIn |> Seq.map (fun computed -> DependencyGraph.ProducerVertex.Computed(computed)))
+        artefact.UsedIn 
+            |> Seq.map DependencyGraph.MethodVertex.Command
+            |> Seq.fold connectWithConsumer (graph, methodNodeMap)
     
-    let registering_folder acc artefact =    
-        let graph, allocatedNodes = acc
-        registerArtefactRelatedMethods artefact graph allocatedNodes
-    let graph, _ = Seq.fold registering_folder (FlowGraph.Empty, Map.empty) g.Artefacts
+    let registerArtefact (graph, methodNodeMap) artefact =    
+        registerArtefactRelatedMethods artefact graph methodNodeMap
+
+    let graph, _ = g.Artefacts |> Seq.fold registerArtefact (FlowGraph.Empty, Map.empty)
     graph

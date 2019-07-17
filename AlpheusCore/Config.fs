@@ -109,7 +109,7 @@ let createExperimentDirectoryAsync rootPath =
 
 /// Tries to find the root of the Alpheus experiment in the supplied path and up in the file hierarchy
 /// Returns the full path to the root
-let tryLocateExpereimentRoot path =
+let tryLocateExperimentRoot path =
     //path can be either file, folder
     //it can exist or not exist
     let fullPath = Path.GetFullPath(path)

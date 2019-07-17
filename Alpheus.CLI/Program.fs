@@ -3,15 +3,9 @@
 open System
 open Argu
 open ItisLab.Alpheus.CLI
+open ItisLab.Alpheus.Trace
 open System.IO
 open System.Text
-
-let traceVerbose str =
-    //ts.TraceEvent(TraceEventType.Verbose,0,str)
-    printfn "%s" str
-
-let traceInfo str =
-    printfn "%s" str
 
 [<EntryPoint>]
 let main argv =
@@ -34,7 +28,7 @@ let main argv =
         elif parseResults.Contains Config then
             let configArgs = parseResults.GetResult <@ Config @>
             let cwd = Directory.GetCurrentDirectory()
-            match Config.tryLocateExpereimentRoot cwd with
+            match Config.tryLocateExperimentRoot cwd with
                 |   None ->
                     printfn "The file you've specified is not under Alpheus experiment folder"
                     1
@@ -97,32 +91,7 @@ let main argv =
             let inputpath = saveArgs.GetResult <@ SaveArgs.Path @>
             API.saveAsync inputpath storageName saveAll |> Async.RunSynchronously
         elif parseResults.Contains Build then                
-            let buildArgs = parseResults.GetResult <@ Build @>
-            let deps = buildArgs.GetResults <@ D @>
-            traceVerbose(sprintf "Dependencies: %A" deps)
-            let outputs = buildArgs.GetResults <@ O @>
-            traceVerbose(sprintf "Outputs: %A" outputs)
-            let doNotCleanOutputs = 
-                if buildArgs.Contains Disable_Outputs_Clean then true else false
-            if List.length outputs = 0 then
-                raise(ArgumentException("You need to specify at least one output"))
-            let unrecognized = buildArgs.UnrecognizedCliParams
-            
-            if List.length unrecognized = 0 then
-                raise(ArgumentException("You need to specify command"))
-            else
-                let command = String.Join(' ',unrecognized) // buildArgs.TryGetResult <@ Command @>
-                // Checking that both dependencies and outputs are under the same experiment folder
-                let allPathParams = List.append deps outputs
-                let roots = List.map Config.tryLocateExpereimentRoot allPathParams |> List.distinct
-                traceVerbose(sprintf "found experiment roots among supplied artefact paths: %A" roots)
-                if List.length roots > 1 then
-                    raise(ArgumentException("Not all of the artefacts (inputs, outputs) are under the same experiment root folder"))            
-
-                // generating leafs full alpheus path
-                let experimentRoot = (List.exactlyOne roots).Value
-                API.buildAsync experimentRoot deps outputs command doNotCleanOutputs |> Async.RunSynchronously
-                0
+            BuildCommand.run (parseResults.GetResult <@ Build @>)
         else
             printfn "%s" usage
             2
