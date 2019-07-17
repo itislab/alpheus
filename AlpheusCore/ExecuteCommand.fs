@@ -17,7 +17,8 @@ let internal annotateLine (methodId:string) (channel:string) (line:string) =
 /// Runs the command line method and waits indefinitely until the process exits.
 /// Returns the exit code.
 let runAndWait (context: ComputationContext) (input: int -> string, output: int -> string) (computation: CommandLineVertex) =
-    let program,args = MethodCommand.split computation.Command                   
+    let command = computation.Command.Trim() |> MethodCommand.substitute (input, output)
+    let program,args = MethodCommand.split command                 
     let printStream (annotate:string->string) (stream:StreamReader) = 
         async {
             do! Async.SwitchToNewThread()

@@ -28,7 +28,7 @@ type ComputationGraphNode(producerVertex:MethodVertex, experimentRoot:string) =
     inherit ExecutableMethod(
         System.Guid.NewGuid(),
         List.init (getDepCount producerVertex) (fun _ -> typeof<ArtefactId>),
-        List.init (getDepCount producerVertex) (fun _ -> typeof<ArtefactId>))
+        List.init (getOutCount producerVertex) (fun _ -> typeof<ArtefactId>))
 
     member s.VertexID =
         match producerVertex with
@@ -47,7 +47,7 @@ type ComputationGraphNode(producerVertex:MethodVertex, experimentRoot:string) =
                     // The artefact does not exist on disk
                     // This may be OK in case the specified version is contained available in storages
                     if sourceVertex.Artefact.StoragesContainingVersion.IsEmpty then
-                        invalidOp "The source artefact must either exist on local disk or be restorable from storage"
+                        invalidOp (sprintf "The source artefact must either exist on local disk or be restorable from storage: %A" sourceVertex.Artefact.Artefact.Id)
                     else
                         // we don't need to save alph file as
                         // 1) not tracked artefacts does not initially have alph file and do not need them
@@ -128,8 +128,8 @@ type ComputationGraphNode(producerVertex:MethodVertex, experimentRoot:string) =
 
                     // 2) executing a command
                     let print (s:string) = Console.WriteLine s
-                    let input idx = comp.Inputs.[idx].Artefact.Id.GetFullPath(experimentRoot)
-                    let output idx = comp.Outputs.[idx].Artefact.Id.GetFullPath(experimentRoot)
+                    let input idx = comp.Inputs.[idx-1].Artefact.Id.GetFullPath(experimentRoot)
+                    let output idx = comp.Outputs.[idx-1].Artefact.Id.GetFullPath(experimentRoot)
                     let context : ComputationContext = { ExperimentRoot = experimentRoot; Print = print  }
                     let exitCode = comp |> ExecuteCommand.runAndWait context (input, output) 
 
