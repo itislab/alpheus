@@ -11,7 +11,7 @@ open ItisLab.Alpheus.ExecuteCommand
 [<Fact>]
 let ``Running utility from PATH``() =
     async {
-        let! exitCode = ExecuteCommand.runCmdLocallyAsync (fun x -> printfn "%s" x) "test" "dotnet" "--list-runtimes" Environment.CurrentDirectory
+        let! exitCode = ExecuteCommand.runCmdLocallyAsync (fun x -> printfn "%s" x) "path utility test" "dotnet" "--list-runtimes" Environment.CurrentDirectory
         Assert.Equal(0,exitCode)
         } |> toAsyncFact
 
@@ -25,9 +25,9 @@ type FileCopingTests()=
                 if isTestRuntimeWindows then
                     "copy.cmd"
                 else
-                    // to be runnable on Unix we need to set executable flag on the script
-                    Assert.Equal(0,execUnixShellcommand "chmod a+x data/copy.sh")
-                    "copy.sh"
+                    // to be runnable on Unix we need to set executable flag on the executable
+                    Assert.Equal(0,execUnixShellcommand "chmod a+x data/copy_prog")
+                    "copy_prog"
             let wd = Path.GetFullPath(Path.Combine(s.Path,"../../")) // this is "data" dir.
             // Test checks that the executable is searched here,
             // and that executable's working directory is set properly
@@ -42,6 +42,6 @@ type FileCopingTests()=
             sprintf "args: %s" args |> tracefn
             sprintf "wd: %s" wd |> tracefn
 
-            let! exitCode = ExecuteCommand.runCmdLocallyAsync (fun x -> System.Diagnostics.Trace.WriteLine(sprintf "%s" x)) "test" localExecutable args wd
+            let! exitCode = ExecuteCommand.runCmdLocallyAsync (fun x -> System.Diagnostics.Trace.WriteLine(sprintf "%s" x)) "local executable test" localExecutable args wd
             Assert.Equal(0,exitCode)
         }
