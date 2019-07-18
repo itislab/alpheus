@@ -34,13 +34,13 @@
     <Compile Include="StorageTests.fs" />
     <Compile Include="ConfigTests.fs" />
     <Compile Include="ArtefactArchiverTests.fs" />
+    <Compile Include="SampleExperimentTests.fs" />
     <Compile Include="DependencyGraphTests.fs" />
     <Compile Include="DependencyGraphDiskTests.fs" />
     <Compile Include="ExecuteCommandTests.fs" />
+    <Compile Include="ApiTests.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
-
-  <ItemGroup />
 
   <ItemGroup>
     <PackageReference Include="FsCheck.Xunit" Version="2.14.0" />
