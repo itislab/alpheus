@@ -131,7 +131,7 @@ type ComputationGraphNode(producerVertex:MethodVertex, experimentRoot:string) =
                     let input idx = comp.Inputs.[idx-1].Artefact.Id.GetFullPath(experimentRoot)
                     let output idx = comp.Outputs.[idx-1].Artefact.Id.GetFullPath(experimentRoot)
                     let context : ComputationContext = { ExperimentRoot = experimentRoot; Print = print  }
-                    let exitCode = comp |> ExecuteCommand.runAndWait context (input, output) 
+                    let exitCode = comp |> ExecuteCommand.runCommandLineMethodAndWait context (input, output) 
 
                     // 3) upon 0 exit code hash the outputs
                     if exitCode <> 0 then
