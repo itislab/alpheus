@@ -70,7 +70,7 @@ and ArtefactVertex(id:ArtefactId) =
             |   None -> "not exist"
             |   Some(hash) -> hash.Substring(0,6)
         sprintf "Artefact(%s|%s)" (s.Id.ToString()) version
-and MethodVertex =
+and [<CustomEquality; CustomComparison>] MethodVertex =
     /// The vertex produces single artefact out of void
     |   Source of SourceVertex
     /// The vertex corresponds to invocation of single CLI command
@@ -80,6 +80,20 @@ and MethodVertex =
             match x with
             | Source src -> src.MethodId
             | Command cmd -> cmd.MethodId
+
+        interface IComparable<MethodVertex> with
+            member x.CompareTo other = x.MethodId.CompareTo (other.MethodId)  
+        interface IComparable with
+            member x.CompareTo other =
+                match other with
+                | null -> nullArg "other"
+                | :? MethodVertex as other -> (x:>IComparable<MethodVertex>).CompareTo(other)
+                | _ -> invalidArg "other" "Cannot compare values of different types"
+        override x.Equals other =
+            match other with
+            | :? MethodVertex as other -> (x:>IComparable<MethodVertex>).CompareTo(other) = 0
+            | _ -> false
+        override x.GetHashCode() = x.MethodId.GetHashCode()
 
 and SourceVertex(methodId: MethodId, artefact:VersionedArtefact) =
     let mutable artefact : VersionedArtefact = artefact    

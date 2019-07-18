@@ -175,12 +175,9 @@ type ComputationGraphNode(producerVertex:MethodVertex, experimentRoot:string) =
         let outputCasted = List.map (fun x -> x :> Artefact) outputVersions
         seq{ yield outputCasted, null }
 
-
-
-
 let buildGraph experimentRoot (g:DependencyGraph.Graph) =    
     let factory method : ComputationGraphNode = ComputationGraphNode(method,experimentRoot)
-    FlowGraphFactory.buildGraph g factory
+    g |> DependencyGraphToAngaraWrapper |> AngaraTranslator.translate factory
 
 let doComputations (g:FlowGraph<ComputationGraphNode>) = 
     let state  = 

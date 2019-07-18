@@ -101,7 +101,7 @@ let buildStatusGraph (g:DependencyGraph.Graph) =
         match method with
         |   DependencyGraph.Source(source) -> upcast SourceGraphNode(source.Artefact)
         |   DependencyGraph.Command(computed) -> upcast NotSourceGraphNode(computed)
-    FlowGraphFactory.buildGraph g factory
+    g |> DependencyGraphToAngaraWrapper |> AngaraTranslator.translate factory
         
 let printStatuses (g:FlowGraph<StatusGraphNode>) =
     let state = 
