@@ -22,7 +22,7 @@ type ArtefactId =
 
 let isFullIDDirectory (fullID:ArtefactId) =
     match fullID with
-    |   ArtefactId.ID s -> s.EndsWith(Path.DirectorySeparatorChar)
+    |   ArtefactId.ID s -> s.EndsWith(Path.DirectorySeparatorChar) || s.EndsWith(Path.AltDirectorySeparatorChar)
 
 /// Path relative to some .alph file (directory delimiter is always / even on windows)
 /// Trailing slash indicates that the artifact is folder
@@ -155,7 +155,7 @@ let tryLoadAsync (filepath:string) =
 /// Full path transformed to full path. Relative to relative.
 let artefactPathToAlphFilePath (artefactPath:string) =
     let prefix = 
-        if artefactPath.EndsWith(Path.DirectorySeparatorChar) then
+        if artefactPath.EndsWith(Path.DirectorySeparatorChar) || artefactPath.EndsWith(Path.AltDirectorySeparatorChar) then
             artefactPath.Substring(0,artefactPath.Length-1)
         else
             artefactPath
