@@ -64,7 +64,7 @@ type DepGraphConstruction() =
             traceInfo (sprintf "testing %A" artefactId)
             let! graph = buildDependencyGraphAsync s.RootPath artefactId
             Assert.True(graph.ArtefactsCount>0,"Graph must be non-empty")
-            } |> toAsyncFact
+            } |> Async.RunSynchronously // to prevent race condition on disk file we run async though RunSynchronously rather than toAsyncFact
 
     [<Theory>]
     [<ClassData(typedefof<GraphBuildDataSource>)>]
@@ -77,7 +77,7 @@ type DepGraphConstruction() =
             let outputPaths = testCase.OutputIDs |> Array.map (fun x -> Path.Combine(s.Path,x)) |> List.ofArray
             let! buildResult = buildAsync s.RootPath inputPaths outputPaths "../copy_prog $in1 $out1" false
             assertResultOk buildResult
-        } |> toAsyncFact
+        } |> Async.RunSynchronously // to prevent race condition on disk file we run async though RunSynchronously rather than toAsyncFact
 
     [<Theory>]
     [<ClassData(typedefof<GraphBuildDataSource>)>]
@@ -102,7 +102,7 @@ type DepGraphConstruction() =
 
             let checks = testCase.OutputIDs |> Array.map (fun x -> checkGraphAsync (ArtefactId.ID x) testCase.ExpectedMethodsInGraph testCase.ExpectedArtefactsInGraph)
             checks |> Array.iter Async.RunSynchronously
-        } |> toAsyncFact
+        } |> Async.RunSynchronously // to prevent race condition on disk file we run async though RunSynchronously rather than toAsyncFact
 
     [<Theory>]
     [<ClassData(typedefof<GraphBuildDataSource>)>]
@@ -131,7 +131,7 @@ type DepGraphConstruction() =
 
             let checks = testCase.OutputIDs |> Array.map (fun x -> checkGraphAsync (ArtefactId.ID x))
             checks |> Array.iter Async.RunSynchronously
-        } |> toAsyncFact
+        } |> Async.RunSynchronously // to prevent race condition on disk file we run async though RunSynchronously rather than toAsyncFact
 
 type DepGraphLocalComputation() =
     inherit SampleExperiment.SampleExperiment()
