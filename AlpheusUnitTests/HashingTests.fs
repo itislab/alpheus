@@ -90,7 +90,7 @@ let ``Consistency across alpheus versions and platforms`` () =
 
     // This test checks the consistency across alpheus version and across different platforms (where tests are executed)
     // the following hardcoded hash value is calculated on windows
-    Assert.Equal("5079DAD9B4A4565053F1FA772E2E0012500A510A430D60A0BCE6FC745CA0D3533C4B283BB1B944B2BF5FCE60382004E9175576B6A995582B460250D94DED766F",str)
+    Assert.Equal("9D231A0BF5230973C4D2F519AD337136F5730B2DDB95E423C42459CBED7921E517BEC1F16F1840F257645A6F62315E90A035161815064C5C63674A7D11BD4C43",str)
 
     } |> toAsyncFact
 

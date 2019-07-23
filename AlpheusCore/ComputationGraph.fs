@@ -45,7 +45,7 @@ type ComputationGraphNode(producerVertex:MethodVertex, experimentRoot:string) =
                 match sourceVertex.Artefact.Artefact.ActualHash with
                 |   None ->
                     // The artefact does not exist on disk
-                    // This may be OK in case the specified version is contained available in storages
+                    // This may be OK in case the specified version is available in storages
                     if sourceVertex.Artefact.StoragesContainingVersion.IsEmpty then
                         invalidOp (sprintf "The source artefact must either exist on local disk or be restorable from storage: %A" sourceVertex.Artefact.Artefact.Id)
                     else

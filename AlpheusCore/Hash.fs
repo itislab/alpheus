@@ -45,7 +45,9 @@ let hashFileAsync fullPath =
     async {
         let readChunkSize = 100 * 1024 * 1024 //in Bytes
         use f_stream = File.OpenRead fullPath
-        return! hashStreamAsync readChunkSize f_stream
+        let! hash = hashStreamAsync readChunkSize f_stream
+        f_stream.Dispose()
+        return hash
     }
 
 let rec hashDirectoryAsync (fullPath:string) =

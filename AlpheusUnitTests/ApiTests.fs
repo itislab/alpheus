@@ -9,6 +9,8 @@ open System.Collections.Generic
 open ItisLab.Alpheus.AlphFiles
 open System.IO
 open ItisLab.Alpheus.DependencyGraph
+open System
+open ItisLab.Alpheus
 
 /// can be used as calssData for XUnit theory. returns all of the artefactIDs for the sample experiment
 type ArtefactIdSource() =
@@ -36,7 +38,13 @@ type GraphBuildDataSource() =
             yield [| {inputsIndices=[|0|]; OutputIDs=[|"dir1/test6.txt"|]; ExpectedArtefactsInGraph = 2; ExpectedMethodsInGraph = 2} |]
             yield [| {inputsIndices=[|1|]; OutputIDs=[|"dir1/test6.txt"|]; ExpectedArtefactsInGraph = 2; ExpectedMethodsInGraph = 2} |]
             yield [| {inputsIndices=[|2|]; OutputIDs=[|"dir1/test6.txt"|]; ExpectedArtefactsInGraph = 4; ExpectedMethodsInGraph = 4} |]
+            yield [| {inputsIndices=[|3|]; OutputIDs=[|"dir1/test6.txt"|]; ExpectedArtefactsInGraph = 4; ExpectedMethodsInGraph = 4} |]
+            yield [| {inputsIndices=[|4|]; OutputIDs=[|"dir1/test6.txt"|]; ExpectedArtefactsInGraph = 6; ExpectedMethodsInGraph = 6} |]
+            yield [| {inputsIndices=[|0|]; OutputIDs=[|"dir1/test6/"|]; ExpectedArtefactsInGraph = 2; ExpectedMethodsInGraph = 2} |]
+            yield [| {inputsIndices=[|1|]; OutputIDs=[|"dir1/test6/"|]; ExpectedArtefactsInGraph = 2; ExpectedMethodsInGraph = 2} |]
+            yield [| {inputsIndices=[|2|]; OutputIDs=[|"dir1/test6/"|]; ExpectedArtefactsInGraph = 4; ExpectedMethodsInGraph = 4} |]
             yield [| {inputsIndices=[|3|]; OutputIDs=[|"dir1/test6/"|]; ExpectedArtefactsInGraph = 4; ExpectedMethodsInGraph = 4} |]
+            yield [| {inputsIndices=[|4|]; OutputIDs=[|"dir1/test6/"|]; ExpectedArtefactsInGraph = 6; ExpectedMethodsInGraph = 6} |]
         }
     interface IEnumerable<obj array> with
         member s.GetEnumerator() =
@@ -122,3 +130,45 @@ type DepGraphConstruction() =
             checks |> Array.iter Async.RunSynchronously
         } |> toAsyncFact
 
+type DepGraphLocalComputation() =
+    inherit SampleExperiment.SampleExperiment()
+
+    
+    [<Fact>]
+    member s.``Compute: concat 2 files``() =
+        let expRoot = Path.GetFullPath(s.Path)
+        let savedWD = Environment.CurrentDirectory
+        try
+            // we will concat these files
+            File.Copy("data/cat.cmd",Path.Combine(s.Path,"cat.cmd"))
+            File.Copy("data/texturalData.txt",Path.Combine(s.Path,"1.txt"))
+            File.Copy("data/texturalData2.txt",Path.Combine(s.Path,"2.txt"))
+        
+            // setting proper working directory
+            Environment.CurrentDirectory <- expRoot
+            
+            let concatCommand = 
+                if isTestRuntimeWindows then
+                    "cmd /C \"cat.cmd cat_test.txt 1.txt 2.txt\""
+                else
+                    "/bin/sh -c \"cat 1.txt > cat_test.txt; cat 2.txt >> cat_test.txt\""
+            API.buildAsync expRoot ["1.txt"; "2.txt"] ["cat_test.txt"] concatCommand false |> Async.RunSynchronously
+
+            // graph is constructed. Now executing
+            printfn "Graph constructed"
+
+            Assert.False(File.Exists("cat_test.txt"))
+            let exitCode = API.compute "cat_test.txt"
+            Assert.Equal(0,exitCode)
+            Assert.True(File.Exists("cat_test.txt"))
+
+            let f1 = File.ReadAllText("1.txt")
+            let f2 = File.ReadAllText("2.txt")
+            let f3 = File.ReadAllText("cat_test.txt")
+
+            // And verifying the content
+            let len = (f1+f2).Length
+            Assert.Equal(f1+f2,f3.Substring(0,len)) // constraining the length as windows copy command writes strange SUB symbol et the end of the file
+
+        finally
+            Environment.CurrentDirectory <- savedWD

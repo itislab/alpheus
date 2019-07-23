@@ -283,6 +283,7 @@ let saveAsync (artefactPath:string) storageName saveAll =
     }
 
 /// Adds one more method vertex to the experiment graph
+/// deps: a list of paths to the input artefacts. outputs: a list of paths to the produced artefacts
 let buildAsync experimentRoot deps outputs command doNotCleanOutputs =
     let getId = ArtefactId.Create experimentRoot
     let fullInputIDs = List.map getId deps

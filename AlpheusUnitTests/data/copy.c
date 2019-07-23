@@ -2,9 +2,9 @@
 #include <stdlib.h>
 
 // Compiled binary for this code is "copy_prog" that is placed in source control near this source file
+// It is used in tests
 // It is compiled on linux with "cc copy.c -o copy_prog"
-// This code is used for compiling utility that is stored in source control as a compiled binary
-// The program copyies the source file into the destination
+// The program copies the source file into the destination
 
 int main(int argc, char** argv) {
        FILE *fp;
@@ -13,7 +13,7 @@ int main(int argc, char** argv) {
        char buffer[bufSize];
 
        if(argc<3) {
-            printf("You need to specify source and distanation as arguments\r\n");
+            printf("You need to specify source and destination as arguments\r\n");
             exit(1);
        }
        const char* source = argv[1];
@@ -34,6 +34,6 @@ int main(int argc, char** argv) {
 
        fclose(fp);
        fclose(fp2);
-       printf("Successfuly copied.\r\n");
+       printf("Successfully copied.\r\n");
        return(0);
 }

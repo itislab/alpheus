@@ -6,6 +6,7 @@ open ItisLab.Alpheus
 open Utils
 open System.IO
 
+[<Collection("Disk involving test collection")>]
 type SampleExperiment() =
     inherit SingleUseOneTimeDirectory()
 
