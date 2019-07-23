@@ -119,13 +119,11 @@ let compute (artefactPath:string) =
         else
             artefactPathToAlphFilePath artefactPath
     if not (File.Exists(alphFilePath)) then
-       printfn "Can't find .alph file \"%s\"" alphFilePath
-       1
+       Error(sprintf "Can't find .alph file \"%s\"" alphFilePath)
     else
         match Config.tryLocateExperimentRoot alphFilePath with
         |   None ->
-            printfn "The file you've specified is not under Alpheus experiment folder"
-            1
+            Error("The file you've specified is not under Alpheus experiment folder")
         |   Some(experimentRoot) ->                    
             let statusAsync = async {
                 let! artefactPath = alphFilePathToArtefactPathAsync alphFilePath
@@ -146,13 +144,11 @@ let status artefactPath =
     let alphFilePath = artefactPathToAlphFilePath artefactPath
     
     if not (File.Exists(alphFilePath)) then
-       printfn "The alph file %s does not exist" alphFilePath
-       1
+       Error(sprintf "The alph file %s does not exist" alphFilePath)
     else
         match Config.tryLocateExperimentRoot alphFilePath with
         |   None ->
-            printfn "The file you've specified is not under Alpheus experiment folder"
-            1
+            Error("The file you've specified is not under Alpheus experiment folder")
         |   Some(experimentRoot) ->                    
             async {
                 let! artefactPath = alphFilePathToArtefactPathAsync alphFilePath
@@ -177,14 +173,12 @@ let restoreAsync (artefactPath:string) =
                 artefactPathToAlphFilePath artefactPath
         match Config.tryLocateExperimentRoot alphFilePath with
             |   None ->
-                printfn "The file/dir you've specified is not under Alpheus experiment folder"
-                return 1
+                return Error("The file/dir you've specified is not under Alpheus experiment folder")
             |   Some(experimentRoot) ->     
                 let! loadResults = AlphFiles.tryLoadAsync alphFilePath                            
                 match loadResults with
                 |   None ->
-                    printfn "There is no %s file on disk to fetch the restore version from" alphFilePath
-                    return 2
+                    return Error(sprintf "There is no %s file on disk to fetch the restore version from" alphFilePath)
                 |   Some(alphFile) ->
                     let alphFileFullPath = Path.GetFullPath(alphFilePath)
                     let! artefactPath =  alphFilePathToArtefactPathAsync alphFilePath
@@ -202,17 +196,17 @@ let restoreAsync (artefactPath:string) =
                     let! restoreSourcesResults = checker [| Some(versionToRestore) |]
                     let restoreSources = restoreSourcesResults.[0]
                     if List.length restoreSources = 0 then
-                        printfn "%A:%s is not found in any registered storages" fullID (versionToRestore.Substring(0,6))
-                        return 2
+                        return Error(sprintf "%A:%s is not found in any registered storages" fullID (versionToRestore.Substring(0,6)))
                     else
                         let restoreSource = List.head restoreSources
                         traceVerbose (sprintf "Restoring %A:%s from %s storage" fullID (versionToRestore.Substring(0,6)) restoreSource)
                         let restore = StorageFactory.getStorageRestore experimentRoot (Map.find restoreSource config.ConfigFile.Storage)
                         do! restore fullID versionToRestore
-                        return 0
+                        return Ok()
         }
 
-/// Saves the supplied artefact to the supplied storage
+/// Saves the supplied artefact to the supplied storage.
+/// saveAll means to save all dependencies for the specified artefact
 let saveAsync (artefactPath:string) storageName saveAll =
     async {
     let alphFilePath =
@@ -223,8 +217,7 @@ let saveAsync (artefactPath:string) storageName saveAll =
 
     match Config.tryLocateExperimentRoot alphFilePath with
         |   None ->
-            printfn "The file/dir you've specified is not under Alpheus experiment folder"
-            return 1
+            return Error("The file/dir you've specified is not under Alpheus experiment folder")
         |   Some(experimentRoot) ->                           
             let! alphFile,artefactPath =
                 async {
@@ -279,7 +272,7 @@ let saveAsync (artefactPath:string) storageName saveAll =
             let save = StorageFactory.getStorageSaver experimentRoot storageToSaveTo
             let saveDescriptors = artefactsToSave |> Array.map (fun art -> (fullIDtoFullPath experimentRoot art.Id),art.ActualHash.Value)
             let! _ = save saveDescriptors
-            return 0
+            return Ok()
     }
 
 /// Adds one more method vertex to the experiment graph
@@ -336,5 +329,5 @@ let buildAsync experimentRoot deps outputs command doNotCleanOutputs =
         let outputAlphPaths = List.map (fun x -> artefactPathToAlphFilePath x) outputs
         let! dummy = List.map2 updateAlphFileAsync outputAlphPaths outputVertices |> Async.Parallel
 
-        return ()
+        return Ok()
     }

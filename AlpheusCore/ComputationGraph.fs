@@ -195,9 +195,8 @@ let doComputations (g:FlowGraph<ComputationGraphNode>) =
         // engine.Changes.Subscribe(fun x -> x.State.Vertices)
         let final = Control.pickFinal engine.Changes
         let finalState = final.GetResult()
-        0
+        Ok()
     with 
     | :? Control.FlowFailedException as flowExc -> 
         let failed = String.Join("\n\t", flowExc.InnerExceptions |> Seq.map(fun e -> e.Message))
-        printfn "Failed to compute the artefacts: \n\t%s" failed
-        1
+        Error(sprintf "Failed to compute the artefacts: \n\t%s" failed)

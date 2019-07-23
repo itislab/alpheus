@@ -2,6 +2,7 @@
 
 open System.Threading.Tasks
 open System
+open Xunit
 
 // Ensure we match the return type xUnit.net is looking for
 let toAsyncFact computation : Task = Async.StartAsTask computation :> _
@@ -52,3 +53,9 @@ let execUnixShellcommand (command:string) =
     let p = System.Diagnostics.Process.Start(startInfo)
     p.WaitForExit();
     p.ExitCode
+
+/// Asserts that the result is on Ok track
+let assertResultOk result =
+    match result with
+    |   Ok(_) -> () // expected successful operation
+    |   Error(e) -> Assert.True(false, sprintf "Expected successful save operation, but got error: %A" e)

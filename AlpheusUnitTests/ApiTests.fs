@@ -68,14 +68,15 @@ type DepGraphConstruction() =
 
     [<Theory>]
     [<ClassData(typedefof<GraphBuildDataSource>)>]
-    /// Ensures that build command finishes successfuly for all test cases
+    /// Ensures that build command finishes successfully for all test cases
     member s.``build: finishes``(testCase) =
         async {
-            // preparing and eunning build command
+            // preparing and running build command
             let inputIDs = testCase.inputsIndices |> Array.map (fun idx -> s.FullArtIds.[idx].ToString()) |> List.ofArray
             let inputPaths = inputIDs |> List.map (fun x -> Path.Combine(s.Path,x))
             let outputPaths = testCase.OutputIDs |> Array.map (fun x -> Path.Combine(s.Path,x)) |> List.ofArray
-            do! buildAsync s.RootPath inputPaths outputPaths "../copy_prog $in1 $out1" false
+            let! buildResult = buildAsync s.RootPath inputPaths outputPaths "../copy_prog $in1 $out1" false
+            assertResultOk buildResult
         } |> toAsyncFact
 
     [<Theory>]
@@ -87,7 +88,8 @@ type DepGraphConstruction() =
             let inputIDs = testCase.inputsIndices |> Array.map (fun idx -> s.FullArtIds.[idx].ToString()) |> List.ofArray
             let inputPaths = inputIDs |> List.map (fun x -> Path.Combine(s.Path,x))
             let outputPaths = testCase.OutputIDs |> Array.map (fun x -> Path.Combine(s.Path,x)) |> List.ofArray
-            do! buildAsync s.RootPath inputPaths outputPaths "../copy_prog $in1 $out1" false
+            let! buildResult = buildAsync s.RootPath inputPaths outputPaths "../copy_prog $in1 $out1" false
+            assertResultOk buildResult
 
             //let alphFiles = List.map artefactPathToAlphFilePath outputPaths
             // checking grpah for each newly created output artefact
@@ -111,7 +113,8 @@ type DepGraphConstruction() =
             let inputIDs = testCase.inputsIndices |> Array.map (fun idx -> s.FullArtIds.[idx]) |> List.ofArray
             let inputPaths = inputIDs |> List.map (fun x -> Path.Combine(s.Path,x.ToString()))
             let outputPaths = testCase.OutputIDs |> Array.map (fun x -> Path.Combine(s.Path,x)) |> List.ofArray
-            do! buildAsync s.RootPath inputPaths outputPaths "../copy_prog $in1 $out1" false
+            let! buildResult = buildAsync s.RootPath inputPaths outputPaths "../copy_prog $in1 $out1" false
+            assertResultOk buildResult
 
             // checking graph for each newly created output artefact
             let checkGraphAsync outputId = 
@@ -135,7 +138,7 @@ type DepGraphLocalComputation() =
 
     
     [<Fact>]
-    member s.``Compute: concat 2 files``() =
+    member s.``API Compute: concat 2 files``() =
         let expRoot = Path.GetFullPath(s.Path)
         let savedWD = Environment.CurrentDirectory
         try
@@ -152,14 +155,15 @@ type DepGraphLocalComputation() =
                     "cmd /C \"cat.cmd $out1 $in1 $in2\""
                 else
                     "/bin/sh -c \"cat 1.txt > cat_test.txt; cat 2.txt >> cat_test.txt\""
-            API.buildAsync expRoot ["1.txt"; "2.txt"] ["cat_test.txt"] concatCommand false |> Async.RunSynchronously
+            let buildResult = API.buildAsync expRoot ["1.txt"; "2.txt"] ["cat_test.txt"] concatCommand false |> Async.RunSynchronously
+            assertResultOk buildResult
 
             // graph is constructed. Now executing
             printfn "Graph constructed"
 
             Assert.False(File.Exists("cat_test.txt"))
-            let exitCode = API.compute "cat_test.txt"
-            Assert.Equal(0,exitCode)
+            let computeResult = API.compute "cat_test.txt"
+            assertResultOk computeResult
             Assert.True(File.Exists("cat_test.txt"))
 
             let f1 = File.ReadAllText("1.txt")
@@ -172,3 +176,35 @@ type DepGraphLocalComputation() =
 
         finally
             Environment.CurrentDirectory <- savedWD
+
+
+
+type DepGraphSaveRestore() =
+    inherit SampleExperiment.SampleExperiment()
+
+    [<Fact>]
+    member s.``API Save-Resore: file artefact saves & restores``() =
+        async {
+            let artId = s.FullArtIds.[0]
+            let path = Path.Combine(s.Path,artId.ToString())
+            // local storage is available by default
+            let! saveResult =  API.saveAsync path "local" false
+            assertResultOk saveResult
+             
+            // saving the content for later verification
+            let! origContent = File.ReadAllTextAsync(path) |> Async.AwaitTask
+
+            // deleting the file to restore it
+            File.Delete(path)
+
+            Assert.False(File.Exists(path))
+
+            let! restoreResult = API.restoreAsync path
+            assertResultOk restoreResult
+
+            // checking that it actually restored and it's content matches
+            Assert.True(File.Exists(path),"File is not restored")
+            let! restoredContent = File.ReadAllTextAsync(path) |> Async.AwaitTask
+            Assert.Equal(origContent,restoredContent)
+
+        } |> toAsyncFact
