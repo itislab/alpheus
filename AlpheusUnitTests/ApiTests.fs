@@ -149,7 +149,7 @@ type DepGraphLocalComputation() =
             
             let concatCommand = 
                 if isTestRuntimeWindows then
-                    "cmd /C \"cat.cmd cat_test.txt 1.txt 2.txt\""
+                    "cmd /C \"cat.cmd $out1 $in1 $in2\""
                 else
                     "/bin/sh -c \"cat 1.txt > cat_test.txt; cat 2.txt >> cat_test.txt\""
             API.buildAsync expRoot ["1.txt"; "2.txt"] ["cat_test.txt"] concatCommand false |> Async.RunSynchronously
