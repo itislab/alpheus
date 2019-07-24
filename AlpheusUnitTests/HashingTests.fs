@@ -124,8 +124,8 @@ let ``Different directories result in different hashes`` () =
 
     } |> toAsyncFact
 
-type FastHashTests()=
-    inherit SingleUseOneTimeDirectory()
+type FastHashTests(output)=
+    inherit SingleUseOneTimeDirectory(output)
 
     [<Fact>]
     member s.``Fast hash creates hash file for hashed file`` () =

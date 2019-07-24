@@ -15,8 +15,8 @@ let ``Running utility from PATH``() =
         Assert.Equal(0,exitCode)
         } |> toAsyncFact
 
-type FileCopingTests()=
-    inherit SingleUseOneTimeDirectory()
+type FileCopingTests(output)=
+    inherit SingleUseOneTimeDirectory(output)
 
     [<Fact>]
     member s.``Running local executable``() =

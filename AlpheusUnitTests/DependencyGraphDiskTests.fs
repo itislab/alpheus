@@ -6,8 +6,8 @@ open Xunit
 open ItisLab.Alpheus
 open Utils
 
-type Tests() =
-    inherit SampleExperiment.SampleExperiment()
+type Tests(output) =
+    inherit SampleExperiment.SampleExperiment(output)
 
     [<Fact>]
     member s.``LoadDependenciesAsync loads single source file artefact``() =

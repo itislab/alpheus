@@ -6,18 +6,20 @@ open ItisLab.Alpheus
 open Utils
 open System.IO
 
-type SampleExperiment() =
-    inherit SingleUseOneTimeDirectory()
+/// strings that represent artefact IDs
+let artIdsStr = 
+    [|
+        @"dir1/test1.txt" // there will be no alph file for this artefact
+        @"dir1/test2/"
+        @"dir2/test3.txt" // depends on test1.txt and test2/
+        @"dir2/test4/" // also depends on test11.txt and test2/ ; data for this artefact will be missing
+        @"dir3/dir5/test5.txt" // depends on test3.txt and test4/
+    |]
+
+type SampleExperiment(output) =
+    inherit SingleUseOneTimeDirectory(output)
 
     // creating sample experiment folder for tests
-    let artIdsStr = 
-        [|
-            @"dir1/test1.txt" // there will be no alph file for this artefact
-            @"dir1/test2/"
-            @"dir2/test3.txt" // depends on test1.txt and test2/
-            @"dir2/test4/" // also depends on test11.txt and test2/ ; data for this artefact will be missing
-            @"dir3/dir5/test5.txt" // depends on test3.txt and test4/
-        |]
 
     let fullArtIds = Array.map ItisLab.Alpheus.AlphFiles.ArtefactId.ID artIdsStr
 

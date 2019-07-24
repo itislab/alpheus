@@ -7,8 +7,8 @@ open System.Threading.Tasks
 open ItisLab.Alpheus.Tests.Utils
 open ItisLab.Alpheus.AlphFiles
 
-type AlphFileSerializationTests()=
-    inherit SingleUseOneTimeDirectory()
+type AlphFileSerializationTests(output)=
+    inherit SingleUseOneTimeDirectory(output)
 
     [<Fact>]
     member s.``Alph file round serialization-deserialization``() =

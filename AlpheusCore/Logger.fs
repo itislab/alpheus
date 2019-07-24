@@ -11,9 +11,15 @@ type LogCategory =
     | Execution
     /// To be used in the Alpheus storage system.
     | Storage
+    /// To be used in the Alpheus experement folder management
+    | ExperimentFolder
+
+/// A function to be used for logs output
+let mutable LogFunction = fun (category: LogCategory) (message:string) ->
+    printfn "%A: %s" category message
 
 let logVerbose (category: LogCategory) (message:string) =
-    if showVerbose then printfn "%A: %s" category message
+    if showVerbose then LogFunction category message
     else ()
 
 let logInfo (category: LogCategory) (message:string) =

@@ -23,13 +23,13 @@ let traceInfo str =
 //ts.Listeners.Add(Diagnostics.DefaultTraceListener()) |> ignore
 
 
-let buildDependencyGraphAsync experimentRoot artefactFullID =
+let buildDependencyGraphAsync experimentRoot artefactFullIdList =
     async {
         let! config = Config.openExperimentDirectoryAsync experimentRoot
 
         let g = DependencyGraph.Graph()
-        let vertex = g.GetOrAllocateArtefact artefactFullID
-        let! _ = g.LoadDependenciesAsync [vertex] experimentRoot
+        let vertexList = List.map g.GetOrAllocateArtefact artefactFullIdList
+        let! _ = g.LoadDependenciesAsync vertexList experimentRoot
         traceVerbose(sprintf "Dependency graph is built (%d artefacts; %d methods)" g.ArtefactsCount g.MethodsCount)
         // Filling in actual hashes
         do! fillinActualHashesAsync g.Artefacts experimentRoot
@@ -130,7 +130,7 @@ let compute (artefactPath:string) =
 
                 let fullID = ArtefactId.ID(Path.GetRelativePath(experimentRoot, artefactPath))
             
-                let! g = buildDependencyGraphAsync experimentRoot fullID
+                let! g = buildDependencyGraphAsync experimentRoot [fullID]
                 
                 //flow graph to calculate statuses
                 let flowGraph = ComputationGraph.buildGraph experimentRoot g
@@ -155,7 +155,7 @@ let status artefactPath =
             
                 let fullID = ArtefactId.ID(Path.GetRelativePath(experimentRoot, artefactPath))
             
-                let! g = buildDependencyGraphAsync experimentRoot fullID
+                let! g = buildDependencyGraphAsync experimentRoot [fullID]
         
                 //flow graph to calculate statuses
                 let flowGraph = StatusGraph.buildStatusGraph g
@@ -257,7 +257,7 @@ let saveAsync (artefactPath:string) storageName saveAll =
                     
             let fullID = ArtefactId.ID(Path.GetRelativePath(experimentRoot, artefactPath))
             
-            let! g = buildDependencyGraphAsync experimentRoot fullID                                                                                    
+            let! g = buildDependencyGraphAsync experimentRoot [fullID]
                     
             let artefactsToSave =
                 if saveAll then
@@ -288,12 +288,8 @@ let buildAsync experimentRoot deps outputs command doNotCleanOutputs =
     command |> MethodCommand.validate (fullInputIDs.Length, fullOutputIDs.Length)
 
     async {
-        let g = DependencyGraph.Graph()
-        let inputVertices = List.map g.GetOrAllocateArtefact fullInputIDs
-        let! graphArtefacts = g.LoadDependenciesAsync inputVertices experimentRoot
-        // Filling in actual hashes
-        do! fillinActualHashesAsync g.Artefacts experimentRoot
-        traceVerbose("Actual hashes are loaded")                
+        let! g = buildDependencyGraphAsync experimentRoot fullInputIDs
+        let inputVertices = List.map g.GetOrAllocateArtefact fullInputIDs                     
         let inputVersionedVertices = List.map getVersionedArtefact inputVertices
         let outputVertices = List.map g.GetOrAllocateArtefact fullOutputIDs
         let outputVersionedVertices = List.map getVersionedArtefact outputVertices

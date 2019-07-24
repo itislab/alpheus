@@ -14,8 +14,7 @@ open ItisLab.Alpheus
 
 /// can be used as calssData for XUnit theory. returns all of the artefactIDs for the sample experiment
 type ArtefactIdSource() =
-    let sampleExperiment = new SampleExperiment.SampleExperiment()
-    let sequence : IEnumerable<obj array> = sampleExperiment.FullArtIds |> Seq.map (fun x -> x :> obj) |> Seq.map (fun x -> [|x|])
+    let sequence : IEnumerable<obj array> = SampleExperiment.artIdsStr |> Seq.map ArtefactId.ID |> Seq.map (fun x -> x :> obj) |> Seq.map (fun x -> [|x|])
     interface IEnumerable<obj array> with
         member s.GetEnumerator() =
             sequence.GetEnumerator()
@@ -54,17 +53,25 @@ type GraphBuildDataSource() =
         member s.GetEnumerator() =
             sequence.GetEnumerator() :> IEnumerator            
 
-type DepGraphConstruction() =
-    inherit SampleExperiment.SampleExperiment()
+type DepGraphConstruction(output) =
+    inherit SampleExperiment.SampleExperiment(output)
 
     [<Theory>]
     [<ClassData(typedefof<ArtefactIdSource>)>]
     member s.``dependencyGraph loads``(artefactId:ArtefactId) =
         async {
             traceInfo (sprintf "testing %A" artefactId)
-            let! graph = buildDependencyGraphAsync s.RootPath artefactId
+            let! graph = buildDependencyGraphAsync s.RootPath [artefactId]
             Assert.True(graph.ArtefactsCount>0,"Graph must be non-empty")
-            } |> Async.RunSynchronously // to prevent race condition on disk file we run async though RunSynchronously rather than toAsyncFact
+            } |> toAsyncFact
+
+    [<Fact>]
+    member s.``dependencyGraph loads for all at once``() =
+        async {
+            traceInfo (sprintf "testing %A" s.FullArtIds)
+            let! graph = buildDependencyGraphAsync s.RootPath (List.ofArray s.FullArtIds)
+            Assert.True(graph.ArtefactsCount>0,"Graph must be non-empty")
+            } |> toAsyncFact
 
     [<Theory>]
     [<ClassData(typedefof<GraphBuildDataSource>)>]
@@ -77,14 +84,14 @@ type DepGraphConstruction() =
             let outputPaths = testCase.OutputIDs |> Array.map (fun x -> Path.Combine(s.Path,x)) |> List.ofArray
             let! buildResult = buildAsync s.RootPath inputPaths outputPaths "../copy_prog $in1 $out1" false
             assertResultOk buildResult
-        } |> Async.RunSynchronously // to prevent race condition on disk file we run async though RunSynchronously rather than toAsyncFact
+        } |> toAsyncFact
 
     [<Theory>]
     [<ClassData(typedefof<GraphBuildDataSource>)>]
     /// Checks the artefact and method counts in the graph after the build command for all test cases
     member s.``build: vertex count check``(testCase) =
         async {
-            // preparing and eunning build command
+            // preparing and running build command
             let inputIDs = testCase.inputsIndices |> Array.map (fun idx -> s.FullArtIds.[idx].ToString()) |> List.ofArray
             let inputPaths = inputIDs |> List.map (fun x -> Path.Combine(s.Path,x))
             let outputPaths = testCase.OutputIDs |> Array.map (fun x -> Path.Combine(s.Path,x)) |> List.ofArray
@@ -95,21 +102,21 @@ type DepGraphConstruction() =
             // checking grpah for each newly created output artefact
             let checkGraphAsync outputId expectedMethodCount expectedArtefactCount = 
                 async {
-                    let! graph = buildDependencyGraphAsync s.RootPath outputId
+                    let! graph = buildDependencyGraphAsync s.RootPath [outputId]
                     Assert.Equal(expectedMethodCount,graph.MethodsCount)
                     Assert.Equal(expectedArtefactCount,graph.ArtefactsCount)
                 }
 
             let checks = testCase.OutputIDs |> Array.map (fun x -> checkGraphAsync (ArtefactId.ID x) testCase.ExpectedMethodsInGraph testCase.ExpectedArtefactsInGraph)
             checks |> Array.iter Async.RunSynchronously
-        } |> Async.RunSynchronously // to prevent race condition on disk file we run async though RunSynchronously rather than toAsyncFact
+        } |> toAsyncFact
 
     [<Theory>]
     [<ClassData(typedefof<GraphBuildDataSource>)>]
     /// Checks that newly built artefact vertices have expected inputs
     member s.``build: new artefact deps check``(testCase) =
         async {
-            // preparing and eunning build command
+            // preparing and running build command
             let inputIDs = testCase.inputsIndices |> Array.map (fun idx -> s.FullArtIds.[idx]) |> List.ofArray
             let inputPaths = inputIDs |> List.map (fun x -> Path.Combine(s.Path,x.ToString()))
             let outputPaths = testCase.OutputIDs |> Array.map (fun x -> Path.Combine(s.Path,x)) |> List.ofArray
@@ -119,7 +126,7 @@ type DepGraphConstruction() =
             // checking graph for each newly created output artefact
             let checkGraphAsync outputId = 
                 async {
-                    let! graph = buildDependencyGraphAsync s.RootPath outputId
+                    let! graph = buildDependencyGraphAsync s.RootPath [outputId]
                     let output = graph.GetOrAllocateArtefact outputId
                     let expectedDependecies = inputIDs |> Set.ofList
                     let actualDependecies =
@@ -131,10 +138,10 @@ type DepGraphConstruction() =
 
             let checks = testCase.OutputIDs |> Array.map (fun x -> checkGraphAsync (ArtefactId.ID x))
             checks |> Array.iter Async.RunSynchronously
-        } |> Async.RunSynchronously // to prevent race condition on disk file we run async though RunSynchronously rather than toAsyncFact
+        } |> toAsyncFact
 
-type DepGraphLocalComputation() =
-    inherit SampleExperiment.SampleExperiment()
+type DepGraphLocalComputation(output) =
+    inherit SampleExperiment.SampleExperiment(output)
 
     
     [<Fact>]
@@ -179,8 +186,8 @@ type DepGraphLocalComputation() =
 
 
 
-type DepGraphSaveRestore() =
-    inherit SampleExperiment.SampleExperiment()
+type DepGraphSaveRestore(output) =
+    inherit SampleExperiment.SampleExperiment(output)
 
     [<Fact>]
     member s.``API Save-Resore: file artefact saves & restores``() =

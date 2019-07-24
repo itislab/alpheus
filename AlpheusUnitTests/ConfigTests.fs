@@ -7,8 +7,8 @@ open System.Threading.Tasks
 open ItisLab.Alpheus.Tests.Utils
 open ItisLab.Alpheus.Config
 
-type ConfigSerialization()=
-    inherit SingleUseOneTimeDirectory()
+type ConfigSerialization(output)=
+    inherit SingleUseOneTimeDirectory(output)
 
     [<Fact>]
     member s.``Round serialization``() =

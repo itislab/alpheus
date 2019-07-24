@@ -93,7 +93,7 @@ let rec hashDirectoryAsync (fullPath:string) =
 
 let hashPathAsync fullPath =
     async {
-            printfn "%s" (sprintf "Hashing %s ..." fullPath)
+            Logger.logVerbose Logger.ExperimentFolder (sprintf "Hashing %s ..." fullPath)
             if File.Exists fullPath then
                 let! hash = hashFileAsync fullPath
                 return Some(hashToString hash)
@@ -118,7 +118,9 @@ let fastHashPathAsync (fullPath:string) =
             match hashStr with
             |   None -> return None
             |   Some(hashStr) ->
-                do! File.WriteAllTextAsync(hashFilePath, hashStr) |> Async.AwaitTask      
+                Logger.logVerbose Logger.ExperimentFolder (sprintf "writing %s " hashFilePath)
+                do! File.WriteAllTextAsync(hashFilePath, hashStr) |> Async.AwaitTask
+                Logger.logVerbose Logger.ExperimentFolder (sprintf "%s written successfully" hashFilePath)
                 // File.SetAttributes(hashFilePath, FileAttributes.Hidden)
                 return Some(hashStr)
         }
@@ -135,6 +137,7 @@ let fastHashPathAsync (fullPath:string) =
             | :? ArgumentException -> curDirtime // empty dir
     async {        
         if File.Exists hashFilePath then
+            Logger.logVerbose Logger.ExperimentFolder (sprintf "%s hash file exists" hashFilePath)
             let precomHashTime = File.GetLastWriteTimeUtc hashFilePath
             let dataTime =
                 if File.Exists fullPath then
@@ -145,7 +148,9 @@ let fastHashPathAsync (fullPath:string) =
                     None
             match dataTime with
             |   None -> //data not exists
+                Logger.logVerbose Logger.ExperimentFolder (sprintf "deleteing %s hash file as the artefact is absent" hashFilePath)
                 File.Delete hashFilePath
+                Logger.logVerbose Logger.ExperimentFolder (sprintf "sucessfuly deleted %s hash file" hashFilePath)
                 return None
             |   Some(dataWriteTime) ->                               
                     if precomHashTime > dataWriteTime then // considered up to date
