@@ -8,19 +8,6 @@ open Xunit.Abstractions
 // Ensure we match the return type xUnit.net is looking for
 let toAsyncFact computation : Task = Async.StartAsTask computation :> _
 
-/// represents the TextWriter that prints into supplied XUnit ITestOutputHelper
-type OutputTextWriter(output:ITestOutputHelper) =
-    inherit System.IO.TextWriter()
-
-    override s.WriteLine(m)=
-        output.WriteLine(m)
-
-    override s.WriteLine(format,args) = 
-        output.WriteLine(format,args)
-
-    override s.Encoding
-        with get() = System.Text.Encoding.UTF8
-
 /// Class that can be a parent to all tests classes that require single-use one-time unique named directory creation before test
 /// and deletion after the test
 /// use .Path property to get the pass to the directory
@@ -34,10 +21,18 @@ type SingleUseOneTimeDirectory(output:ITestOutputHelper) =
     
     //let outputTextWriter = new OutputTextWriter(output)
 
+    let logToXunitOutput cat message =
+        try
+            output.WriteLine(sprintf "%A: %s" cat message)
+        with
+        // this is workaround as XUnit sometimes throws InvalidArgument "There is no currently active test"
+        // this is connected with async execution of the tests
+        // related issues are closed but the issues persists here: https://github.com/xunit/xunit/issues/1540
+        |   :? InvalidOperationException -> ()
     
     do
-        // Console.SetOut(outputTextWriter) // redirect standard output (e.g. printfn) of the alpheus to the XUnit output capturer
-        ItisLab.Alpheus.Logger.LogFunction <- fun cat message -> output.WriteLine(sprintf "%A: %s" cat message)
+        // redirect logging module of the alpheus to the XUnit output capturer
+        ItisLab.Alpheus.Logger.LogFunction <- logToXunitOutput
 
         if not(System.IO.Directory.Exists(dir1)) then
             System.IO.Directory.CreateDirectory(dir1) |> ignore  
@@ -53,9 +48,8 @@ type SingleUseOneTimeDirectory(output:ITestOutputHelper) =
 
     interface IDisposable with
         member s.Dispose() =
-            //outputTextWriter.Dispose()
             System.IO.Directory.Delete(path,true)
-            output.WriteLine(sprintf "Successfuly deleted unique test dir %s" path)
+            output.WriteLine(sprintf "Successfully deleted unique test dir %s" path)
 
 /// whether the tests are currently executed on Windows
 let isTestRuntimeWindows = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(Runtime.InteropServices.OSPlatform.Windows)

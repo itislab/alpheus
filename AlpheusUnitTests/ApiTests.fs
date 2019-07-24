@@ -58,7 +58,7 @@ type DepGraphConstruction(output) =
 
     [<Theory>]
     [<ClassData(typedefof<ArtefactIdSource>)>]
-    member s.``dependencyGraph loads``(artefactId:ArtefactId) =
+    member s.``dependencyGraph loads for separate artefacts``(artefactId:ArtefactId) =
         async {
             Logger.logInfo Logger.Test (sprintf "testing %A" artefactId)
             let! graph = buildDependencyGraphAsync s.RootPath [artefactId]
