@@ -7,21 +7,6 @@ open ItisLab.Alpheus.AlphFiles
 open ItisLab.Alpheus
 open System.IO
 
-let traceVerbose str =
-       //ts.TraceEvent(TraceEventType.Verbose,0,str)
-       printfn "%s" str
-
-let traceInfo str =
-       printfn "%s" str
-
-//dealing with tracing
-//let ts = TraceSource("CLI")
-   
-
-//let sourceSwitch = new SourceSwitch("SourceSwitch", "Verbose")
-//ts.Switch <- sourceSwitch
-//ts.Listeners.Add(Diagnostics.DefaultTraceListener()) |> ignore
-
 
 let buildDependencyGraphAsync experimentRoot artefactFullIdList =
     async {
@@ -29,18 +14,19 @@ let buildDependencyGraphAsync experimentRoot artefactFullIdList =
 
         let g = DependencyGraph.Graph()
         let vertexList = List.map g.GetOrAllocateArtefact artefactFullIdList
+        Logger.logVerbose Logger.API "Building the dependency graph"
         let! _ = g.LoadDependenciesAsync vertexList experimentRoot
-        traceVerbose(sprintf "Dependency graph is built (%d artefacts; %d methods)" g.ArtefactsCount g.MethodsCount)
+        Logger.logInfo Logger.API (sprintf "Dependency graph is built (%d artefacts; %d methods)" g.ArtefactsCount g.MethodsCount)
         // Filling in actual hashes
         do! fillinActualHashesAsync g.Artefacts experimentRoot
-        traceVerbose("Actual hashes are loaded")
+        Logger.logVerbose Logger.API "Actual hashes are loaded"
 
         let storages = config.ConfigFile.Storage
         let storagePresenceChecker = StorageFactory.getPresenseChecker experimentRoot (Map.toSeq storages)
 
         // Filling in with information about which storages hold the versions of the artefacts
         let! _ = Async.Parallel [|fillinArtefactContainingStoragesAsync g.Artefacts storagePresenceChecker; fillinMethodEdgeContainingStoragesAsync g.Methods storagePresenceChecker|]
-        traceVerbose("Artefact presence in storages checked")
+        Logger.logVerbose Logger.API "Artefact presence in storages checked"
         return g
         }
 
@@ -134,7 +120,7 @@ let compute (artefactPath:string) =
                 
                 //flow graph to calculate statuses
                 let flowGraph = ComputationGraph.buildGraph experimentRoot g
-                traceVerbose("Running computations")
+                Logger.logVerbose Logger.API "Running computations"
                 return ComputationGraph.doComputations flowGraph
             }
             Async.RunSynchronously statusAsync 
@@ -199,7 +185,7 @@ let restoreAsync (artefactPath:string) =
                         return Error(sprintf "%A:%s is not found in any registered storages" fullID (versionToRestore.Substring(0,6)))
                     else
                         let restoreSource = List.head restoreSources
-                        traceVerbose (sprintf "Restoring %A:%s from %s storage" fullID (versionToRestore.Substring(0,6)) restoreSource)
+                        Logger.logVerbose Logger.API (sprintf "Restoring %A:%s from %s storage" fullID (versionToRestore.Substring(0,6)) restoreSource)
                         let restore = StorageFactory.getStorageRestore experimentRoot (Map.find restoreSource config.ConfigFile.Storage)
                         do! restore fullID versionToRestore
                         return Ok()
@@ -281,9 +267,9 @@ let buildAsync experimentRoot deps outputs command doNotCleanOutputs =
     let getId = ArtefactId.Create experimentRoot
     let fullInputIDs = List.map getId deps
     let fullOutputIDs = List.map getId outputs
-    traceVerbose(sprintf "Dependencies: %A" fullInputIDs)
-    traceVerbose(sprintf "Outputs: %A" fullOutputIDs)
-    traceVerbose(sprintf "Command: \"%s\"" command)
+    Logger.logVerbose Logger.API (sprintf "Dependencies: %A" fullInputIDs)
+    Logger.logVerbose Logger.API (sprintf "Outputs: %A" fullOutputIDs)
+    Logger.logVerbose Logger.API (sprintf "Command: \"%s\"" command)
 
     command |> MethodCommand.validate (fullInputIDs.Length, fullOutputIDs.Length)
 
@@ -305,10 +291,10 @@ let buildAsync experimentRoot deps outputs command doNotCleanOutputs =
 
         methodVertex.DoNotCleanOutputs <- doNotCleanOutputs
         if doNotCleanOutputs then
-            printfn "Clearing of outputs by alpheus is disabled for this computation"
+            Logger.logInfo Logger.API "Clearing of outputs by alpheus is disabled for this computation"
 
-        traceVerbose(sprintf "Dependency graph is built (%d artefacts; %d methods)" g.ArtefactsCount g.MethodsCount)
-        traceVerbose(sprintf "Graph artefacts: %A" g.Artefacts)
+        Logger.logVerbose Logger.API (sprintf "Dependency graph is built (%d artefacts; %d methods)" g.ArtefactsCount g.MethodsCount)
+        Logger.logVerbose Logger.API (sprintf "Graph artefacts: %A" g.Artefacts)
         // dumping outputs as .alph files
         // all outputs share the same compute section                    
         let updateAlphFileAsync alphFilePath artefact =

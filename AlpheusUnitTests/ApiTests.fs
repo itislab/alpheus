@@ -60,7 +60,7 @@ type DepGraphConstruction(output) =
     [<ClassData(typedefof<ArtefactIdSource>)>]
     member s.``dependencyGraph loads``(artefactId:ArtefactId) =
         async {
-            traceInfo (sprintf "testing %A" artefactId)
+            Logger.logInfo Logger.Test (sprintf "testing %A" artefactId)
             let! graph = buildDependencyGraphAsync s.RootPath [artefactId]
             Assert.True(graph.ArtefactsCount>0,"Graph must be non-empty")
             } |> toAsyncFact
@@ -68,7 +68,7 @@ type DepGraphConstruction(output) =
     [<Fact>]
     member s.``dependencyGraph loads for all at once``() =
         async {
-            traceInfo (sprintf "testing %A" s.FullArtIds)
+            Logger.logInfo Logger.Test (sprintf "testing %A" s.FullArtIds)
             let! graph = buildDependencyGraphAsync s.RootPath (List.ofArray s.FullArtIds)
             Assert.True(graph.ArtefactsCount>0,"Graph must be non-empty")
             } |> toAsyncFact
@@ -122,6 +122,7 @@ type DepGraphConstruction(output) =
             let outputPaths = testCase.OutputIDs |> Array.map (fun x -> Path.Combine(s.Path,x)) |> List.ofArray
             let! buildResult = buildAsync s.RootPath inputPaths outputPaths "../copy_prog $in1 $out1" false
             assertResultOk buildResult
+            Logger.logInfo Logger.Test "Graph is build via API call successfuly"
 
             // checking graph for each newly created output artefact
             let checkGraphAsync outputId = 
