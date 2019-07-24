@@ -1,9 +1,10 @@
 ﻿module ItisLab.Alpheus.Tests.DependencyGraphDisk
 
 open System.IO
-open ItisLab.Alpheus.AlphFiles
 open Xunit
 open ItisLab.Alpheus
+open ItisLab.Alpheus.AlphFiles
+open ItisLab.Alpheus.PathUtils
 open Utils
 
 type SampleExperiment() =
@@ -19,16 +20,15 @@ type SampleExperiment() =
             @"dir3/dir5/test5.txt"
         |]
 
-    let fullArtIds = Array.map ItisLab.Alpheus.AlphFiles.ArtefactId.ID artIdsStr
+    let fullArtIds = Array.map ArtefactId.Path artIdsStr
 
     let rootPath = Path.GetFullPath(``base``.Path)
 
     do
-
         ItisLab.Alpheus.Config.createExperimentDirectoryAsync rootPath |> Async.RunSynchronously |> ignore
 
-        let fullPaths = Array.map (fun x -> fullIDtoFullPath rootPath x) fullArtIds
-        let fullAlphFilePaths = Array.map (fun x -> artefactPathToAlphFilePath x) fullPaths
+        let fullPaths = Array.map (idToFullPath rootPath) fullArtIds
+        let fullAlphFilePaths = Array.map (idToAlphFileFullPath rootPath) fullArtIds
 
         // creating dirs
         Directory.CreateDirectory(Path.Combine(``base``.Path,"dir1")) |> ignore

@@ -9,6 +9,12 @@ type IDependencyGraph<'Artefact, 'Method when 'Artefact: equality and 'Method: c
     abstract member OutputsOf: 'Method -> seq<'Artefact>
     abstract member ProducedBy: 'Artefact -> 'Method
     abstract member UsedIn: 'Artefact -> seq<'Method>
+    /// Rank of an artefact:
+    ///  - Number of asterisks in the path
+    ///  - 
+    /// E.g. birds/*.csv --> data/*/metadata.csv
+    ///      reduce: data/ --> statistics.csv
+    abstract member RankOf: 'Artefact -> int
 
 
 /// Creates new or returns an existing flow graph node corresponding to the given dependency graph vertex.
@@ -38,6 +44,11 @@ let translate<'Node,'Artefact,'Method when 'Node:>IVertex and 'Node:comparison a
             // There is an intermediate producer method, we're checking whether we have already added it or not                                    
             // Determining the producer port number that outputs the current artefact                
             let consumerInputPort = consumer |> dependencyGraph.InputsOf |> Seq.findIndex (fun input -> input = artefact) 
+
+            // We have pair (producer) ---> (consumer)
+            // We have actual ranks of artefacts from the dependency graph.
+            // We know the producer node rank. Hence we might need to add scatter nodes to equal ranks. 
+
             let consumerNode, graph, methodNodeMap = consumer |> addOrGetNode graph methodNodeMap nodeFactory
             let graph = graph |> FlowGraph.connect (producerNode,outputPortIndex) (consumerNode,consumerInputPort) 
             (graph, methodNodeMap)

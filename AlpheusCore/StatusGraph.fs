@@ -7,9 +7,10 @@ open Angara.States
 open AlphFiles
 open System
 open ItisLab.Alpheus
+open ItisLab.Alpheus.PathUtils
 
 type ArtefactStatus = {
-    FullID: ArtefactId
+    Id: ArtefactId
     IsOnDisk: bool
     IsUpToDate: bool
     IsTracked: bool
@@ -34,7 +35,7 @@ type SourceGraphNode(orphanArtefact:DependencyGraph.VersionedArtefact) =
 
         // source method is always up to date, thus succeeds                        
         let result = {
-            FullID= orphanArtefact.Artefact.Id;
+            Id = orphanArtefact.Artefact.Id;
             IsUpToDate = (not isOnDisk) || (orphanArtefact.Artefact.ActualHash.Value = orphanArtefact.Version.Value);
             IsOnDisk = isOnDisk;
             IsTracked = orphanArtefact.Artefact.IsTracked
@@ -63,7 +64,7 @@ type NotSourceGraphNode(methodVertex:DependencyGraph.CommandLineVertex) =
         let outputToStatus idx isUpToDate = 
             let output = outputs.[idx]
             {
-                FullID = output.Artefact.Id
+                Id = output.Artefact.Id
                 IsUpToDate = isUpToDate
                 IsOnDisk =
                     match output.Artefact.ActualHash with
@@ -80,7 +81,7 @@ type NotSourceGraphNode(methodVertex:DependencyGraph.CommandLineVertex) =
             match expected,actual with
             |   _,None -> false // if actual file is missing. That's OK. There is no version mismatch
             |   Some(expected),Some(actual) -> expected <> actual
-            |   _,None -> raise(NotImplementedException("need to define behavior"))
+            |   _ -> raise(NotImplementedException("need to define behavior"))
 
         // checking a)
         if List.exists (fun i -> not i.IsUpToDate) inputs then
@@ -119,7 +120,7 @@ let printStatuses (g:FlowGraph<StatusGraphNode>) =
         
         let getVertexOutdatedOutputs (vertex:StatusGraphNode) =
             let N = vertex.OutputCount
-            Seq.init N (fun idx -> Control.outputScalar(vertex,idx) finalState ) |> Seq.choose (fun (s:ArtefactStatus) -> if s.IsUpToDate then None else Some(s.FullID))
+            Seq.init N (fun idx -> Control.outputScalar(vertex,idx) finalState ) |> Seq.choose (fun (s:ArtefactStatus) -> if s.IsUpToDate then None else Some(s.Id))
         
         let getVertexOutputStatusStrings (vertex:StatusGraphNode) =
             let N = vertex.OutputCount
@@ -143,7 +144,7 @@ let printStatuses (g:FlowGraph<StatusGraphNode>) =
                         else
                             expectedVerStorages
                     else String.Empty                    
-                s.FullID, (sprintf "%s\t%s\t%s" diskStatus uptToDateStatus storagesStatus)
+                s.Id, (sprintf "%s\t%s\t%s" diskStatus uptToDateStatus storagesStatus)
             Seq.init N (fun idx -> Control.outputScalar(vertex,idx) finalState ) |> Seq.map statusToStr
 
         let outdatedArtefacts = finalState.Graph.Structure.Vertices |> Set.toSeq |> Seq.collect getVertexOutdatedOutputs

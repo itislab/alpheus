@@ -144,3 +144,8 @@ let tryLocateExperimentRoot path =
                 locateList tail
     locateList l2
 
+let locateExperimentRoot path =
+    match tryLocateExperimentRoot path with
+    | Some root -> root
+    | None -> failwithf "The given path is not under an Alpheus experiment folder: %s" path
+

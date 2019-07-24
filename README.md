@@ -136,7 +136,30 @@ Just delete corresponding `*.alph` files. Note that you can break the dependenci
 
 ### Getting status of an experiment
 
+### Implicit dependencies 
+
+Let there are following methods:
+  - Method M produces folder `data/`.
+  - Method N depends on `data/birds.csv`.
+
+N shouldn't be run unless M completes, since potentially M can change `data/birds.csv`. So the rule is:
+
+If a method dependency path is under or equal an output path of another method, then the first method runs after the second method ends.
+
 ### Vector operations
+
+If you need to perform an identical operation with multiple artefacts, you should provide both input and output paths with an asterisk (*) when declaring a method:
+
+```
+alpheus build -o "counts/*.txt" -d "scripts/count.py" -d "files/*.txt" "python $in1 $in2 $out1"
+```
+
+In the given example, the script `count.py` will be executed for each text file in the `files` folder, and 
+there will be text files with same name containing counts in the `count` folder.
+
+Maximum number of asterisks in the inputs and number of asterisks in the outputs must be same.
+Number of asterisks define dimensionality of the vector operations.
+
 
 ### Using external storage for artefacts
 

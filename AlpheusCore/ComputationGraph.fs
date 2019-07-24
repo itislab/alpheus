@@ -8,6 +8,7 @@ open Angara.Graph
 open Angara.Execution
 open Angara.States
 open ItisLab.Alpheus.DependencyGraph
+open ItisLab.Alpheus.PathUtils
 
 /// extracts the number of input artefacts used in producer vertex
 let private getDepCount producerVertex =
@@ -43,7 +44,7 @@ type ComputationGraphNode(producerVertex:MethodVertex, experimentRoot:string) =
                 // source vertex can always produce output
                 let expectedVersion = sourceVertex.Artefact.Version
                 match sourceVertex.Artefact.Artefact.ActualHash with
-                |   None ->
+                | None ->
                     // The artefact does not exist on disk
                     // This may be OK in case the specified version is contained available in storages
                     if sourceVertex.Artefact.StoragesContainingVersion.IsEmpty then
@@ -53,30 +54,23 @@ type ComputationGraphNode(producerVertex:MethodVertex, experimentRoot:string) =
                         // 1) not tracked artefacts does not initially have alph file and do not need them
                         // 2) tracked artefact already have alph files on disk
                         ()
-                |   Some(diskVersion) ->
-                        // if alph file exists on disk (e.g. isTracked), we need to resave it to update the expected version
-                        if sourceVertex.Artefact.Artefact.IsTracked then
-                            let dumpComp = 
-                                async {
-                                    let artefactFullPath = fullIDtoFullPath experimentRoot sourceVertex.Artefact.Artefact.Id
-                                    let artefactType =
-                                        if isFullIDDirectory sourceVertex.Artefact.Artefact.Id then DirectoryArtefact else FileArtefact
-                                    let alphFileFullPath = artefactPathToAlphFilePath artefactFullPath
-                                    // but if the .alph file is present, we need to update it's version during the execution
-                                    let snapshotSection = 
-                                        {
-                                            Type = artefactType
-                                            Version = diskVersion
-                                        }
-                                    let alphFile = artefactToAlphFile sourceVertex.Artefact.Artefact artefactFullPath experimentRoot
-                                    let alphFile =
-                                        {
-                                            alphFile with
-                                                Origin = Snapshot snapshotSection
-                                        }
-                                    do! AlphFiles.saveAsync alphFile alphFileFullPath
-                                }                    
-                            Async.RunSynchronously dumpComp
+                | Some diskVersion when sourceVertex.Artefact.Artefact.IsTracked ->
+                    // if alph file exists on disk (e.g. isTracked), we need to resave it to update the expected version
+                    async {
+                        let artefactFullPath = idToFullPath experimentRoot sourceVertex.Artefact.Artefact.Id
+                        let alphFileFullPath = idToAlphFileFullPath experimentRoot sourceVertex.Artefact.Artefact.Id
+                        // but if the .alph file is present, we need to update it's version during the execution
+                        let snapshotSection : AlphFiles.VersionedArtefact = 
+                            {
+                                RelativePath = relativePath alphFileFullPath artefactFullPath
+                                Hash = diskVersion
+                            }
+                        let alphFile = artefactToAlphFile sourceVertex.Artefact.Artefact artefactFullPath experimentRoot
+                        let alphFile = { alphFile with Origin = SourceOrigin snapshotSection }
+                        do! AlphFiles.saveAsync alphFile alphFileFullPath
+                    } |> Async.RunSynchronously  
+                | Some _ -> // not tracked
+                    ()
                 [sourceVertex.Artefact.Version]
             |   Command(comp) ->
                 // if Angara.Flow calls execute, it means that the inputs are ready to be used in computation
@@ -123,13 +117,13 @@ type ComputationGraphNode(producerVertex:MethodVertex, experimentRoot:string) =
                             else
                                 if File.Exists path then
                                     File.Delete path
-                        let fullOutputPaths = Seq.map (fun (x:DependencyGraph.VersionedArtefact) -> AlphFiles.fullIDtoFullPath experimentRoot x.Artefact.Id) comp.Outputs |> List.ofSeq
+                        let fullOutputPaths = Seq.map (fun (x:DependencyGraph.VersionedArtefact) -> idToFullPath experimentRoot x.Artefact.Id) comp.Outputs |> List.ofSeq
                         List.iter deletePath fullOutputPaths
 
                     // 2) executing a command
                     let print (s:string) = Console.WriteLine s
-                    let input idx = comp.Inputs.[idx-1].Artefact.Id.GetFullPath(experimentRoot)
-                    let output idx = comp.Outputs.[idx-1].Artefact.Id.GetFullPath(experimentRoot)
+                    let input idx = comp.Inputs.[idx-1].Artefact.Id |> idToFullPath experimentRoot
+                    let output idx = comp.Outputs.[idx-1].Artefact.Id |> idToFullPath experimentRoot
                     let context : ComputationContext = { ExperimentRoot = experimentRoot; Print = print  }
                     let exitCode = comp |> ExecuteCommand.runAndWait context (input, output) 
 
@@ -148,25 +142,21 @@ type ComputationGraphNode(producerVertex:MethodVertex, experimentRoot:string) =
                         comp.UpdateArtefacts updateVersion
             
                         // 5) dumping updated alph files to disk
-                        let diskDumpComputation = 
-                            async {                        
-                                let fullIDToFullAlphPath versionedArtefact =
-                                    let fullArtefactPath = fullIDtoFullPath experimentRoot versionedArtefact.Artefact.Id
-                                    artefactPathToAlphFilePath fullArtefactPath
-                                let outputAlphfilePaths = Seq.map fullIDToFullAlphPath outputs |> Seq.toArray
+                        async {                        
+                            let idToFullAlphPath versionedArtefact = versionedArtefact.Artefact.Id |> idToAlphFileFullPath experimentRoot
+                            let outputAlphfilePaths = Seq.map idToFullAlphPath outputs |> Seq.toArray
 
-                                let updateAlphFileAsync (alphFilePath:string) artefact =
-                                    async {
-                                        let alphFileFullPath = Path.GetFullPath(alphFilePath)
-                                        let alphFile = DependencyGraph.artefactToAlphFile artefact.Artefact alphFileFullPath experimentRoot
-                                        do! AlphFiles.saveAsync alphFile alphFilePath
-                                    }
+                            let updateAlphFileAsync (alphFilePath:string) artefact =
+                                async {
+                                    let alphFileFullPath = Path.GetFullPath(alphFilePath)
+                                    let alphFile = DependencyGraph.artefactToAlphFile artefact.Artefact alphFileFullPath experimentRoot
+                                    do! AlphFiles.saveAsync alphFile alphFilePath
+                                }
                                 
-                                let alphUpdatesComputations = Seq.map2 updateAlphFileAsync outputAlphfilePaths outputs
-                                let! _ = Async.Parallel alphUpdatesComputations
-                                return ()
-                            }
-                        Async.RunSynchronously diskDumpComputation 
+                            let alphUpdatesComputations = Seq.map2 updateAlphFileAsync outputAlphfilePaths outputs
+                            let! _ = Async.Parallel alphUpdatesComputations
+                            return ()
+                        } |> Async.RunSynchronously
                         logVerbose "Outputs metadata saved"
                 else
                     logVerbose "skipping as up to date"

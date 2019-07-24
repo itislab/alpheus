@@ -72,15 +72,15 @@ let main argv =
         elif parseResults.Contains Compute then
             let computeArgs = parseResults.GetResult <@ Compute @>
             let filePath = computeArgs.GetResult <@ ComputeArgs.File @>
-            API.compute filePath
+            API.compute (API.artefactFor filePath)
         elif parseResults.Contains Status then
             let statusArgs = parseResults.GetResult <@ Status @>
             let artefactPath = statusArgs.GetResult <@ StatusArgs.File  @>
-            API.status artefactPath
+            API.status (API.artefactFor artefactPath)
         elif parseResults.Contains Restore then
             let restoreArgs = parseResults.GetResult <@ Restore @>
             let artefactPath = restoreArgs.GetResult <@ RestoreArgs.Path @>
-            let restoreComputation = API.restoreAsync artefactPath
+            let restoreComputation = API.restoreAsync (API.artefactFor artefactPath)
             restoreComputation |> Async.RunSynchronously
 
         elif parseResults.Contains Save then
@@ -89,7 +89,7 @@ let main argv =
             let storageName = saveArgs.GetResult <@ SaveArgs.Storage @>
             
             let inputpath = saveArgs.GetResult <@ SaveArgs.Path @>
-            API.saveAsync inputpath storageName saveAll |> Async.RunSynchronously
+            API.saveAsync (API.artefactFor inputpath) storageName saveAll |> Async.RunSynchronously
         elif parseResults.Contains Build then                
             BuildCommand.run (parseResults.GetResult <@ Build @>)
         else

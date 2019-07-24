@@ -19,3 +19,6 @@ type DependencyGraphToAngaraWrapper(graph: Graph) =
         member x.ProducedBy artefact = artefact.ProducedBy
 
         member x.UsedIn artefact = artefact.UsedIn |> Set.toSeq |> Seq.map Command
+
+        member x.RankOf artefact = invalidOp "Not implemented"
+            

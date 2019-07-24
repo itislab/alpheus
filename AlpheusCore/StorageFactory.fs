@@ -3,10 +3,9 @@
 open ItisLab.Alpheus.Config
 open System.IO
 open ItisLab.Alpheus.Storage
-open System.Collections
 open System
 open System.Threading
-open ItisLab.Alpheus.AlphFiles
+open ItisLab.Alpheus.PathUtils
 open Logger
 
 let traceVerbose str =
@@ -193,11 +192,11 @@ let getStorageSaver (projectRoot:string)  storageDef =
 
 //returns fullID -> version -> Async<unit>
 let getStorageRestore (projectRoot:string)  (storageDef:Config.Storage) =    
-    let restore (fullID:ArtefactId) (version:Hash.HashString) =
+    let restore (artefactId:ArtefactId) (version:Hash.HashString) =
         async {                
-                let absPath = fullIDtoFullPath projectRoot fullID
+                let absPath = idToFullPath projectRoot artefactId
                 let storage = createStorage projectRoot storageDef                         
-                traceVerbose (sprintf "restoring  %A:%s" fullID (version.Substring(0,8).ToLower()))
+                traceVerbose (sprintf "restoring  %A:%s" artefactId (version.Substring(0,8).ToLower()))
                 let! checkResult = storage.IsInStorageAsync version                            
                 match checkResult with
                 |   SingleFile ->
@@ -223,7 +222,7 @@ let getStorageRestore (projectRoot:string)  (storageDef:Config.Storage) =
                     extractionComps |> Array.iter (fun x -> bucketProcessor.Post (Enqueue x))                    
                     do! waitComplete
                 |   Absent -> raise(InvalidDataException("Artefact is absent in storage"))        
-                logVerbose LogCategory.Storage (sprintf "restored  %A:%s" fullID (version.Substring(0,8).ToLower()))
+                logVerbose LogCategory.Storage (sprintf "restored  %A:%s" artefactId (version.Substring(0,8).ToLower()))
                 return ()            
         }
     restore
