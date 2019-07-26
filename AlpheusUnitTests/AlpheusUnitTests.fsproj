@@ -34,8 +34,9 @@
     <Content Include="data\texturalData2.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Compile Include="MethodCommandSyntaxTests.fs" />
     <Compile Include="TestUtils.fs" />
+    <Compile Include="GitIgnoreManagerTests.fs" />
+    <Compile Include="MethodCommandSyntaxTests.fs" />
     <Compile Include="HashingTests.fs" />
     <Compile Include="ConversionHelpersTests.fs" />
     <Compile Include="AlphFilesTests.fs" />

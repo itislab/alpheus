@@ -21,10 +21,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Logger.fs" />
-    <Compile Include="DebuggingHelpers.fs" />
-    <None Include="alpheus.cmd">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
     <None Include="app.config" />
     <Compile Include="Hash.fs" />
     <Compile Include="AlphFiles.fs" />

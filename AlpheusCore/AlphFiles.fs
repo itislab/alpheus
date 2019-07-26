@@ -18,11 +18,15 @@ type ArtefactId =
     static member Create (experimentRoot: string) (artefactPath: string) =
         let relativePath = Path.GetRelativePath(experimentRoot, artefactPath)
         if (Path.IsPathRooted artefactPath) && relativePath = artefactPath then raise (ArgumentException("The given artefact path is not under the experiment root"))
+        let relativePath =
+            if Path.DirectorySeparatorChar = '/' then relativePath
+            else
+                relativePath.Replace(Path.DirectorySeparatorChar, '/')
         ArtefactId.ID relativePath
 
 let isFullIDDirectory (fullID:ArtefactId) =
     match fullID with
-    |   ArtefactId.ID s -> s.EndsWith(Path.DirectorySeparatorChar) || s.EndsWith(Path.AltDirectorySeparatorChar)
+    |   ArtefactId.ID s -> s.EndsWith(Path.DirectorySeparatorChar)
 
 /// Path relative to some .alph file (directory delimiter is always / even on windows)
 /// Trailing slash indicates that the artifact is folder
