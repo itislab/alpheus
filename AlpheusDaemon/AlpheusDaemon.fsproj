@@ -44,6 +44,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AlpheusCore\AlpheusCore.fsproj" />
+    <ProjectReference Include="Client\Client.fsproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
   </ItemGroup>
 
   <Target Name="BuildClient" BeforeTargets="Build"> <!-- Inputs="yarn.lock;package.json" Outputs="node_modules/.yarn-integrity"  -->

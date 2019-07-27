@@ -20,7 +20,7 @@ let buildDependencyGraphAsync experimentRoot artefactList =
         logVerbose LogCategory.API (sprintf "Dependency graph is built (%d artefacts; %d methods)" g.ArtefactsCount g.MethodsCount)
         // Filling in actual hashes
         do! fillinActualHashesAsync g.Artefacts experimentRoot
-        Logger.logVerbose Logger.API "Actual hashes are loaded"
+        Logger.logInfo Logger.API "Actual hashes are loaded"
 
         let storages = config.ConfigFile.Storage
         let storagePresenceChecker = StorageFactory.getPresenseChecker experimentRoot (Map.toSeq storages)
@@ -98,7 +98,7 @@ let configRemoveStorageAsync expereimentRoot storageToRemove =
         do! Config.saveConfigAsync config
     }
 
-/// Returns experiement root and artefact id for the given arbitrary path.
+/// Returns the experiment root and artefact id for the given arbitrary path.
 let artefactFor path : Result<string*ArtefactId, string> = 
     result {
         let! experimentRoot = (Config.tryLocateExperimentRoot path, sprintf "The given path is not under an Alpheus experiment folder: %s" path)
@@ -146,7 +146,7 @@ let restoreAsync (experimentRoot, artefactId : ArtefactId) =
                 return Error (sprintf "%A:%s is not found in any registered storages" artefactId (versionToRestore.Substring(0,6)))
             else
                 let restoreSource = List.head restoreSources
-                logVerbose LogCategory.CLI  (sprintf "Restoring %A:%s from %s storage" artefactId (versionToRestore.Substring(0,6)) restoreSource)
+                logVerbose LogCategory.API (sprintf "Restoring %A:%s from %s storage" artefactId (versionToRestore.Substring(0,6)) restoreSource)
                 let restore = StorageFactory.getStorageRestore experimentRoot (Map.find restoreSource config.ConfigFile.Storage)
                 do! restore artefactId versionToRestore
                 return Ok()
@@ -154,7 +154,7 @@ let restoreAsync (experimentRoot, artefactId : ArtefactId) =
 
 /// Saves the supplied artefact to the supplied storage.
 /// saveAll means to save all dependencies for the specified artefact
-let saveAsync (experimentRoot, artefactId) storageName saveAll : Async<Result<unit, string>> =
+let saveAsync (experimentRoot, artefactId) storageName saveAll =
     let alphFilePath = artefactId |> idToAlphFileFullPath experimentRoot
     let artefactPath = artefactId |> idToFullPath experimentRoot
     async {

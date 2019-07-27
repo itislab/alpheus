@@ -28,7 +28,7 @@ type SingleUseOneTimeDirectory(output:ITestOutputHelper) =
 
     let tempName = System.Guid.NewGuid().ToString()
     let dir1 = System.IO.Path.Combine("data","singleTimeDirs")
-    let path = System.IO.Path.Combine(dir1,tempName) + String([|System.IO.Path.DirectorySeparatorChar|])
+    let path = System.IO.Path.Combine(dir1,tempName) + string System.IO.Path.DirectorySeparatorChar
     let fullPath = System.IO.Path.GetFullPath(path)
     
     //let outputTextWriter = new OutputTextWriter(output)
