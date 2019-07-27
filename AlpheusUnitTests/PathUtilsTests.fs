@@ -64,7 +64,7 @@ type PathUtilsTests()=
             relativePath basePath targetPath |> ignore 
             failwith "Expected exception, but not thrown"
         with 
-            | :? ArgumentException as ae -> () // ok
+            | :? ArgumentException as ae -> () // ok (we can't use Assert.Throws since it requires the exact exception type, not parent)
             | _ -> failwith "Unexpected exception type"
       
     [<Theory>]
@@ -171,3 +171,52 @@ type PathUtilsTests()=
     member s.``pathToAlphFile returns the path of the corresponding alph file``(targetPlatform: TargetPlatform, artefactPath: string, actualPath: string) =
         if targetPlatform = s.Platform then 
             Assert.Equal(actualPath, pathToAlphFile artefactPath)
+
+    [<Theory>]
+    [<InlineData(TargetPlatform.Windows, @"source\test\", @"source\test.alph")>]
+    [<InlineData(TargetPlatform.Windows, @"test", @"test.alph")>]
+    [<InlineData(TargetPlatform.Windows, @"test.csv", @"test.csv.alph")>]
+    [<InlineData(TargetPlatform.Windows, @"source\test.csv", @"source\test.csv.alph")>]
+    [<InlineData(TargetPlatform.Windows, @"source\*.csv", @"source\vector.csv.alph")>]
+    [<InlineData(TargetPlatform.Windows, @"source\*\", @"source\vector.alph")>]
+    [<InlineData(TargetPlatform.Windows, @"source\*\*\data\*.csv", @"source\vector-vector-data-vector.csv.alph")>]
+    [<InlineData(TargetPlatform.Windows, @"*\", @"vector.alph")>]
+    [<InlineData(TargetPlatform.Linux, @"source/test/", @"source/test.alph")>]
+    [<InlineData(TargetPlatform.Linux, @"source/test.csv", @"source/test.csv.alph")>]
+    [<InlineData(TargetPlatform.Linux, @"source/*.csv", @"source/vector.csv.alph")>]
+    [<InlineData(TargetPlatform.Linux, @"source/*/", @"source/vector.alph")>]
+    [<InlineData(TargetPlatform.Linux, @"source/*/*/data/*.csv", @"source/vector-vector-data-vector.csv.alph")>]
+    [<InlineData(TargetPlatform.Linux, @"*/", @"vector.alph")>]
+    member s.``idToAlphFilePath returns the path to the corresponding alph file``(targetPlatform: TargetPlatform, artefactPath: ExperimentRelativePath, expectedAlphFilePath: ExperimentRelativePath) =
+        if targetPlatform = s.Platform then 
+            let id = ArtefactId.Path artefactPath
+            Assert.Equal(expectedAlphFilePath, idToAlphFilePath id)
+
+    [<Theory>]
+    [<InlineData(@".\experiment\")>]
+    [<InlineData(@"./experiment/")>]
+    [<InlineData("experiment")>]
+    member s.``idToAlphFileFullPath throws if the experiment path is incorrect`` (experimentPath: string) =
+        let artefactId = ArtefactId.Path "test.txt"
+        Assert.Throws<ArgumentException>(fun () -> idToAlphFileFullPath experimentPath artefactId |> ignore)
+
+    [<Theory>]
+    [<InlineData(TargetPlatform.Windows, @"C:\experiment\", @"source\test\", @"C:\experiment\source\test.alph")>]
+    [<InlineData(TargetPlatform.Windows, @"C:\experiment\", @"test", @"C:\experiment\test.alph")>]
+    [<InlineData(TargetPlatform.Windows, @"C:\experiment\", @"test.csv", @"C:\experiment\test.csv.alph")>]
+    [<InlineData(TargetPlatform.Windows, @"C:\experiment\", @"source\test.csv", @"C:\experiment\source\test.csv.alph")>]
+    [<InlineData(TargetPlatform.Windows, @"C:\experiment\", @"source\*.csv", @"C:\experiment\source\vector.csv.alph")>]
+    [<InlineData(TargetPlatform.Windows, @"C:\experiment\", @"source\*\", @"C:\experiment\source\vector.alph")>]
+    [<InlineData(TargetPlatform.Windows, @"C:\experiment\", @"source\*\*\data\*.csv", @"C:\experiment\source\vector-vector-data-vector.csv.alph")>]
+    [<InlineData(TargetPlatform.Windows, @"C:\experiment\", @"*\", @"C:\experiment\vector.alph")>]
+    [<InlineData(TargetPlatform.Linux, @"/experiment/", @"source/test/", @"/experiment/source/test.alph")>]
+    [<InlineData(TargetPlatform.Linux, @"/experiment/", @"source/test.csv", @"/experiment/source/test.csv.alph")>]
+    [<InlineData(TargetPlatform.Linux, @"/experiment/", @"source/*.csv", @"/experiment/source/vector.csv.alph")>]
+    [<InlineData(TargetPlatform.Linux, @"/experiment/", @"source/*/", @"/experiment/source/vector.alph")>]
+    [<InlineData(TargetPlatform.Linux, @"/experiment/", @"source/*/*/data/*.csv", @"/experiment/source/vector-vector-data-vector.csv.alph")>]
+    [<InlineData(TargetPlatform.Linux, @"/experiment/", @"*/", @"/experiment/vector.alph")>]
+    member s.``idToAlphFileFullPath returns the full path to the corresponding alph file``(targetPlatform: TargetPlatform, experimentRoot: string, artefactPath: ExperimentRelativePath, expectedAlphFilePath: string) =
+           if targetPlatform = s.Platform then 
+               let id = ArtefactId.Path artefactPath
+               let alpFileFullPath = idToAlphFileFullPath experimentRoot id
+               Assert.Equal(expectedAlphFilePath, alpFileFullPath)

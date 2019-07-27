@@ -82,4 +82,6 @@ let idToAlphFilePath (artefactId:ArtefactId) : ExperimentRelativePath =
 
 /// Given the artefact id, returns the full path to the corresponding alph file.
 let idToAlphFileFullPath (experimentRoot: string) (artefactId:ArtefactId) : string =
+    if not(Path.IsPathRooted experimentRoot) then invalidArg "experimentRoot" "Experiment root is not absolute"
+    if not(isDirectory experimentRoot) then invalidArg "experimentRoot" "Experiment root is not a directory (must end with the slash)"
     Path.Combine(experimentRoot, idToAlphFilePath artefactId)
