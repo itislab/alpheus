@@ -46,7 +46,7 @@ type ComputationGraphNode(producerVertex:MethodVertex, experimentRoot:string) =
                 match sourceVertex.Artefact.Artefact.ActualHash with
                 | None ->
                     // The artefact does not exist on disk
-                    // This may be OK in case the specified version is contained available in storages
+                    // This may be OK in case the specified version is available in storages
                     if sourceVertex.Artefact.StoragesContainingVersion.IsEmpty then
                         invalidOp (sprintf "The source artefact must either exist on local disk or be restorable from storage: %A" sourceVertex.Artefact.Artefact.Id)
                     else
@@ -125,7 +125,7 @@ type ComputationGraphNode(producerVertex:MethodVertex, experimentRoot:string) =
                     let input idx = comp.Inputs.[idx-1].Artefact.Id |> idToFullPath experimentRoot
                     let output idx = comp.Outputs.[idx-1].Artefact.Id |> idToFullPath experimentRoot
                     let context : ComputationContext = { ExperimentRoot = experimentRoot; Print = print  }
-                    let exitCode = comp |> ExecuteCommand.runAndWait context (input, output) 
+                    let exitCode = comp |> ExecuteCommand.runCommandLineMethodAndWait context (input, output) 
 
                     // 3) upon 0 exit code hash the outputs
                     if exitCode <> 0 then
@@ -182,9 +182,8 @@ let doComputations (g:FlowGraph<ComputationGraphNode>) =
         // engine.Changes.Subscribe(fun x -> x.State.Vertices)
         let final = Control.pickFinal engine.Changes
         let finalState = final.GetResult()
-        0
+        Ok()
     with 
     | :? Control.FlowFailedException as flowExc -> 
         let failed = String.Join("\n\t", flowExc.InnerExceptions |> Seq.map(fun e -> e.Message))
-        printfn "Failed to compute the artefacts: \n\t%s" failed
-        1
+        Error(sprintf "Failed to compute the artefacts: \n\t%s" failed)

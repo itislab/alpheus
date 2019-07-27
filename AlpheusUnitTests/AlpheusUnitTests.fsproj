@@ -8,6 +8,17 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="AssemblyInfo.fs" />
+    <None Include="data\cat.cmd">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="data\copy.c" />
+    <None Include="data\copy_prog">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="data\copy.cmd">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <Content Include="data\folder_with_files\TextFile3.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
@@ -20,8 +31,12 @@
     <Content Include="data\texturalData.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Compile Include="MethodCommandSyntaxTests.fs" />
+    <Content Include="data\texturalData2.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <Compile Include="TestUtils.fs" />
+    <Compile Include="GitIgnoreManagerTests.fs" />
+    <Compile Include="MethodCommandSyntaxTests.fs" />
     <Compile Include="HashingTests.fs" />
     <Compile Include="ConversionHelpersTests.fs" />
     <Compile Include="AlphFilesTests.fs" />
@@ -29,9 +44,11 @@
     <Compile Include="StorageTests.fs" />
     <Compile Include="ConfigTests.fs" />
     <Compile Include="ArtefactArchiverTests.fs" />
+    <Compile Include="SampleExperimentTests.fs" />
     <Compile Include="DependencyGraphTests.fs" />
     <Compile Include="DependencyGraphDiskTests.fs" />
     <Compile Include="ExecuteCommandTests.fs" />
+    <Compile Include="ApiTests.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 

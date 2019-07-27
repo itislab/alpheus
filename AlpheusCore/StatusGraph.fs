@@ -151,9 +151,8 @@ let printStatuses (g:FlowGraph<StatusGraphNode>) =
         let allArtefactStatuses = finalState.Graph.Structure.Vertices |> Set.toSeq |> Seq.collect getVertexOutputStatusStrings |> Seq.sortBy fst |> Seq.map (fun x -> let id,status = x in sprintf "%10A:\t%s" id status)
         let statuses = String.Join("\n\t", allArtefactStatuses)
         printfn "Statuses:\n\t%s" statuses
-        0
+        Ok()
     with 
     | :? Control.FlowFailedException as flowExc -> 
         let failed = String.Join("\n\t", flowExc.InnerExceptions |> Seq.map(fun e -> e.ToString()))
-        printfn "Failed to compute the artefacts: \n\t%s" failed
-        1
+        Error(sprintf "Failed to compute the artefacts: \n\t%s" failed)

@@ -7,8 +7,8 @@ open System.Threading.Tasks
 open ItisLab.Alpheus.Tests.Utils
 open ItisLab.Alpheus.ArtefactArchiver
 
-type ArchiverTests() =
-    inherit SingleUseOneTimeDirectory()
+type ArchiverTests(output) =
+    inherit SingleUseOneTimeDirectory(output)
 
     let assertTextFilesContentEqualAsync expectedFile actualFile =
         async {

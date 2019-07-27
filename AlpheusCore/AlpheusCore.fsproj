@@ -20,12 +20,9 @@
     <DebugType>Full</DebugType>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="ResultBuilder.fs" />
     <Compile Include="Logger.fs" />
     <Compile Include="AngaraTranslator.fs" />
-    <Compile Include="DebuggingHelpers.fs" />
-    <None Include="alpheus.cmd">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
     <None Include="app.config" />
     <Compile Include="Hash.fs" />
     <Compile Include="Experiment.fs" />

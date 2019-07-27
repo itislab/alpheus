@@ -9,24 +9,25 @@ open ItisLab.Alpheus.PathUtils
 open ItisLab.Alpheus
 open System.IO
 
-let buildDependencyGraphAsync experimentRoot artefact =
+let buildDependencyGraphAsync experimentRoot artefactList =
     async {
         let! config = Config.openExperimentDirectoryAsync experimentRoot
 
         let g = DependencyGraph.Graph()
-        let vertex = g.GetOrAllocateArtefact artefact
-        let! _ = g.LoadDependenciesAsync [vertex] experimentRoot
-        logVerbose LogCategory.CLI (sprintf "Dependency graph is built (%d artefacts; %d methods)" g.ArtefactsCount g.MethodsCount)
+        let vertexList = List.map g.GetOrAllocateArtefact artefactList
+        Logger.logVerbose Logger.API "Building the dependency graph"
+        let! _ = g.LoadDependenciesAsync vertexList experimentRoot
+        logVerbose LogCategory.API (sprintf "Dependency graph is built (%d artefacts; %d methods)" g.ArtefactsCount g.MethodsCount)
         // Filling in actual hashes
         do! fillinActualHashesAsync g.Artefacts experimentRoot
-        logVerbose LogCategory.CLI ("Actual hashes are loaded")
+        Logger.logVerbose Logger.API "Actual hashes are loaded"
 
         let storages = config.ConfigFile.Storage
         let storagePresenceChecker = StorageFactory.getPresenseChecker experimentRoot (Map.toSeq storages)
 
         // Filling in with information about which storages hold the versions of the artefacts
         let! _ = Async.Parallel [|fillinArtefactContainingStoragesAsync g.Artefacts storagePresenceChecker; fillinMethodEdgeContainingStoragesAsync g.Methods storagePresenceChecker|]
-        logVerbose LogCategory.CLI ("Artefact presence in storages checked")
+        Logger.logVerbose Logger.API "Artefact presence in storages checked"
         return g
     }
 
@@ -98,26 +99,28 @@ let configRemoveStorageAsync expereimentRoot storageToRemove =
     }
 
 /// Returns experiement root and artefact id for the given arbitrary path.
-let artefactFor path = 
-    let experimentRoot = Config.locateExperimentRoot path
-    let artefactId = path |> pathToId experimentRoot
-    (experimentRoot, artefactId)
+let artefactFor path : Result<string*ArtefactId, string> = 
+    result {
+        let! experimentRoot = (Config.tryLocateExperimentRoot path, sprintf "The given path is not under an Alpheus experiment folder: %s" path)
+        let artefactId = path |> pathToId experimentRoot
+        return (experimentRoot, artefactId)
+    }
 
 /// (Re)Computes the artefact specified
 let compute (experimentRoot, artefactId) =
     async {
-        let! g = buildDependencyGraphAsync experimentRoot artefactId
+        let! g = buildDependencyGraphAsync experimentRoot [artefactId]
                 
         //flow graph to calculate statuses
         let flowGraph = ComputationGraph.buildGraph experimentRoot g
-        logVerbose LogCategory.CLI ("Running computations")
+        logVerbose LogCategory.API "Running computations"
         return ComputationGraph.doComputations flowGraph
     } |> Async.RunSynchronously
 
 /// Prints to the stdout the textural statuses of the artefact and its provenance
 let status (experimentRoot, artefactId) =
     async {
-        let! g = buildDependencyGraphAsync experimentRoot artefactId
+        let! g = buildDependencyGraphAsync experimentRoot [artefactId]
         let flowGraph = StatusGraph.buildStatusGraph g
         return StatusGraph.printStatuses flowGraph
     } |> Async.RunSynchronously
@@ -129,8 +132,7 @@ let restoreAsync (experimentRoot, artefactId : ArtefactId) =
         let! loadResults = AlphFiles.tryLoadAsync alphFile                            
         match loadResults with
         | None ->
-            printfn "There is no artefact %A on disk to fetch the restore version from" artefactId
-            return 2
+            return Error (sprintf "There is no artefact %A on disk to fetch the restore version from" artefactId)
         | Some(alphFile) ->
             let versionToRestore =
                 match alphFile.Origin with
@@ -141,21 +143,21 @@ let restoreAsync (experimentRoot, artefactId : ArtefactId) =
             let! restoreSourcesResults = checker [| Some(versionToRestore) |]
             let restoreSources = restoreSourcesResults.[0]
             if List.length restoreSources = 0 then
-                printfn "%A:%s is not found in any registered storages" artefactId (versionToRestore.Substring(0,6))
-                return 2
+                return Error (sprintf "%A:%s is not found in any registered storages" artefactId (versionToRestore.Substring(0,6)))
             else
                 let restoreSource = List.head restoreSources
                 logVerbose LogCategory.CLI  (sprintf "Restoring %A:%s from %s storage" artefactId (versionToRestore.Substring(0,6)) restoreSource)
                 let restore = StorageFactory.getStorageRestore experimentRoot (Map.find restoreSource config.ConfigFile.Storage)
                 do! restore artefactId versionToRestore
-                return 0
+                return Ok()
     }
 
-/// Saves the supplied artefact to the supplied storage
-let saveAsync (experimentRoot, artefactId) storageName saveAll =
+/// Saves the supplied artefact to the supplied storage.
+/// saveAll means to save all dependencies for the specified artefact
+let saveAsync (experimentRoot, artefactId) storageName saveAll : Async<Result<unit, string>> =
+    let alphFilePath = artefactId |> idToAlphFileFullPath experimentRoot
+    let artefactPath = artefactId |> idToFullPath experimentRoot
     async {
-        let alphFilePath = artefactId |> idToAlphFileFullPath experimentRoot
-        let artefactPath = artefactId |> idToFullPath experimentRoot
         let! alphFile =
             async {
                 let! loadResults = AlphFiles.tryLoadAsync alphFilePath                                                                        
@@ -177,7 +179,7 @@ let saveAsync (experimentRoot, artefactId) storageName saveAll =
         }                                       
         do! AlphFiles.saveAsync alphFile alphFilePath
                     
-        let! g = buildDependencyGraphAsync experimentRoot artefactId                                                                            
+        let! g = buildDependencyGraphAsync experimentRoot [artefactId]                                                                            
                     
         let artefactsToSave =
             if saveAll then
@@ -192,27 +194,25 @@ let saveAsync (experimentRoot, artefactId) storageName saveAll =
         let save = StorageFactory.getStorageSaver experimentRoot storageToSaveTo
         let saveDescriptors = artefactsToSave |> Array.map (fun art -> (idToFullPath experimentRoot artefactId),art.ActualHash.Value)
         let! _ = save saveDescriptors
-        return 0
+        return Ok()
     }
 
+
 /// Adds one more method vertex to the experiment graph
+/// deps: a list of paths to the input artefacts. outputs: a list of paths to the produced artefacts
 let buildAsync experimentRoot deps outputs command doNotCleanOutputs =
     let getId = pathToId experimentRoot
     let fullInputIDs = List.map getId deps
     let fullOutputIDs = List.map getId outputs
-    logVerbose LogCategory.CLI (sprintf "Dependencies: %A" fullInputIDs)
-    logVerbose LogCategory.CLI (sprintf "Outputs: %A" fullOutputIDs)
-    logVerbose LogCategory.CLI (sprintf "Command: \"%s\"" command)
+    logVerbose LogCategory.API (sprintf "Dependencies: %A" fullInputIDs)
+    logVerbose LogCategory.API (sprintf "Outputs: %A" fullOutputIDs)
+    logVerbose LogCategory.API (sprintf "Command: \"%s\"" command)
 
     command |> MethodCommand.validate (fullInputIDs.Length, fullOutputIDs.Length)
 
     async {
-        let g = DependencyGraph.Graph()
-        let inputVertices = List.map g.GetOrAllocateArtefact fullInputIDs
-        let! graphArtefacts = g.LoadDependenciesAsync inputVertices experimentRoot
-        // Filling in actual hashes
-        do! fillinActualHashesAsync g.Artefacts experimentRoot
-        logVerbose LogCategory.CLI ("Actual hashes are loaded")                
+        let! g = buildDependencyGraphAsync experimentRoot fullInputIDs
+        let inputVertices = List.map g.GetOrAllocateArtefact fullInputIDs                     
         let inputVersionedVertices = List.map getVersionedArtefact inputVertices
         let outputVertices = List.map g.GetOrAllocateArtefact fullOutputIDs
         let outputVersionedVertices = List.map getVersionedArtefact outputVertices
@@ -228,11 +228,10 @@ let buildAsync experimentRoot deps outputs command doNotCleanOutputs =
 
         methodVertex.DoNotCleanOutputs <- doNotCleanOutputs
         if doNotCleanOutputs then
-            printfn "Clearing of outputs by alpheus is disabled for this computation"
+            Logger.logInfo Logger.API "Clearing of outputs by alpheus is disabled for this computation"
 
-        logVerbose LogCategory.CLI (sprintf "Dependency graph is built (%d artefacts; %d methods)" g.ArtefactsCount g.MethodsCount)
-        logVerbose LogCategory.CLI (sprintf "Graph artefacts: %A" g.Artefacts)
-        
+        Logger.logVerbose Logger.API (sprintf "Dependency graph is built (%d artefacts; %d methods)" g.ArtefactsCount g.MethodsCount)
+        Logger.logVerbose Logger.API (sprintf "Graph artefacts: %A" g.Artefacts)
         // dumping outputs as .alph files
         // all outputs share the same compute section                    
         let updateAlphFileAsync alphFilePath artefact =
@@ -249,5 +248,5 @@ let buildAsync experimentRoot deps outputs command doNotCleanOutputs =
         let outputAlphPaths = List.map pathToAlphFile outputs
         let! _ = List.map2 updateAlphFileAsync outputAlphPaths outputVertices |> Async.Parallel
 
-        return ()
+        return Ok()
     }

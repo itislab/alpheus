@@ -388,10 +388,12 @@ type Graph() =
 
 let fillinActualHashesAsync (artefacts:ArtefactVertex seq) (experimentRoot: string) =
     async {
-        let fullPaths = Seq.map (fun (a:ArtefactVertex) -> idToFullPath experimentRoot a.Id) artefacts
-        let asyncs = Seq.map Hash.fastHashPathAsync fullPaths |> Array.ofSeq
+        let fullPaths = Seq.map (fun (a:ArtefactVertex) -> idToFullPath experimentRoot a.Id) artefacts |> Array.ofSeq
+        let fullPathsDistinct = Seq.distinct fullPaths |> Array.ofSeq
+        let lookupTable = fullPathsDistinct |> Seq.mapi (fun i x -> x,i) |> Map.ofSeq 
+        let asyncs = Seq.map Hash.fastHashPathAsync fullPathsDistinct |> Array.ofSeq
         let! hashes = Async.Parallel asyncs
-        Seq.iter2 (fun hash (art:ArtefactVertex) -> art.ActualHash <- hash ) hashes artefacts
+        Seq.iter2 (fun fullPath (art:ArtefactVertex) -> let idx = Map.find fullPath lookupTable in let hash = hashes.[idx] in art.ActualHash <- hash ) fullPaths artefacts
     }
 
 /// Fulls up the StoragesContainingActialHash of the artefacts

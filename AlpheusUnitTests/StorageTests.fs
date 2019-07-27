@@ -188,10 +188,10 @@ type CommonTests() =
         s.DirectoryArtefactContentCheck 32 |> toAsyncFact
 
 /// Applies the tests defined in CommonTests to the local storage
-type Local() =
+type Local(output) =
     inherit CommonTests()
 
-    let singleUseDir = new SingleUseOneTimeDirectory()
+    let singleUseDir = new SingleUseOneTimeDirectory(output)
     let localStorage = StorageLocal.Storage(singleUseDir.Path)
 
     override s.Storage

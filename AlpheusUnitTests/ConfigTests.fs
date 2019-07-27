@@ -7,8 +7,8 @@ open System.Threading.Tasks
 open ItisLab.Alpheus.Tests.Utils
 open ItisLab.Alpheus.Config
 
-type ConfigSerialization()=
-    inherit SingleUseOneTimeDirectory()
+type ConfigSerialization(output)=
+    inherit SingleUseOneTimeDirectory(output)
 
     [<Fact>]
     member s.``Round serialization``() =
@@ -91,6 +91,6 @@ type ConfigSerialization()=
             let! _ = createExperimentDirectoryAsync(dir1)
 
             match tryLocateExperimentRoot dir3 with
-            |   None -> Assert.True(false,"Failed to found the experiment root")
-            |   Some(found) -> Assert.Equal(Path.GetFullPath(dir1),found)
+            |   None -> Assert.True(false,"Failed to find the experiment root")
+            |   Some(found) -> Assert.Equal(Path.GetFullPath(dir1) + string Path.DirectorySeparatorChar,found)
         }   |> toAsyncFact

@@ -7,8 +7,8 @@ open ItisLab.Alpheus
 open ItisLab.Alpheus.Tests.Utils
 open ItisLab.Alpheus.PathUtils
 
-type PathUtilsTests()=
-    inherit SingleUseOneTimeDirectory()
+type PathUtilsTests(output)=
+    inherit SingleUseOneTimeDirectory(output)
 
     [<Theory>]
     [<InlineData(@"c:\temp\")>]
@@ -209,6 +209,7 @@ type PathUtilsTests()=
     [<InlineData(TargetPlatform.Windows, @"C:\experiment\", @"source\*\", @"C:\experiment\source\vector.alph")>]
     [<InlineData(TargetPlatform.Windows, @"C:\experiment\", @"source\*\*\data\*.csv", @"C:\experiment\source\vector-vector-data-vector.csv.alph")>]
     [<InlineData(TargetPlatform.Windows, @"C:\experiment\", @"*\", @"C:\experiment\vector.alph")>]
+    [<InlineData(TargetPlatform.Windows, @"C:\experiment\", @"dir1/test2/", @"C:\experiment\dir1\test2.alph")>]
     [<InlineData(TargetPlatform.Linux, @"/experiment/", @"source/test/", @"/experiment/source/test.alph")>]
     [<InlineData(TargetPlatform.Linux, @"/experiment/", @"source/test.csv", @"/experiment/source/test.csv.alph")>]
     [<InlineData(TargetPlatform.Linux, @"/experiment/", @"source/*.csv", @"/experiment/source/vector.csv.alph")>]

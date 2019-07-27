@@ -8,8 +8,8 @@ open ItisLab.Alpheus.Tests.Utils
 open ItisLab.Alpheus.AlphFiles
 open ItisLab.Alpheus
 
-type AlphFileSerializationTests()=
-    inherit SingleUseOneTimeDirectory()
+type AlphFileSerializationTests(output)=
+    inherit SingleUseOneTimeDirectory(output)
 
     [<Fact>]
     member s.``Alph file round serialization-deserialization``() =

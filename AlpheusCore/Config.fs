@@ -124,11 +124,13 @@ let tryLocateExperimentRoot path =
     // printfn "candidate list is %A" l2
 
     let stringOfReversedPathElements l =
-        let res = l |> List.rev |> List.toArray |> Path.Combine
+        let res = l |> List.rev |> List.toArray |> Path.Combine        
         // Path.Combine ignores empty elements, thus removes leading / in case of unix.
         // Guarding against it
         if isUnixRooted then "/"+res else res
             
+    let appendDirectorySeparator path = 
+        path + string Path.DirectorySeparatorChar // indicates that the path is a directory
 
     let rec locateList candidate_l =
         match candidate_l with
@@ -139,13 +141,7 @@ let tryLocateExperimentRoot path =
             // printfn "Checking existence of %s" toCheck
 
             if Directory.Exists(toCheck) then
-                Some(candidate_l |> stringOfReversedPathElements)
+                Some(candidate_l |> stringOfReversedPathElements |> appendDirectorySeparator)
             else
                 locateList tail
     locateList l2
-
-let locateExperimentRoot path =
-    match tryLocateExperimentRoot path with
-    | Some root -> root
-    | None -> failwithf "The given path is not under an Alpheus experiment folder: %s" path
-
