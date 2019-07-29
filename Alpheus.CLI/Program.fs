@@ -16,8 +16,11 @@ let main argv =
     try 
         let cliResult = 
             let usage = parser.PrintUsage(programName = programName)
-            let parseResults = parser.ParseCommandLine(argv,false,true,true)
-            if parseResults.Contains Init then
+            let parseResults = parser.ParseCommandLine(argv,ignoreMissing=false,ignoreUnrecognized=true,raiseOnUsage=false)
+            if parseResults.IsUsageRequested then
+                printfn "%s" usage
+                Ok()
+            else if parseResults.Contains Init then
                 let cwd = Directory.GetCurrentDirectory()
                 if Config.isExperimentDirectory cwd then
                     Error("The current directory is already Alpheus experiment directory")
@@ -93,6 +96,10 @@ let main argv =
         match cliResult with
         |   Ok() -> 0
         |   Error(m) -> printfn "Error occurred: %s" m; 1
-    with e ->
-        printfn "%s" (e.ToString())
+    with
+    |   :? ArguException as e ->
+        printfn "%s" e.Message // argu exception is parse exception. So don't print stack trace. We print only parse error content.
         2
+    |   e ->
+        printfn "%s" (e.ToString()) // In all other exception types we print the exception with stack trace.
+        3

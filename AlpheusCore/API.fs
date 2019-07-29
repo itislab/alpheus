@@ -252,13 +252,21 @@ let saveAsync (artefactPath:string) storageName saveAll =
                     [| g.GetOrAllocateArtefact fullID |]
                                                 
             let! config = Config.openExperimentDirectoryAsync experimentRoot
-            let storageToSaveTo =                                
-                config.ConfigFile.Storage |> Map.toSeq |> Seq.filter (fun pair -> let k,_ = pair in k=storageName) |> Seq.map snd |> Seq.head
-                    
-            let save = StorageFactory.getStorageSaver experimentRoot storageToSaveTo
-            let saveDescriptors = artefactsToSave |> Array.map (fun art -> (fullIDtoFullPath experimentRoot art.Id),art.ActualHash.Value)
-            let! _ = save saveDescriptors
-            return Ok()
+            let storageToSaveToOption =                                
+                config.ConfigFile.Storage |> Map.toSeq |> Seq.filter (fun pair -> let k,_ = pair in k=storageName) |> Seq.map snd |> Seq.tryHead
+
+            match storageToSaveToOption with
+            |   Some storageToSaveTo ->    
+                let save = StorageFactory.getStorageSaver experimentRoot storageToSaveTo
+                let saveDescriptors = artefactsToSave |> Array.map (fun art -> (fullIDtoFullPath experimentRoot art.Id),art.ActualHash.Value)
+                let! _ = save saveDescriptors
+                return Ok()
+            |   None ->
+                // specified storage is not found
+                let storageNames = config.ConfigFile.Storage |> Map.toSeq |> Seq.map fst |> List.ofSeq
+                let errMsg =
+                    sprintf "The storage name you've specified (\"%s\") does not exist. Please use one of the available storages %A or register the new one." storageName storageNames
+                return Error errMsg
     }
 
 /// Adds one more method vertex to the experiment graph
