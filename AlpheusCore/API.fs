@@ -205,7 +205,7 @@ let saveAsync (artefactPath:string) storageName saveAll =
         |   None ->
             return Error("The file/dir you've specified is not under Alpheus experiment folder")
         |   Some(experimentRoot) ->                           
-            let! alphFile,artefactPath =
+            let! alphFile,artefactPath = // creating/updating alph file for the target artefact only
                 async {
                     let! loadResults = AlphFiles.tryLoadAsync alphFilePath                                                                        
                     let! artefactPath =
@@ -241,7 +241,7 @@ let saveAsync (artefactPath:string) storageName saveAll =
                 }                                       
             do! AlphFiles.saveAsync alphFile alphFilePath
                     
-            let fullID = ArtefactId.ID(Path.GetRelativePath(experimentRoot, artefactPath))
+            let fullID = ArtefactId.Create experimentRoot artefactPath
             
             let! g = buildDependencyGraphAsync experimentRoot [fullID]
                     
@@ -258,9 +258,22 @@ let saveAsync (artefactPath:string) storageName saveAll =
             match storageToSaveToOption with
             |   Some storageToSaveTo ->    
                 let save = StorageFactory.getStorageSaver experimentRoot storageToSaveTo
-                let saveDescriptors = artefactsToSave |> Array.map (fun art -> (fullIDtoFullPath experimentRoot art.Id),art.ActualHash.Value)
-                let! _ = save saveDescriptors
-                return Ok()
+                let nonExistentChooser (art:ArtefactVertex) =
+                    match art.ActualHash with
+                    |   Some _ -> None
+                    |   None -> Some(art.Id)
+                let nonExistentArtefacts = artefactsToSave |> Array.choose nonExistentChooser
+                if Array.length nonExistentArtefacts > 0 then
+                    return Error (sprintf "Can't save the following artefacts as they don't exist on disk: %A" nonExistentArtefacts)
+                else
+                    let saveDescriptors = artefactsToSave |> Array.map (fun art -> (fullIDtoFullPath experimentRoot art.Id),art.ActualHash.Value)
+                    let! _ = save saveDescriptors
+
+                    // adding the saved artefact into the gitignore
+                    let newIgnoreEntries = artefactsToSave |> Array.map (fun art -> art.Id.ToString())
+                    let gitIgnorePath = Path.Combine(experimentRoot,".gitignore")
+                    do! GitIgnoreManager.addEntriesAsync gitIgnorePath newIgnoreEntries
+                    return Ok()
             |   None ->
                 // specified storage is not found
                 let storageNames = config.ConfigFile.Storage |> Map.toSeq |> Seq.map fst |> List.ofSeq

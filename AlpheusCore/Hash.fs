@@ -130,11 +130,11 @@ let fastHashPathAsync (fullPath:string) =
         let subFiles = Directory.GetFiles(dirpath) |> Array.filter (fun name -> not(name.EndsWith(".hash")))
         let subDirTimes = Array.map getDirLastWriteTimeDeepUTC subDirs
         let subFilesTimes = Array.map File.GetLastWriteTimeUtc subFiles
-        try 
+        if subDirTimes.Length > 0 || subFilesTimes.Length > 0 then
             let maxSubTimes = Seq.append subFilesTimes subDirTimes |> Seq.max
             max curDirtime maxSubTimes
-        with            
-            | :? ArgumentException -> curDirtime // empty dir
+        else // empty directory
+            curDirtime
     async {        
         if File.Exists hashFilePath then
             Logger.logVerbose Logger.ExperimentFolder (sprintf "%s hash file exists" hashFilePath)
