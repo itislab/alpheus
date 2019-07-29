@@ -26,7 +26,7 @@ type ArtefactId =
 
 let isFullIDDirectory (fullID:ArtefactId) =
     match fullID with
-    |   ArtefactId.ID s -> s.EndsWith(Path.DirectorySeparatorChar)
+    |   ArtefactId.ID s -> s.EndsWith("/") // artefact IDs must always contain strait slashes even on Windows
 
 /// Path relative to some .alph file (directory delimiter is always / even on windows)
 /// Trailing slash indicates that the artifact is folder
