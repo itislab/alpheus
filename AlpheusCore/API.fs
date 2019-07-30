@@ -198,7 +198,8 @@ let saveAsync (experimentRoot, artefactId) storageName saveAll =
             let! _ = save saveDescriptors
 
             // adding the saved artefact into the gitignore
-            let newIgnoreEntries = artefactsToSave |> Array.map (fun art -> art.Id.ToString())
+            let newIgnoreEntry (art:ArtefactVertex) = art.Id |> idToExperimentPath |> unixPath
+            let newIgnoreEntries = artefactsToSave |> Array.map newIgnoreEntry
             let gitIgnorePath = Path.Combine(experimentRoot,".gitignore")
             do! GitIgnoreManager.addEntriesAsync gitIgnorePath newIgnoreEntries
 
