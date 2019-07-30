@@ -172,11 +172,11 @@ type PathUtilsTests(output)=
     [<InlineData(TargetPlatform.Windows, @"c:\experiment\source\*.csv", @"c:\experiment\source\vector.csv.alph")>]
     [<InlineData(TargetPlatform.Windows, @"c:\experiment\source\*\", @"c:\experiment\source\vector.alph")>]
     [<InlineData(TargetPlatform.Windows, @"c:\experiment\source\*\data\*\*.csv", @"c:\experiment\source\vector-data-vector-vector.csv.alph")>]
-    [<InlineData(TargetPlatform.Linux, @"/experiment/source/test.csv", @"c:/experiment/source/test.csv.alph")>]
-    [<InlineData(TargetPlatform.Linux, @"/experiment/source/test/", @"c:/experiment/source/test.alph")>]
-    [<InlineData(TargetPlatform.Linux, @"/experiment/source/*.csv", @"c:/experiment/source/vector.csv.alph")>]
-    [<InlineData(TargetPlatform.Linux, @"/experiment/source/*/", @"c:/experiment/source/vector.alph")>]
-    [<InlineData(TargetPlatform.Linux, @"/experiment/source/*/data/*/*.csv", @"c:/experiment/source/vector-data-vector-vector.csv.alph")>]
+    [<InlineData(TargetPlatform.Linux, @"/experiment/source/test.csv", @"/experiment/source/test.csv.alph")>]
+    [<InlineData(TargetPlatform.Linux, @"/experiment/source/test/", @"/experiment/source/test.alph")>]
+    [<InlineData(TargetPlatform.Linux, @"/experiment/source/*.csv", @"/experiment/source/vector.csv.alph")>]
+    [<InlineData(TargetPlatform.Linux, @"/experiment/source/*/", @"/experiment/source/vector.alph")>]
+    [<InlineData(TargetPlatform.Linux, @"/experiment/source/*/data/*/*.csv", @"/experiment/source/vector-data-vector-vector.csv.alph")>]
     member s.``pathToAlphFile returns the path of the corresponding alph file``(targetPlatform: TargetPlatform, artefactPath: string, actualPath: string) =
         if targetPlatform = s.Platform then 
             Assert.Equal(actualPath, pathToAlphFile artefactPath)
