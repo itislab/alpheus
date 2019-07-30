@@ -80,5 +80,26 @@ let addEntriesAsync gitignore_path entries_to_add =
             // the alpheus section presents in the .gitignore
             // or alpheus section does not present in the .gitignore at all. So creating it
             // the behavior is the same
-            do! writeGitIgnore gitignore_path (head.ToString()) (alpheusSectionBuilder.ToString()) (tail.ToString())
+            let writeGitIgnoreComputation = writeGitIgnore gitignore_path (head.ToString()) (alpheusSectionBuilder.ToString()) (tail.ToString())
+            if File.Exists gitignore_path then
+                let initialAttributes = File.GetAttributes(gitignore_path)
+                try
+                    // wiping out Hidden, Archive and Readonly attributes if any
+                    let writableAttributesInt =
+                        (int initialAttributes) &&&
+                        (~~~ (int FileAttributes.Hidden)) &&&
+                        (~~~ (int FileAttributes.Archive)) &&&
+                        (~~~ (int FileAttributes.ReadOnly))
+                    let writableAttributes: FileAttributes = downcast FileAttributes.ToObject(typedefof<FileAttributes>,writableAttributesInt)
+                    Logger.logVerbose Logger.GitIgnoreManager "Making .gitignore file writable"
+                    File.SetAttributes(gitignore_path, writableAttributes)
+                    Logger.logVerbose Logger.GitIgnoreManager "Writing .gitignore file"
+                    do! writeGitIgnoreComputation
+
+                finally
+                    // restoring back attributes
+                    Logger.logVerbose Logger.GitIgnoreManager "Restoring initial .gitignore attributes"
+                    File.SetAttributes(gitignore_path,initialAttributes)
+            else
+                do! writeGitIgnoreComputation
     }

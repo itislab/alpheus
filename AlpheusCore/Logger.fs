@@ -17,6 +17,8 @@ type LogCategory =
     | ExperimentFolder
     /// Dependency graph manipulation and management
     | DependencyGraph
+    /// Managing (updating) the .gitignore file
+    | GitIgnoreManager
 
 /// A function to be used for logs output. Can be set externally to override default behavior of printing to console
 let mutable LogFunction = fun (category: LogCategory) (message:string) ->
