@@ -17,10 +17,15 @@
     <AssemblyName>Alpheus</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="ResultBuilder.fs" />
     <Compile Include="Logger.fs" />
+    <Compile Include="AngaraTranslator.fs" />
     <None Include="app.config" />
     <Compile Include="Hash.fs" />
+    <Compile Include="Experiment.fs" />
     <Compile Include="AlphFiles.fs" />
+    <Compile Include="PathUtils.fs" />
+    <Compile Include="AfterfactId.fs" />
     <Compile Include="MethodCommand.fs" />
     <Compile Include="Storage.fs" />
     <Compile Include="StorageAzure.fs" />
@@ -29,7 +34,7 @@
     <Compile Include="ArtefactArchiver.fs" />
     <Compile Include="StorageFactory.fs" />
     <Compile Include="DependencyGraph.fs" />
-    <Compile Include="FlowGraphFactory.fs" />
+    <Compile Include="DependencyGraphToAngaraWrapper.fs" />
     <Compile Include="StatusGraph.fs" />
     <Compile Include="ComputationContext.fs" />
     <Compile Include="ExecuteCommand.fs" />

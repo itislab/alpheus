@@ -102,9 +102,7 @@ let loadGraph path = async {
         failwith "COULD NOT LOAD GRAPH"
     | Some experimentRoot ->
         let allAlphFiles = Directory.GetFiles(experimentRoot, "*.alph", SearchOption.AllDirectories)
-        let! artefactPaths = allAlphFiles |> Array.map alphFilePathToArtefactPathAsync |> Async.Parallel
-        let relPaths = artefactPaths |> Array.map (fun fn -> Path.GetRelativePath(experimentRoot, fn))
-        let artefactIDs = relPaths |> Seq.map ArtefactId.ID |> List.ofSeq
+        let artefactIDs = allAlphFiles |> Array.map (PathUtils.pathToId experimentRoot) |> Array.toList
         let! depGraph = buildDependencyGraphAsync experimentRoot artefactIDs
         let artefactNodes =
             depGraph.Artefacts

@@ -21,10 +21,9 @@
     <Compile Include="Trace.fs" />
     <Compile Include="Cli.fs" />
     <Compile Include="BuildCommand.fs" />
+    <Compile Include="Runner.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
-
-  <ItemGroup />
 
   <ItemGroup>
     <PackageReference Include="Argu" Version="5.4.0" />

@@ -3,6 +3,7 @@
 open ItisLab.Alpheus.AlphFiles
 open Xunit
 open ItisLab.Alpheus
+open ItisLab.Alpheus.PathUtils
 open Utils
 open System.IO
 
@@ -21,7 +22,7 @@ type SampleExperiment(output) =
 
     // creating sample experiment folder for tests
 
-    let fullArtIds = Array.map ItisLab.Alpheus.AlphFiles.ArtefactId.ID artIdsStr
+    let fullArtIds = Array.map ItisLab.Alpheus.ArtefactId.Path artIdsStr
 
     let rootPath = Path.GetFullPath(``base``.Path)
 
@@ -29,8 +30,8 @@ type SampleExperiment(output) =
 
         ItisLab.Alpheus.Config.createExperimentDirectoryAsync rootPath |> Async.RunSynchronously |> ignore
 
-        let fullPaths = Array.map (fun x -> fullIDtoFullPath rootPath x) fullArtIds
-        let fullAlphFilePaths = Array.map (fun x -> artefactPathToAlphFilePath x) fullPaths
+        let fullPaths = Array.map (fun x -> idToFullPath rootPath x) fullArtIds
+        let fullAlphFilePaths = Array.map (fun x -> idToAlphFileFullPath rootPath x) fullArtIds
 
         // creating dirs
         Directory.CreateDirectory(Path.Combine(``base``.Path,"dir1")) |> ignore
