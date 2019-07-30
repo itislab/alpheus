@@ -91,6 +91,6 @@ type ConfigSerialization(output)=
             let! _ = createExperimentDirectoryAsync(dir1)
 
             match tryLocateExperimentRoot dir3 with
-            |   None -> Assert.True(false,"Failed to found the experiment root")
-            |   Some(found) -> Assert.Equal(Path.GetFullPath(dir1),found)
+            |   None -> Assert.True(false,"Failed to find the experiment root")
+            |   Some(found) -> Assert.Equal(Path.GetFullPath(dir1) + string Path.DirectorySeparatorChar,found)
         }   |> toAsyncFact

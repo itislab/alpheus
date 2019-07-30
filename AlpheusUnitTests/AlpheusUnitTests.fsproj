@@ -40,6 +40,7 @@
     <Compile Include="HashingTests.fs" />
     <Compile Include="ConversionHelpersTests.fs" />
     <Compile Include="AlphFilesTests.fs" />
+    <Compile Include="PathUtilsTests.fs" />
     <Compile Include="StorageTests.fs" />
     <Compile Include="ConfigTests.fs" />
     <Compile Include="ArtefactArchiverTests.fs" />

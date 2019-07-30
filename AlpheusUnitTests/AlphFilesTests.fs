@@ -1,4 +1,4 @@
-﻿module ItisLab.Alpheus.Tests.AlphFiles
+﻿namespace ItisLab.Alpheus.Tests
 
 open System
 open Xunit
@@ -6,6 +6,7 @@ open System.IO
 open System.Threading.Tasks
 open ItisLab.Alpheus.Tests.Utils
 open ItisLab.Alpheus.AlphFiles
+open ItisLab.Alpheus
 
 type AlphFileSerializationTests(output)=
     inherit SingleUseOneTimeDirectory(output)
@@ -13,10 +14,11 @@ type AlphFileSerializationTests(output)=
     [<Fact>]
     member s.``Alph file round serialization-deserialization``() =
         async {
-            let snapshortSection : SnapshotSection = {Type= ArtefactType.FileArtefact ; Version = "0000"}
+            let artefactPath = Path.Combine(s.Path, "test.dat")
+            let snapshortSection : VersionedArtefact = { RelativePath = artefactPath; Hash = "0000"}
             let alphFile : AlphFile = {
                 IsTracked = true
-                Origin = DataOrigin.Snapshot snapshortSection
+                Origin = DataOrigin.SourceOrigin snapshortSection
             }
             let path = Path.Combine(s.Path,"test.json")
             do! saveAsync alphFile path
@@ -28,38 +30,4 @@ type AlphFileSerializationTests(output)=
                 Assert.True(false,"Failed to deserialized serialized file")
         } |> toAsyncFact
 
-    [<Fact>]
-    member s.``alphFilePathToArtefactPathAsync handles file artefact``() =
-        async {
-            let snapshortSection : SnapshotSection = {Type= ArtefactType.FileArtefact ; Version = "0000"}
-            let fileArtefactAlphFile : AlphFile = {
-                IsTracked = true
-                Origin = DataOrigin.Snapshot snapshortSection
-            }
-            let path = Path.Combine(s.Path,"test.txt.alph")
-            do! saveAsync fileArtefactAlphFile path
-            
-            let! loaded = alphFilePathToArtefactPathAsync path
-            Assert.Equal(loaded,Path.Combine(s.Path,"test.txt"))
-
-        } |> toAsyncFact
-
-    [<Fact>]
-    member s.``alphFilePathToArtefactPathAsync handles directory artefact``() =
-        async {
-            let snapshortSection : SnapshotSection = {Type= ArtefactType.DirectoryArtefact ; Version = "0000"}
-            let fileArtefactAlphFile : AlphFile = {
-                IsTracked = true
-                Origin = DataOrigin.Snapshot snapshortSection
-            }
-            let path = Path.Combine(s.Path,"test.alph")
-            do! saveAsync fileArtefactAlphFile path
-            
-            let! loaded = alphFilePathToArtefactPathAsync path
-            if isTestRuntimeWindows then 
-                Assert.Equal(loaded,Path.Combine(s.Path,@"test\"))
-            else
-                Assert.Equal(loaded,Path.Combine(s.Path,@"test/"))
-                
-        } |> toAsyncFact
-
+   

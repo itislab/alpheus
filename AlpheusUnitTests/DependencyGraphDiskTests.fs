@@ -1,9 +1,10 @@
 ﻿module ItisLab.Alpheus.Tests.DependencyGraphDisk
 
 open System.IO
-open ItisLab.Alpheus.AlphFiles
 open Xunit
 open ItisLab.Alpheus
+open ItisLab.Alpheus.AlphFiles
+open ItisLab.Alpheus.PathUtils
 open Utils
 
 type Tests(output) =

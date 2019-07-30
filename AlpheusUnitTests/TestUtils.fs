@@ -8,7 +8,18 @@ open Xunit.Abstractions
 // Ensure we match the return type xUnit.net is looking for
 let toAsyncFact computation : Task = Async.StartAsTask computation :> _
 
-/// Class that can be a parent to all tests classes that require single-use one-time unique named directory creation before test
+/// whether the tests are currently executed on Windows
+let isTestRuntimeWindows = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(Runtime.InteropServices.OSPlatform.Windows)
+
+/// The OS specific path that is the root on the testing runtime
+let testRuntimeRootPath =
+    if isTestRuntimeWindows then @"C:\" else "/"
+
+type TargetPlatform =
+    | Windows = 1
+    | Linux = 2
+
+/// Class that can be a parent to all tests classes that require single-use one-time unique named directory creation befor test
 /// and deletion after the test
 /// use .Path property to get the pass to the directory
 [<Xunit.Collection("Disk involving test collection")>] // this prevents parallel tests execution
@@ -17,7 +28,8 @@ type SingleUseOneTimeDirectory(output:ITestOutputHelper) =
 
     let tempName = System.Guid.NewGuid().ToString()
     let dir1 = System.IO.Path.Combine("data","singleTimeDirs")
-    let path = System.IO.Path.Combine(dir1,tempName)
+    let path = System.IO.Path.Combine(dir1,tempName) + string System.IO.Path.DirectorySeparatorChar
+    let fullPath = System.IO.Path.GetFullPath(path)
     
     //let outputTextWriter = new OutputTextWriter(output)
 
@@ -43,20 +55,17 @@ type SingleUseOneTimeDirectory(output:ITestOutputHelper) =
         with get() = output
 
     /// One-time single-use unique named directory to carry on tests within
-    member s.Path
-        with get() = path
+    member s.Path = path
+
+    member s.FullPath = fullPath
+
+    member s.Platform = if isTestRuntimeWindows then TargetPlatform.Windows else TargetPlatform.Linux
 
     interface IDisposable with
         member s.Dispose() =
             System.IO.Directory.Delete(path,true)
             output.WriteLine(sprintf "Successfully deleted unique test dir %s" path)
 
-/// whether the tests are currently executed on Windows
-let isTestRuntimeWindows = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(Runtime.InteropServices.OSPlatform.Windows)
-
-/// The OS specific path that is the root on the testing runtime
-let testRuntimeRootPath =
-    if isTestRuntimeWindows then @"C:\" else "/"
 
 /// runs the command in Unix Shell
 /// Useful for setting file permissions, etc.

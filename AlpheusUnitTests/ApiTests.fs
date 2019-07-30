@@ -14,7 +14,7 @@ open ItisLab.Alpheus
 
 /// can be used as calssData for XUnit theory. returns all of the artefactIDs for the sample experiment
 type ArtefactIdSource() =
-    let sequence : IEnumerable<obj array> = SampleExperiment.artIdsStr |> Seq.map ArtefactId.ID |> Seq.map (fun x -> x :> obj) |> Seq.map (fun x -> [|x|])
+    let sequence : IEnumerable<obj array> = SampleExperiment.artIdsStr |> Seq.map ArtefactId.Path |> Seq.map (fun x -> x :> obj) |> Seq.map (fun x -> [|x|])
     interface IEnumerable<obj array> with
         member s.GetEnumerator() =
             sequence.GetEnumerator()
@@ -107,7 +107,7 @@ type DepGraphConstruction(output) =
                     Assert.Equal(expectedArtefactCount,graph.ArtefactsCount)
                 }
 
-            let checks = testCase.OutputIDs |> Array.map (fun x -> checkGraphAsync (ArtefactId.ID x) testCase.ExpectedMethodsInGraph testCase.ExpectedArtefactsInGraph)
+            let checks = testCase.OutputIDs |> Array.map (fun x -> checkGraphAsync (ArtefactId.Path x) testCase.ExpectedMethodsInGraph testCase.ExpectedArtefactsInGraph)
             checks |> Array.iter Async.RunSynchronously
         } |> toAsyncFact
 
@@ -137,7 +137,7 @@ type DepGraphConstruction(output) =
                     Assert.Equal<ArtefactId>(expectedDependecies, actualDependecies)
                 }
 
-            let checks = testCase.OutputIDs |> Array.map (fun x -> checkGraphAsync (ArtefactId.ID x))
+            let checks = testCase.OutputIDs |> Array.map (fun x -> checkGraphAsync (ArtefactId.Path x))
             checks |> Array.iter Async.RunSynchronously
         } |> toAsyncFact
 
@@ -147,7 +147,7 @@ type DepGraphLocalComputation(output) =
     
     [<Fact>]
     member s.``API Compute: concat 2 files``() =
-        let expRoot = Path.GetFullPath(s.Path)
+        let expRoot = s.FullPath
         let savedWD = Environment.CurrentDirectory
         try
             // we will concat these files
@@ -170,7 +170,10 @@ type DepGraphLocalComputation(output) =
             printfn "Graph constructed"
 
             Assert.False(File.Exists("cat_test.txt"))
-            let computeResult = API.compute "cat_test.txt"
+            let computeResult = result {
+                let! target = API.artefactFor "cat_test.txt"
+                return! API.compute target
+            }
             assertResultOk computeResult
             Assert.True(File.Exists("cat_test.txt"))
 
@@ -191,12 +194,13 @@ type DepGraphSaveRestore(output) =
     inherit SampleExperiment.SampleExperiment(output)
 
     [<Fact>]
-    member s.``API Save-Resore: file artefact saves & restores``() =
+    member s.``API Save-Restore: file artefact saves & restores``() =
         async {
             let artId = s.FullArtIds.[0]
-            let path = Path.Combine(s.Path,artId.ToString())
+            let path = artId |> PathUtils.idToFullPath s.FullPath
+
             // local storage is available by default
-            let! saveResult =  API.saveAsync path "local" false
+            let! saveResult =  API.saveAsync (s.FullPath, artId) "local" false
             assertResultOk saveResult
              
             // saving the content for later verification
@@ -207,12 +211,11 @@ type DepGraphSaveRestore(output) =
 
             Assert.False(File.Exists(path))
 
-            let! restoreResult = API.restoreAsync path
+            let! restoreResult = API.restoreAsync (s.FullPath, artId)
             assertResultOk restoreResult
 
             // checking that it actually restored and it's content matches
             Assert.True(File.Exists(path),"File is not restored")
             let! restoredContent = File.ReadAllTextAsync(path) |> Async.AwaitTask
             Assert.Equal(origContent,restoredContent)
-
         } |> toAsyncFact
