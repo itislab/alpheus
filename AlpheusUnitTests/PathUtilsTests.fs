@@ -11,29 +11,33 @@ type PathUtilsTests(output)=
     inherit SingleUseOneTimeDirectory(output)
 
     [<Theory>]
-    [<InlineData(@"c:\temp\")>]
-    [<InlineData(@"c:\")>]
-    [<InlineData(@"c:\Мои данные\")>]
-    [<InlineData("/с/data/")>]
-    member s.``isDirectory returns true if a path point a directory``(pathToDirectory : string) =
-        Assert.True(isDirectory pathToDirectory)
+    [<InlineData(TargetPlatform.Windows, @"c:\temp\")>]
+    [<InlineData(TargetPlatform.Windows, @"c:\")>]
+    [<InlineData(TargetPlatform.Windows, @"c:\Мои данные\")>]
+    [<InlineData(TargetPlatform.Linux, "/с/data/")>]
+    member s.``isDirectory returns true if a path point a directory``(targetPlatform: TargetPlatform, pathToDirectory : string) =
+        if targetPlatform = s.Platform then
+            Assert.True(isDirectory pathToDirectory)
 
     [<Theory>]
-    [<InlineData(@"c:\temp\data.csv")>]
-    [<InlineData(@"c:\Мои данные\Файл с данными без расширения")>]
-    [<InlineData("/с/data/my data.csv")>]
-    member s.``isDirectory returns false if a path points a file``(pathToFile : string) =
-        Assert.False(isDirectory pathToFile)
+    [<InlineData(TargetPlatform.Windows, @"c:\temp\data.csv")>]
+    [<InlineData(TargetPlatform.Windows, @"c:\Мои данные\Файл с данными без расширения")>]
+    [<InlineData(TargetPlatform.Linux, "/с/data/my data.csv")>]
+    [<InlineData(TargetPlatform.Linux, "/с/data/file")>]
+    member s.``isDirectory returns false if a path points a file``(targetPlatform: TargetPlatform, pathToFile : string) =
+        if targetPlatform = s.Platform then
+            Assert.False(isDirectory pathToFile)
         
     [<Theory>]
-    [<InlineData(@"c:\experiment\data.alph", true)>]
-    [<InlineData(@"c:\experiment\", false)>]
-    [<InlineData(@"c:\experiment\data.csv", false)>]
-    [<InlineData("/с/experiment/my data.alph", true)>]
-    [<InlineData("/с/experiment/my data.csv", false)>]
-    [<InlineData("/с/experiment/", false)>]
-    member s.``isAlph file checks if the given path points an alph file``(pathToFile : string, actualIsAlph: bool) =
-        Assert.Equal(actualIsAlph, isAlphFile pathToFile)
+    [<InlineData(TargetPlatform.Windows, @"c:\experiment\data.alph", true)>]
+    [<InlineData(TargetPlatform.Windows, @"c:\experiment\", false)>]
+    [<InlineData(TargetPlatform.Windows, @"c:\experiment\data.csv", false)>]
+    [<InlineData(TargetPlatform.Linux, "/с/experiment/my data.alph", true)>]
+    [<InlineData(TargetPlatform.Linux, "/с/experiment/my data.csv", false)>]
+    [<InlineData(TargetPlatform.Linux, "/с/experiment/", false)>]
+    member s.``isAlph file checks if the given path points an alph file``(targetPlatform: TargetPlatform, pathToFile : string, actualIsAlph: bool) =
+        if targetPlatform = s.Platform then
+            Assert.Equal(actualIsAlph, isAlphFile pathToFile)
 
     [<Theory>]
     [<InlineData(TargetPlatform.Windows, @"c:\experiment\", @"c:\experiment\data.csv", @"data.csv")>]
@@ -168,6 +172,11 @@ type PathUtilsTests(output)=
     [<InlineData(TargetPlatform.Windows, @"c:\experiment\source\*.csv", @"c:\experiment\source\vector.csv.alph")>]
     [<InlineData(TargetPlatform.Windows, @"c:\experiment\source\*\", @"c:\experiment\source\vector.alph")>]
     [<InlineData(TargetPlatform.Windows, @"c:\experiment\source\*\data\*\*.csv", @"c:\experiment\source\vector-data-vector-vector.csv.alph")>]
+    [<InlineData(TargetPlatform.Linux, @"/experiment/source/test.csv", @"c:/experiment/source/test.csv.alph")>]
+    [<InlineData(TargetPlatform.Linux, @"/experiment/source/test/", @"c:/experiment/source/test.alph")>]
+    [<InlineData(TargetPlatform.Linux, @"/experiment/source/*.csv", @"c:/experiment/source/vector.csv.alph")>]
+    [<InlineData(TargetPlatform.Linux, @"/experiment/source/*/", @"c:/experiment/source/vector.alph")>]
+    [<InlineData(TargetPlatform.Linux, @"/experiment/source/*/data/*/*.csv", @"c:/experiment/source/vector-data-vector-vector.csv.alph")>]
     member s.``pathToAlphFile returns the path of the corresponding alph file``(targetPlatform: TargetPlatform, artefactPath: string, actualPath: string) =
         if targetPlatform = s.Platform then 
             Assert.Equal(actualPath, pathToAlphFile artefactPath)
