@@ -218,4 +218,26 @@ type DepGraphSaveRestore(output) =
             Assert.True(File.Exists(path),"File is not restored")
             let! restoredContent = File.ReadAllTextAsync(path) |> Async.AwaitTask
             Assert.Equal(origContent,restoredContent)
+
+        } |> toAsyncFact
+    
+    [<Theory>] // gitgnore must always hold the entries with straight slashes (even on windows)
+    [<InlineData(@"dir1/test2/")>]
+    [<InlineData(@"dir2/test3.txt")>]
+    [<InlineData(@"dir1/test1.txt")>] // alph file is missing for this artefact
+    [<InlineData(@"dir3/dir5/test5.txt")>]
+    member s.``API Save: gitignore entry is added for single file``(artIdStr) =
+        async {
+            let artefactId = ArtefactId.Path artIdStr
+            // local storage is available by default
+            let! saveResult =  API.saveAsync (s.FullPath, artefactId) "local" false
+            assertResultOk saveResult
+
+            let gitIgnorePath = Path.Combine(s.Path,".gitignore")
+
+            Assert.True(File.Exists(gitIgnorePath), ".gitignore file must be created")
+
+            let! entries = File.ReadAllLinesAsync gitIgnorePath |> Async.AwaitTask
+            Assert.True(Seq.exists (fun s -> s = artIdStr) entries, ".gitignore must contain newly added artefact record")
+
         } |> toAsyncFact

@@ -196,6 +196,13 @@ let saveAsync (experimentRoot, artefactId) storageName saveAll =
             let save = StorageFactory.getStorageSaver experimentRoot storageToSaveTo
             let saveDescriptors = artefactsToSave |> Array.map (fun art -> (idToFullPath experimentRoot artefactId),art.ActualHash.Value)
             let! _ = save saveDescriptors
+
+            // adding the saved artefact into the gitignore
+            let newIgnoreEntry (art:ArtefactVertex) = art.Id |> idToExperimentPath |> unixPath
+            let newIgnoreEntries = artefactsToSave |> Array.map newIgnoreEntry
+            let gitIgnorePath = Path.Combine(experimentRoot,".gitignore")
+            do! GitIgnoreManager.addEntriesAsync gitIgnorePath newIgnoreEntries
+
             return Ok()
         | None ->
             // specified storage is not found

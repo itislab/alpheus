@@ -8,9 +8,6 @@ open System.Threading
 open ItisLab.Alpheus.PathUtils
 open Logger
 
-let traceVerbose str =
-    printfn "Storage:\t %s" str
-
 let createStorage (projectRoot:string) storageDef =
     match storageDef with
         |   Storage.Directory(root) ->
@@ -136,51 +133,53 @@ let getStorageSaver (projectRoot:string)  storageDef =
                     |   Directory -> true
                     |   Absent -> false
                 if alreadyExists then
-                    traceVerbose (sprintf "already saved  %s:%s" fullID (version.Substring(0,8).ToLower()))
+                    Logger.logInfo Logger.Storage (sprintf "already saved  %s:%s" fullID (version.Substring(0,8).ToLower()))
                     return ()
                 else
                     if isSingleFile then
                         use! stream = storage.getFileSaveStreamAsync version                        
-                        traceVerbose (sprintf "saving  %s:%s" fullID (version.Substring(0,8).ToLower()))
+                        Logger.logVerbose Logger.Storage (sprintf "saving  %s:%s" fullID (version.Substring(0,8).ToLower()))
                         do! ArtefactArchiver.archiveSingleFileToStreamAsync artefactFullPath stream                                                
-                        traceVerbose (sprintf "saved  %s:%s" fullID (version.Substring(0,8).ToLower()))
+                        Logger.logInfo Logger.Storage (sprintf "saved  %s:%s" fullID (version.Substring(0,8).ToLower()))
                     else
                         let files = System.IO.Directory.GetFiles(artefactFullPath,"*.*",System.IO.SearchOption.AllDirectories)
-                        let NBuckets = min (Array.length files) maxDirChunks
-                        traceVerbose (sprintf "saving  %s:%s %d files into %d buckets" fullID (version.Substring(0,8).ToLower()) (Array.length files) NBuckets)
-                        let buckets = Array.init NBuckets (fun _ -> System.Collections.Generic.List<string>())
-                        // splitting files in NBuckets groups
-                        let iterator idx filename =                            
-                            let bucket_idx = idx % NBuckets
-                            buckets.[bucket_idx].Add(filename)
-                        Array.iteri iterator files
+                        if Array.length files = 0 then return()
+                        else    
+                            let NBuckets = min (Array.length files) maxDirChunks
+                            Logger.logVerbose Logger.Storage (sprintf "saving  %s:%s %d files into %d buckets" fullID (version.Substring(0,8).ToLower()) (Array.length files) NBuckets)
+                            let buckets = Array.init NBuckets (fun _ -> System.Collections.Generic.List<string>())
+                            // splitting files in NBuckets groups
+                            let iterator idx filename =                            
+                                let bucket_idx = idx % NBuckets
+                                buckets.[bucket_idx].Add(filename)
+                            Array.iteri iterator files
 
-                        //Archiving buckets
-                        let! bucketStreams = storage.getDirSaveStreamsAsync version NBuckets
+                            //Archiving buckets
+                            let! bucketStreams = storage.getDirSaveStreamsAsync version NBuckets
 
-                        let dirFullPath = artefactFullPath+Path.DirectorySeparatorChar.ToString()
+                            let dirFullPath = artefactFullPath+Path.DirectorySeparatorChar.ToString()
 
-                        let sharedCounter = ref 0 
-                        let N = Array.length files
-                        let counterSync = obj()
+                            let sharedCounter = ref 0 
+                            let N = Array.length files
+                            let counterSync = obj()
 
-                        let fileCompleteCallback filename =
-                            lock counterSync (fun () ->
-                                incr sharedCounter
-                                printfn "%d/%d\t %s Done" sharedCounter.Value N filename
-                            ) 
+                            let fileCompleteCallback filename =
+                                lock counterSync (fun () ->
+                                    incr sharedCounter
+                                    printfn "%d/%d\t %s Done" sharedCounter.Value N filename
+                                ) 
 
-                        let archiver = ArtefactArchiver.archiveDirFilesToStreamAsync fileCompleteCallback dirFullPath
-                        let bucketComps = Array.map2 archiver buckets bucketStreams
-                        let concurrencyLevel = System.Environment.ProcessorCount*2
-                        traceVerbose (sprintf "using %d concurrent archivers" concurrencyLevel)
-                        let bucketProcessor,waitComplete = throttlingAgent concurrencyLevel
-                        bucketProcessor.Post (ExpectedCount (Array.length bucketComps))
-                        Array.iter (fun x -> bucketProcessor.Post (Enqueue x)) bucketComps                        
-                        do! waitComplete
-                        bucketStreams |> Array.iter (fun s -> s.Flush(); s.Close(); s.Dispose())
-                        traceVerbose (sprintf "saved  %s:%s" fullID (version.Substring(0,8).ToLower()))
-                        return ()                        
+                            let archiver = ArtefactArchiver.archiveDirFilesToStreamAsync fileCompleteCallback dirFullPath
+                            let bucketComps = Array.map2 archiver buckets bucketStreams
+                            let concurrencyLevel = System.Environment.ProcessorCount*2
+                            Logger.logVerbose Logger.Storage (sprintf "using %d concurrent archivers" concurrencyLevel)
+                            let bucketProcessor,waitComplete = throttlingAgent concurrencyLevel
+                            bucketProcessor.Post (ExpectedCount (Array.length bucketComps))
+                            Array.iter (fun x -> bucketProcessor.Post (Enqueue x)) bucketComps                        
+                            do! waitComplete
+                            bucketStreams |> Array.iter (fun s -> s.Flush(); s.Close(); s.Dispose())
+                            Logger.logInfo Logger.Storage (sprintf "saved  %s:%s" fullID (version.Substring(0,8).ToLower()))
+                            return ()                        
         }
     let saver artefacts =
         async {
@@ -196,7 +195,7 @@ let getStorageRestore (projectRoot:string)  (storageDef:Config.Storage) =
         async {                
                 let absPath = idToFullPath projectRoot artefactId
                 let storage = createStorage projectRoot storageDef                         
-                traceVerbose (sprintf "restoring  %A:%s" artefactId (version.Substring(0,8).ToLower()))
+                Logger.logVerbose Logger.Storage (sprintf "restoring  %A:%s" artefactId (version.Substring(0,8).ToLower()))
                 let! checkResult = storage.IsInStorageAsync version                            
                 match checkResult with
                 |   SingleFile ->
@@ -216,13 +215,13 @@ let getStorageRestore (projectRoot:string)  (storageDef:Config.Storage) =
                             }
                     let extractionComps = streams |> Array.map extracter
                     let concurrencyLevel = System.Environment.ProcessorCount*2
-                    traceVerbose (sprintf "using pool of %d concurrent extractors to extract %d buckets" concurrencyLevel streamsCount)
+                    Logger.logVerbose Logger.Storage (sprintf "using pool of %d concurrent extractors to extract %d buckets" concurrencyLevel streamsCount)
                     let bucketProcessor,waitComplete = throttlingAgent concurrencyLevel
                     bucketProcessor.Post (ExpectedCount (Array.length extractionComps))
                     extractionComps |> Array.iter (fun x -> bucketProcessor.Post (Enqueue x))                    
                     do! waitComplete
                 |   Absent -> raise(InvalidDataException("Artefact is absent in storage"))        
-                logVerbose LogCategory.Storage (sprintf "restored  %A:%s" artefactId (version.Substring(0,8).ToLower()))
+                logInfo LogCategory.Storage (sprintf "restored  %A:%s" artefactId (version.Substring(0,8).ToLower()))
                 return ()            
         }
     restore
