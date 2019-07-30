@@ -7,7 +7,10 @@ open System.Text
 
 let run (programName:string) (parseResults:ParseResults<AlpheusArgs>) : Result<unit, string> =
     let usage = parseResults.Parser.PrintUsage(programName = programName)
-    if parseResults.Contains Init then
+    if parseResults.IsUsageRequested then
+        printfn "%s" usage
+        Ok()
+    else if parseResults.Contains Init then
         result {
             let! cwd = (Directory.GetCurrentDirectory(), Config.isExperimentDirectory, "The current directory is already an Alpheus experiment directory")
             return API.createExperimentDirectoryAsync cwd |> Async.RunSynchronously |> ignore
