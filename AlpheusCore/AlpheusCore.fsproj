@@ -16,9 +16,6 @@
     <RepositoryUrl>https://github.com/itislab/alpheus</RepositoryUrl>
     <AssemblyName>Alpheus</AssemblyName>
   </PropertyGroup>
-  <PropertyGroup>
-    <DebugType>Full</DebugType>
-  </PropertyGroup>
   <ItemGroup>
     <Compile Include="Logger.fs" />
     <None Include="app.config" />
