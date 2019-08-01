@@ -2,7 +2,6 @@
 
 open System
 open System.IO
-open ItisLab.Alpheus.Hash
 open Newtonsoft.Json
 
 // Example 1:
@@ -67,30 +66,3 @@ let tryLoadAsync (filepath:string) =
             return None
     }
 
-/// Computes signature of supplied computeSection (Signature and isTracked member inside this computeSection is ignored during hash calculation)
-let getSignature (computeSection:CommandOutput) =
-    use sha = System.Security.Cryptography.SHA1.Create()
-    let addHash (str:string) =
-        let bytes = System.Text.Encoding.UTF8.GetBytes(str)
-        sha.TransformBlock(bytes,0,bytes.Length,bytes,0) |> ignore
-        ()
-    addHash computeSection.Command 
-    addHash computeSection.WorkingDirectory
-    let hashArtefact art =
-        addHash art.RelativePath
-        addHash art.Hash
-    Seq.iter hashArtefact (Seq.append computeSection.Inputs  computeSection.Outputs)
-    sha.TransformFinalBlock(Array.zeroCreate<byte> 0,0,0) |> ignore
-    hashToString sha.Hash
-
-let checkSignature (computeSection:CommandOutput) =
-    let readSignature = computeSection.Signature
-    let expectedSignature = getSignature computeSection
-    if readSignature = expectedSignature then
-        computeSection
-    else
-        // wiping out result hashes
-        {
-            computeSection with
-                Outputs = Array.map (fun x -> {x with Hash=""}) computeSection.Outputs
-        }

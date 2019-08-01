@@ -3,8 +3,9 @@
 open System.IO
 open System
 open System.Text
+open ItisLab.Alpheus
+open AlphFiles
 
-type HashString = string
         
 let hashToString (data : byte array) : HashString = System.BitConverter.ToString(data).Replace("-", System.String.Empty)
 
@@ -61,7 +62,7 @@ let rec hashDirectoryAsync (fullPath:string) =
             Directory.GetFiles fullPath            
             |> Array.filter (fun name -> not(name.EndsWith(".hash") || name.EndsWith(".alph"))) // ignoring hash file and .alph files
             // Assuming that if the code traverses .alph file, it means that the parent directory is being referenced by alpheus
-            // And standalong files (also referenced by alpheus and having .alph files) within this directory should not influence the hash of the parent dir
+            // And standalone files (also referenced by alpheus and having .alph files) within this directory should not influence the hash of the parent dir
             |> Array.sort
         let fileNamesRel =
             fileNamesAbs
@@ -94,6 +95,7 @@ let rec hashDirectoryAsync (fullPath:string) =
 let hashPathAsync fullPath =
     async {
             Logger.logVerbose Logger.ExperimentFolder (sprintf "Hashing %s ..." fullPath)
+            // todo: let items = PathUtils.enumeratePath fullPath
             if File.Exists fullPath then
                 let! hash = hashFileAsync fullPath
                 return Some(hashToString hash)
@@ -106,12 +108,7 @@ let hashPathAsync fullPath =
     
 /// optimization that caches the computed hashes into *.hash files
 let fastHashPathAsync (fullPath:string) =
-    let hashFilePath =
-        let prefix =
-            if fullPath.EndsWith(Path.DirectorySeparatorChar) then
-                fullPath.Substring(0,fullPath.Length-1)
-            else fullPath
-        sprintf "%s.hash" prefix
+    let hashFilePath = PathUtils.pathToHashFile fullPath
     let hashAndSave() =            
         async {
             let! hashStr = hashPathAsync fullPath
@@ -162,3 +159,31 @@ let fastHashPathAsync (fullPath:string) =
         else
             return! hashAndSave()
     }
+
+/// Computes signature of supplied computeSection (Signature and isTracked member inside this computeSection is ignored during hash calculation)
+let getSignature (computeSection:CommandOutput) =
+    use sha = System.Security.Cryptography.SHA1.Create()
+    let addHash (str:string) =
+        let bytes = System.Text.Encoding.UTF8.GetBytes(str)
+        sha.TransformBlock(bytes,0,bytes.Length,bytes,0) |> ignore
+        ()
+    addHash computeSection.Command 
+    addHash computeSection.WorkingDirectory
+    let hashArtefact art =
+        addHash art.RelativePath
+        addHash art.Hash
+    Seq.iter hashArtefact (Seq.append computeSection.Inputs  computeSection.Outputs)
+    sha.TransformFinalBlock(Array.zeroCreate<byte> 0,0,0) |> ignore
+    hashToString sha.Hash
+
+let checkSignature (computeSection:CommandOutput) =
+    let readSignature = computeSection.Signature
+    let expectedSignature = getSignature computeSection
+    if readSignature = expectedSignature then
+        computeSection
+    else
+        // wiping out result hashes
+        {
+            computeSection with
+                Outputs = Array.map (fun x -> {x with Hash=""}) computeSection.Outputs
+        }

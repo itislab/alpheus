@@ -25,7 +25,7 @@ type Storage(accountName:string,accountKey:string,containerName:string) =
             printfn "Failed to initialize Azure storage. Check azure credentials and container name validity (%s)" (agex.ToString())
             raise(agex)
     interface IStorage with
-        member s.IsInStorageAsync (version: Hash.HashString) =
+        member s.IsInStorageAsync (version: HashString) =
             async {                
                     if String.IsNullOrEmpty(version) then
                         return Storage.Absent

@@ -6,7 +6,7 @@ open System
 
 type Storage(absPath:string) =
     interface IStorage with
-        member s.IsInStorageAsync (version: Hash.HashString) =
+        member s.IsInStorageAsync (version: HashString) =
             async {                
                 if String.IsNullOrEmpty version then
                     return ArtefactType.Absent

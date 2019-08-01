@@ -5,7 +5,7 @@ open System.IO
 
 /// conversion to OS specific directory delimiter
 let internal normalizePath (path:string) = path.Replace('/', Path.DirectorySeparatorChar).Trim()
-let internal unixPath (path:string) = path.Replace('\\', '/')
+let unixPath (path:string) = path.Replace('\\', '/')
 
 let isDirectory (path:string) = path.EndsWith(Path.DirectorySeparatorChar) || path.EndsWith(Path.AltDirectorySeparatorChar)
 
@@ -69,8 +69,7 @@ and alphRelativePathToId (alphFile: string) (experimentRoot: string) (relativePa
     let fullPath = Path.GetFullPath(Path.Combine(alphFolder, relativePath))
     pathToId experimentRoot fullPath
 
-/// Given the artefact path of any type, returns the path to the corresponding alph file of the same type as the original path.
-let pathToAlphFile (artefactPath:string) : string =
+let private unvectorizePath (artefactPath:string) : string =
     let artefactPath = normalizePath artefactPath
     let prefix = 
         if artefactPath.EndsWith(Path.DirectorySeparatorChar) then
@@ -78,13 +77,21 @@ let pathToAlphFile (artefactPath:string) : string =
         else
             artefactPath
     let idx = prefix.IndexOf('*')
-    let prefix =
-        if idx < 0 then 
-            prefix
-        else
-            prefix.Substring(0, idx) + prefix.Substring(idx).Replace(Path.DirectorySeparatorChar, '-').Replace("*", "vector")
-    
+    if idx < 0 then 
+        prefix
+    else
+        prefix.Substring(0, idx) + prefix.Substring(idx).Replace(Path.DirectorySeparatorChar, '-').Replace("*", "vector")
+
+
+/// Given the artefact path of any type, returns the path to the corresponding alph file of the same type as the original path.
+let pathToAlphFile (artefactPath:string) : string =
+    let prefix = unvectorizePath artefactPath    
     sprintf "%s.alph" prefix 
+
+/// Given the artefact path of any type, returns the path to the corresponding hash file of the same type as the original path.
+let pathToHashFile (artefactPath:string) : string =
+    let prefix = unvectorizePath artefactPath    
+    sprintf "%s.hash" prefix 
 
 /// Given the artefact id, returns the path to the corresponding alph file (relative to the experiment root).
 let idToAlphFilePath (artefactId:ArtefactId) : ExperimentRelativePath =
@@ -96,3 +103,45 @@ let idToAlphFileFullPath (experimentRoot: string) (artefactId:ArtefactId) : stri
     if not(Path.IsPathRooted experimentRoot) then invalidArg "experimentRoot" "Experiment root is not absolute"
     if not(isDirectory experimentRoot) then invalidArg "experimentRoot" "Experiment root is not a directory (must end with the slash)"
     Path.Combine(experimentRoot, idToAlphFilePath artefactId)
+
+
+let enumeratePath (artefactPath:string) =
+    let isDirectory = isDirectory artefactPath
+    let isHidden (name:string) = name.StartsWith(".")
+    let isPattern (name:string) = name.Contains("*")
+    
+    let rec enumerate (path: string) (parts : string list) : string seq =
+        match parts with
+        | [] -> 
+            Seq.singleton path
+        | head :: _ when isHidden head ->
+            Seq.empty
+        | [head] when isDirectory -> 
+            DirectoryInfo(path).GetDirectories(head) |> Seq.filter(fun fi -> not(isHidden fi.Name)) |> Seq.map(fun fi -> fi.FullName)     
+        | [head] -> 
+            DirectoryInfo(path).GetFiles(head) |> Seq.filter(fun fi -> not(isHidden fi.Name)) |> Seq.map(fun fi -> fi.FullName)     
+        | head :: tail ->
+            sprintf "%s :: %A" head tail |> Logger.logInfo Logger.Test
+            sprintf "Looking for %s in %s" head path |> Logger.logInfo Logger.Test
+            let found = Directory.EnumerateDirectories(path, head) |> Seq.toArray
+            sprintf "Found %A" found |> Logger.logInfo Logger.Test
+            DirectoryInfo(path).GetDirectories(head) 
+            |> Seq.filter(fun fi -> not(isHidden fi.Name)) 
+            |> Seq.map(fun fi -> enumerate fi.FullName tail) 
+            |> Seq.concat 
+
+    let rec rootPath path (parts : string list) : (string * string list) =
+        match parts with
+        | [] -> (path, [])
+        | head :: tail when not(isPattern(head)) -> rootPath (if String.IsNullOrEmpty(path) then head else Path.Combine(path, head)) tail
+        | _ -> (path, parts)
+
+    let parts = artefactPath.Split([|Path.DirectorySeparatorChar; Path.AltDirectorySeparatorChar|], StringSplitOptions.RemoveEmptyEntries) |> List.ofArray
+    let (root, partsWithPattern) = rootPath String.Empty parts
+    enumerate root partsWithPattern          
+
+/// Returns full paths for all items (files or directories) corresponding to the given artefact id.
+let enumerateItems (experimentRoot: string) (artefactId: ArtefactId) =
+    let artefactPath = artefactId |> idToFullPath experimentRoot 
+    enumeratePath artefactPath
+

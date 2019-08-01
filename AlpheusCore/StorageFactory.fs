@@ -78,7 +78,7 @@ let getPresenseChecker (projectRoot:string) (storages:(string*Config.Storage) se
         let (name:string),storageDef = pair
         
         let storage = createStorage projectRoot storageDef
-        let check (versions:(Hash.HashString option) seq) =
+        let check (versions:(HashString option) seq) =
             async {
                 let versionsArray = Array.ofSeq versions
                 let saveCheck v =                     
@@ -96,7 +96,7 @@ let getPresenseChecker (projectRoot:string) (storages:(string*Config.Storage) se
                 return namedResults
             }
         check
-    let check (versions:(Hash.HashString option) array) =
+    let check (versions:(HashString option) array) =
         async {            
             let N = Array.length versions
             let checkers = Seq.map singleStorageChecker storages |> Array.ofSeq
@@ -119,7 +119,7 @@ let maxDirChunks = 16
 let getStorageSaver (projectRoot:string)  storageDef =    
     let storage = createStorage projectRoot storageDef
 
-    let singleArtefactSaver (artefactFullPath:string) (version:Hash.HashString) =
+    let singleArtefactSaver (artefactFullPath:string) (version:HashString) =
         async {            
             if version.Length = 0 then
                 return ()
@@ -191,7 +191,7 @@ let getStorageSaver (projectRoot:string)  storageDef =
 
 //returns fullID -> version -> Async<unit>
 let getStorageRestore (projectRoot:string)  (storageDef:Config.Storage) =    
-    let restore (artefactId:ArtefactId) (version:Hash.HashString) =
+    let restore (artefactId:ArtefactId) (version:HashString) =
         async {                
                 let absPath = idToFullPath projectRoot artefactId
                 let storage = createStorage projectRoot storageDef                         

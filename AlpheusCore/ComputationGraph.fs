@@ -10,17 +10,22 @@ open Angara.States
 open ItisLab.Alpheus.DependencyGraph
 open ItisLab.Alpheus.PathUtils
 
-/// extracts the number of input artefacts used in producer vertex
-let private getDepCount producerVertex =
-    match producerVertex with
-    | Source(_) -> 0
-    | Command(c) -> c.Inputs.Count
 
-/// extracts the number of artefacts produced by the vertex
-let private getOutCount producerVertex =
-    match producerVertex with
-    | Source(_) -> 1
-    | Command(c) -> c.Outputs.Count
+let private arrayType<'a> rank : Type =
+    if rank < 0 then invalidArg "rank" "Rank is negative"
+    else if rank = 0 then typeof<ArtefactId>
+    else typeof<ArtefactId>.MakeArrayType(rank)
+
+let getOutputTypes (v:MethodVertex) =
+    match v with
+    | Source src -> [arrayType src.Artefact.Artefact.Rank]
+    | Command cmd -> cmd.Outputs |> Seq.map(fun a -> arrayType a.Artefact.Rank) |> List.ofSeq
+
+let getInputTypes (v:MethodVertex) =
+    match v with
+    | Source src -> List.empty
+    | Command cmd -> cmd.Inputs |> Seq.map(fun a -> arrayType a.Artefact.Rank) |> List.ofSeq
+
 
 /// This type represents an Angara Flow method.
 /// Note that execution modifies the given vertex and it is Angara Flow execution runtime who controls
@@ -28,8 +33,8 @@ let private getOutCount producerVertex =
 type ComputationGraphNode(producerVertex:MethodVertex, experimentRoot:string) = 
     inherit ExecutableMethod(
         System.Guid.NewGuid(),
-        List.init (getDepCount producerVertex) (fun _ -> typeof<ArtefactId>),
-        List.init (getOutCount producerVertex) (fun _ -> typeof<ArtefactId>))
+        getInputTypes producerVertex,
+        getOutputTypes producerVertex)
 
     member s.VertexID =
         match producerVertex with

@@ -17,7 +17,7 @@ let ts = TraceSource("Dependency Graph")
 type VersionedArtefact = {
     Artefact: ArtefactVertex
     /// Expected version. None means that the artefact version was never fixed
-    Version: Hash.HashString option
+    Version: HashString option
     /// Which storages (their names) contain the Version of the Artefact
     StoragesContainingVersion: string list
     }
@@ -27,7 +27,7 @@ and ArtefactVertex(id:ArtefactId) =
     let mutable outputs : Set<CommandLineVertex> = Set.empty
     let mutable isTracked = false
     let mutable storagesContainingActialHash = []
-    let mutable actualHash : Hash.HashString option = None // None means that file/dir does not exist on disk
+    let mutable actualHash : HashString option = None // None means that file/dir does not exist on disk
     
     member s.Id = id
     member s.ProducedBy
@@ -53,6 +53,8 @@ and ArtefactVertex(id:ArtefactId) =
     member s.StoragesContainingActualHash
         with get() = storagesContainingActialHash
         and set v = storagesContainingActialHash <- v
+
+    member s.Rank = Artefacts.rank id
         
     interface System.IComparable with
         member s.CompareTo(other) =
@@ -71,6 +73,7 @@ and ArtefactVertex(id:ArtefactId) =
             |   None -> "not exist"
             |   Some(hash) -> hash.Substring(0,6)
         sprintf "Artefact(%s|%s)" (s.Id.ToString()) version
+
 and [<CustomEquality; CustomComparison>] MethodVertex =
     /// The vertex produces single artefact out of void
     |   Source of SourceVertex
@@ -183,7 +186,7 @@ let artefactToAlphFile (artefact:ArtefactVertex) (alphFileFullPath:string) (expe
                 let candidate =
                     Path.GetRelativePath(alphFileDirFullPath, Path.GetFullPath(Path.Combine(experimentRoot,computedVertex.WorkingDirectory)))
                 if candidate = "" then ("."+Path.DirectorySeparatorChar.ToString()) else candidate
-            let vesionOptionConverter version : Hash.HashString =
+            let vesionOptionConverter version : HashString =
                 match version with
                 | None -> "---NEVER-PRODUCED---"
                 | Some v -> v
@@ -198,7 +201,7 @@ let artefactToAlphFile (artefact:ArtefactVertex) (alphFileFullPath:string) (expe
               Signature = String.Empty
               OutputsCleanDisabled = computedVertex.DoNotCleanOutputs }
         {
-            Origin = DataOrigin.CommandOrigin { computeSection with Signature = getSignature computeSection}
+            Origin = DataOrigin.CommandOrigin { computeSection with Signature = Hash.getSignature computeSection}
             IsTracked = artefact.IsTracked
         }
 
@@ -339,7 +342,7 @@ type Graph() =
                             // produced by some method.
 
                             // checking weather the internals were modified (weather the output hashes mentioned are valid)
-                            let computeSection = checkSignature(computeSection)
+                            let computeSection = Hash.checkSignature(computeSection)
                                                         
                             // 1) allocating a method vertex
                             let allOutputsIDs = computeSection.Outputs |> Array.map (fun out -> out.RelativePath |> alphRelativePathToId alphFileFullPath experimentRootPath) 
@@ -397,7 +400,7 @@ let fillinActualHashesAsync (artefacts:ArtefactVertex seq) (experimentRoot: stri
     }
 
 /// Fulls up the StoragesContainingActialHash of the artefacts
-let fillinArtefactContainingStoragesAsync (artefacts:ArtefactVertex seq) (getContainingStorageNames: (Hash.HashString option array -> Async<(string list) array>)) =
+let fillinArtefactContainingStoragesAsync (artefacts:ArtefactVertex seq) (getContainingStorageNames: (HashString option array -> Async<(string list) array>)) =
     async {
         // we fill in only artefacts that are on disk
         let artefactsArray = Seq.filter (fun (art:ArtefactVertex) -> art.ActualHash.IsSome ) artefacts |> Array.ofSeq
@@ -408,7 +411,7 @@ let fillinArtefactContainingStoragesAsync (artefacts:ArtefactVertex seq) (getCon
     }
 
 /// fills up Inputs and Outputs of methods with the information about the storages that contain the mentioned versions
-let fillinMethodEdgeContainingStoragesAsync (methods:MethodVertex seq) (getContainingStorageNames: ((Hash.HashString option) array -> Async<(string list) array>)) =
+let fillinMethodEdgeContainingStoragesAsync (methods:MethodVertex seq) (getContainingStorageNames: ((HashString option) array -> Async<(string list) array>)) =
     async {
         let methodsArray = Array.ofSeq methods
         // gathering versions
