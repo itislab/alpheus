@@ -3,6 +3,7 @@
 open System
 open System.IO
 open Newtonsoft.Json
+open Angara.Data
 
 // Example 1:
 //  artefact id: files/*.txt
@@ -15,7 +16,7 @@ open Newtonsoft.Json
 
 type VersionedArtefact = {
     RelativePath: AlphRelativePath
-    Hash: HashString
+    Hash: MdMap<string, HashString option>
 }
 
 type CommandOutput =  {
@@ -24,6 +25,7 @@ type CommandOutput =  {
     OutputIndex: int
     WorkingDirectory: AlphRelativePath
     Command: string    
+    /// Hashed content of this instance. Allows to determine if it was edited.
     Signature: HashString
     OutputsCleanDisabled: bool
 }

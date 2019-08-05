@@ -16,15 +16,31 @@ let private arrayType<'a> rank : Type =
     else if rank = 0 then typeof<ArtefactId>
     else typeof<ArtefactId>.MakeArrayType(rank)
 
-let getOutputTypes (v:MethodVertex) =
+let private inputRank (v:MethodVertex) =
     match v with
-    | Source src -> [arrayType src.Artefact.Artefact.Rank]
-    | Command cmd -> cmd.Outputs |> Seq.map(fun a -> arrayType a.Artefact.Rank) |> List.ofSeq
+    | Source src -> 0
+    | Command cmd -> cmd.Inputs |> Seq.map(fun a -> a.Artefact.Rank) |> Seq.max
+
+let private outputRank (v:MethodVertex) =
+    match v with
+    | Source src -> src.Artefact.Artefact.Rank
+    | Command cmd -> cmd.Outputs |> Seq.map(fun a -> a.Artefact.Rank) |> Seq.max
+
+let private methodRank (v:MethodVertex) = min (outputRank v) (inputRank v)
+
+let getOutputTypes (v:MethodVertex) =
+    let rank = methodRank v
+    match v with
+    | Source src -> [max 0 (src.Artefact.Artefact.Rank - rank) |> arrayType]
+    | Command cmd -> cmd.Outputs |> Seq.map(fun a -> max 0 (a.Artefact.Rank - rank) |> arrayType) |> List.ofSeq
 
 let getInputTypes (v:MethodVertex) =
+    let rank = methodRank v
     match v with
     | Source src -> List.empty
-    | Command cmd -> cmd.Inputs |> Seq.map(fun a -> arrayType a.Artefact.Rank) |> List.ofSeq
+    | Command cmd -> cmd.Inputs |> Seq.map(fun a -> max 0 (a.Artefact.Rank - rank) |> arrayType) |> List.ofSeq
+
+
 
 
 /// This type represents an Angara Flow method.
@@ -41,13 +57,18 @@ type ComputationGraphNode(producerVertex:MethodVertex, experimentRoot:string) =
         |   Source(s) -> s.Artefact.Artefact.Id
         |   Command(comp) -> (Seq.head comp.Outputs).Artefact.Id // first output is used as vertex ID
 
+    override s.ToString() = 
+        match producerVertex with
+        | Source src -> sprintf "Source %A" src.Artefact.Artefact.Id
+        | Command cmd -> sprintf "Command %s" cmd.Command
+
     override s.Execute(_, _) = // ignoring checkpoints
         // we behave differently for source vertices and computed vertices            
         let outputVersions =
             match producerVertex with
             |   Source(sourceVertex) ->
                 // source vertex can always produce output
-                let expectedVersion = sourceVertex.Artefact.Version
+                let expectedVersion = sourceVertex.Artefact.ExpectedVersion
                 match sourceVertex.Artefact.Artefact.ActualHash with
                 | None ->
                     // The artefact does not exist on disk
@@ -76,7 +97,7 @@ type ComputationGraphNode(producerVertex:MethodVertex, experimentRoot:string) =
                     } |> Async.RunSynchronously  
                 | Some _ -> // not tracked
                     ()
-                [sourceVertex.Artefact.Version]
+                [sourceVertex.Artefact.ExpectedVersion]
             |   Command(comp) ->
                 // if Angara.Flow calls execute, it means that the inputs are ready to be used in computation
   
@@ -100,7 +121,7 @@ type ComputationGraphNode(producerVertex:MethodVertex, experimentRoot:string) =
                     // NOTE: signature is checked during the .alph file reading
                     // if it is invalid, output versions are empty
                     let isArtefactAvailable (art:VersionedArtefact) =
-                        (versionsMatch art.Version art.Artefact.ActualHash) || (not art.StoragesContainingVersion.IsEmpty)
+                        (versionsMatch art.ExpectedVersion art.Artefact.ActualHash) || (not art.StoragesContainingVersion.IsEmpty)
                        
                     // if any of the outputs is unavailable, we have to run the computation
                     not(Seq.forall isArtefactAvailable outputs)
@@ -143,7 +164,7 @@ type ComputationGraphNode(producerVertex:MethodVertex, experimentRoot:string) =
                     
                         // 4b) updating dependency versions in dependency graph
                         let updateVersion (art:DependencyGraph.VersionedArtefact) = 
-                            { art with Version = art.Artefact.ActualHash }
+                            { art with ExpectedVersion = art.Artefact.ActualHash }
                         comp.UpdateArtefacts updateVersion
             
                         // 5) dumping updated alph files to disk
@@ -165,7 +186,7 @@ type ComputationGraphNode(producerVertex:MethodVertex, experimentRoot:string) =
                         logVerbose "Outputs metadata saved"
                 else
                     logVerbose "skipping as up to date"
-                comp.Outputs |> Seq.map (fun (output:DependencyGraph.VersionedArtefact) -> output.Version) |> List.ofSeq
+                comp.Outputs |> Seq.map (fun (output:DependencyGraph.VersionedArtefact) -> output.ExpectedVersion) |> List.ofSeq
  
         let outputCasted = List.map (fun x -> x :> Artefact) outputVersions
         seq{ yield outputCasted, null }

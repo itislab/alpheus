@@ -6,6 +6,7 @@ open System.IO
 open ItisLab.Alpheus
 open ItisLab.Alpheus.Tests.Utils
 open ItisLab.Alpheus.PathUtils
+open Angara.Data
 
 type PathUtilsTests(output)=
     inherit ItisLab.Alpheus.Tests.SampleExperiment.SampleExperiment(output)
@@ -234,18 +235,22 @@ type PathUtilsTests(output)=
 
     [<Theory>]
     [<MemberData("FileArtefactsForEnumerate")>]
-    member s.``enumerateItems enumerates files according to a pattern``(artefactId:string, expectedFiles:string[]) =
+    member s.``enumerateItems enumerates files according to a pattern`` (artefactId:string, expected: (string list * string)[]) =
         let artefactId = ArtefactId.Path artefactId
-        let files = enumerateItems s.FullPath artefactId |> Seq.map (relativePath s.FullPath >> unixPath) |> Seq.toArray
-        Assert.Equal<string>(expectedFiles, files)
+        let items = enumerateItems s.FullPath artefactId
+        let simplify = relativePath s.FullPath >> unixPath
+        let actual = items |> MdMap.toSeq |> Seq.map(fun (keyPaths, valuePath) -> keyPaths |> List.map simplify, simplify valuePath) |> Seq.toArray
+        Assert.Equal<string list * string>(expected, actual)
+        //let files = enumerateItems s.FullPath artefactId |> Seq.map (fun () relativePath s.FullPath >> unixPath) |> Seq.toArray
+        //Assert.Equal<string>(expectedFiles, files)
 
     static member FileArtefactsForEnumerate : obj[][] = 
-        [| [| "dir1/test1.txt"; [| "dir1/test1.txt" |] |]
-           [| "dir1/*.txt"; [| "dir1/test1.txt" |] |]
-           [| "dir*/test1.txt"; [| "dir1/test1.txt" |] |]
-           [| "*/*.txt"; [| "dir1/test1.txt"; "dir2/test3.txt" |] |]
-           [| "dir3/*/*.txt"; [| "dir3/dir5/test5.txt" |] |]
-           [| "*/*/*.txt"; [| "dir3/dir5/test5.txt" |] |]
-           [| "*/"; [| "dir1"; "dir2"; "dir3" |] |]
-           [| "*/*/"; [| "dir1/test2"; "dir3/dir5" |] |]
+        [| [| "dir1/test1.txt"; [| List.empty<string>, "dir1/test1.txt" |] |]
+           [| "dir1/*.txt"; [| [ "dir1/test1.txt" ],"dir1/test1.txt" |] |]
+           [| "dir*/test1.txt"; [| ["dir1"; "dir1/test1.txt" ], "dir1/test1.txt" |] |]
+           [| "*/*.txt"; [| ["dir1"; "dir1/test1.txt" ], "dir1/test1.txt"; ["dir2"; "dir2/test3.txt" ], "dir2/test3.txt" |] |]
+           [| "dir3/*/*.txt"; [| ["dir3/dir5"; "dir3/dir5/test5.txt"], "dir3/dir5/test5.txt" |] |]
+           [| "*/*/*.txt"; [| ["dir3"; "dir3/dir5"; "dir3/dir5/test5.txt"], "dir3/dir5/test5.txt" |] |]
+           [| "*/"; [| ["dir1"], "dir1"; ["dir2"], "dir2"; ["dir3"], "dir3" |] |]
+           [| "*/*/"; [| ["dir1";"dir1/test2"], "dir1/test2"; ["dir3";"dir3/dir5"], "dir3/dir5" |] |]
         |]

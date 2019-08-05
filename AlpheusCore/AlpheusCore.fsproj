@@ -17,6 +17,7 @@
     <AssemblyName>Alpheus</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="AsyncUtils.fs" />
     <Compile Include="ResultBuilder.fs" />
     <Compile Include="Logger.fs" />
     <Compile Include="AngaraTranslator.fs" />

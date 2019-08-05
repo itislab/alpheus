@@ -7,6 +7,7 @@ open System
 open System.Diagnostics
 open ItisLab.Alpheus
 open ItisLab.Alpheus.PathUtils
+open Angara.Data
 
 let ts = TraceSource("Dependency Graph")
 
@@ -17,17 +18,17 @@ let ts = TraceSource("Dependency Graph")
 type VersionedArtefact = {
     Artefact: ArtefactVertex
     /// Expected version. None means that the artefact version was never fixed
-    Version: HashString option
+    ExpectedVersion: MdMap<string, HashString option> option
     /// Which storages (their names) contain the Version of the Artefact
-    StoragesContainingVersion: string list
-    }
+    //StoragesContainingVersion: MdMap<string, string list> 
+}
 
 and ArtefactVertex(id:ArtefactId) =    
     let mutable input : MethodVertex option = None
     let mutable outputs : Set<CommandLineVertex> = Set.empty
     let mutable isTracked = false
-    let mutable storagesContainingActialHash = []
-    let mutable actualHash : HashString option = None // None means that file/dir does not exist on disk
+    //let mutable storagesContainingActialHash = []
+    let mutable actualHash : MdMap<string, HashString option> option = None // None means that file/dir does not exist on disk
     
     member s.Id = id
     member s.ProducedBy
@@ -50,9 +51,9 @@ and ArtefactVertex(id:ArtefactId) =
         with get() = actualHash
         and set v = actualHash <- v
 
-    member s.StoragesContainingActualHash
-        with get() = storagesContainingActialHash
-        and set v = storagesContainingActialHash <- v
+    //member s.StoragesContainingActualHash // DV: I suggest to compute this on-demand (or stick to a single storage?)
+    //    with get() = storagesContainingActialHash
+    //    and set v = storagesContainingActialHash <- v
 
     member s.Rank = Artefacts.rank id
         
@@ -71,7 +72,7 @@ and ArtefactVertex(id:ArtefactId) =
         let version =
             match s.ActualHash with
             |   None -> "not exist"
-            |   Some(hash) -> hash.Substring(0,6)
+            |   Some(hash) -> sprintf "%A" (hash |> MdMap.map(Option.map(fun s -> s.Substring(0,6))))
         sprintf "Artefact(%s|%s)" (s.Id.ToString()) version
 
 and [<CustomEquality; CustomComparison>] MethodVertex =
@@ -166,7 +167,7 @@ let artefactToAlphFile (artefact:ArtefactVertex) (alphFileFullPath:string) (expe
     match methodVertex with
     | MethodVertex.Source(sourceVertex) ->
         let expectedVersion =
-            match sourceVertex.Artefact.Version with
+            match sourceVertex.Artefact.ExpectedVersion with
             |   Some(v) -> v
             |   None -> invalidOp "The source artefact has no hash"
         let artefactPath = sourceVertex.Artefact.Artefact.Id |> idToFullPath experimentRoot
@@ -186,13 +187,13 @@ let artefactToAlphFile (artefact:ArtefactVertex) (alphFileFullPath:string) (expe
                 let candidate =
                     Path.GetRelativePath(alphFileDirFullPath, Path.GetFullPath(Path.Combine(experimentRoot,computedVertex.WorkingDirectory)))
                 if candidate = "" then ("."+Path.DirectorySeparatorChar.ToString()) else candidate
-            let vesionOptionConverter version : HashString =
+            let vesionOptionConverter version =
                 match version with
-                | None -> "---NEVER-PRODUCED---"
+                | None -> MdMap.scalar None
                 | Some v -> v
             let toSection (a:VersionedArtefact) = 
                 let relative = relativePath alphFileFullPath (a.Artefact.Id |> idToFullPath experimentRoot)
-                { RelativePath = relative; Hash = vesionOptionConverter a.Version}
+                { RelativePath = relative; Hash = vesionOptionConverter a.ExpectedVersion}
             { Inputs = computedVertex.Inputs |> Seq.map toSection |> Array.ofSeq
               Outputs = computedVertex.Outputs |> Seq.map toSection |> Array.ofSeq
               OutputIndex = computedVertex.Outputs |> Seq.findIndex (fun a -> a.Artefact.Id = artefact.Id)
@@ -244,7 +245,7 @@ type Graph() =
             raise(InvalidOperationException(sprintf "attempt to allocate new source vertex \"%s\", but the vertex with this ID is already allocated" methodId))
         else
             let artefact = s.GetOrAllocateArtefact(outputId)
-            let source = SourceVertex(methodId, {Artefact = artefact; Version = artefact.ActualHash; StoragesContainingVersion=[]})
+            let source = SourceVertex(methodId, {Artefact = artefact; ExpectedVersion = artefact.ActualHash})
             let vertex = Source(source)
             methodVertices <- Map.add methodId vertex methodVertices
             source
@@ -308,14 +309,8 @@ type Graph() =
                         // as there no alph file. We must create it now and fix current disk data version in it
                         // so calculating actual disk data version
                         // writing in expected versions
-                        let! calculatedVersion = Hash.fastHashPathAsync fullOutputPath
-                        let versionedArtefact =
-                            match calculatedVersion with
-                            |   None -> 
-                                { vertex.Artefact with Version = None }
-                                //raise(InvalidDataException(sprintf "The artefact %s does not exist on disk" (AlphFiles.fullIDtoString dequeuedArtefact.FullID)))
-                            |   Some(version) ->
-                                { vertex.Artefact with Version=Some version }
+                        let! calculatedVersion = Hash.hashVectorPathAndSave fullOutputPath
+                        let versionedArtefact = { vertex.Artefact with ExpectedVersion = Some calculatedVersion }                       
                         vertex.Artefact <- versionedArtefact
                         // 2a) connect the method vertex to the outputs
                         s.ConnectArtefactAsOutput versionedArtefact (Source vertex)
@@ -333,7 +328,7 @@ type Graph() =
                             let vertex = s.AllocateSourceMethod(dequeuedArtefact.Id)
 
                             // setting up expected version
-                            let artefact = { vertex.Artefact with Version = Some snapshot.Hash }
+                            let artefact = { vertex.Artefact with ExpectedVersion = Some snapshot.Hash }
                             vertex.Artefact <- artefact
                             // 2a) connect the method vertex to the outputs
                             s.ConnectArtefactAsOutput artefact (Source vertex)
@@ -363,15 +358,16 @@ type Graph() =
                             let allOutputsHashes = Array.map (fun x -> Some x.Hash) computeSection.Outputs 
                             let allOutputVertices = Array.map s.GetOrAllocateArtefact allOutputsIDs  
                             let versionedOutputs =
-                                Array.map2
-                                    (fun (v:ArtefactVertex) hash -> {Artefact=v; Version=hash; StoragesContainingVersion = []})
-                                    allOutputVertices allOutputsHashes |> Array.sortBy (fun x -> x.Artefact.Id)
+                                Array.map2 (fun (v:ArtefactVertex) hash -> {Artefact=v; Version=hash; StoragesContainingVersion = []}) allOutputVertices allOutputsHashes 
+                                |> Array.sortBy (fun x -> x.Artefact.Id)
+
+                            // TODO: DV: figure out what is this code for and restore it:
                             let versionedOutputSet = Set.ofArray versionedOutputs
                             if methodVertex.Outputs.Count > 0 then
-                                if methodVertex.Outputs |> Set.ofSeq <> versionedOutputSet then
+                                if Set.ofSeq methodVertex.Outputs <> versionedOutputSet then
                                     raise(InvalidOperationException(sprintf "different methods produce the same output artefact in the graph: 1) %A 2) %A" methodVertex.Outputs allOutputsIDs))                                
                             else
-                                // 2a) connect the method vertex to the outputs
+                                 //2a) connect the method vertex to the outputs
                                 Array.iter (fun a -> s.ConnectArtefactAsOutput a (Command methodVertex)) versionedOutputs                                
                             // 2b) connect inputs to the vertex
                             if methodVertex.Inputs.Count = 0 then
@@ -389,25 +385,31 @@ type Graph() =
             return processedOutputs
         }
 
+
+/// Modifies the given artefacts by updating their actual hashes.
 let fillinActualHashesAsync (artefacts:ArtefactVertex seq) (experimentRoot: string) =
     async {
         let fullPaths = Seq.map (fun (a:ArtefactVertex) -> idToFullPath experimentRoot a.Id) artefacts |> Array.ofSeq
         let fullPathsDistinct = Seq.distinct fullPaths |> Array.ofSeq
         let lookupTable = fullPathsDistinct |> Seq.mapi (fun i x -> x,i) |> Map.ofSeq 
-        let asyncs = Seq.map Hash.fastHashPathAsync fullPathsDistinct |> Array.ofSeq
+        let asyncs = fullPathsDistinct |> Seq.map Hash.hashVectorPathAndSave |> Array.ofSeq
         let! hashes = Async.Parallel asyncs
-        Seq.iter2 (fun fullPath (art:ArtefactVertex) -> let idx = Map.find fullPath lookupTable in let hash = hashes.[idx] in art.ActualHash <- hash ) fullPaths artefacts
+        artefacts |> Seq.iter2 (fun fullPath (art:ArtefactVertex) -> let idx = Map.find fullPath lookupTable in let hash = hashes.[idx] in art.ActualHash <- Some hash) fullPaths 
     }
 
-/// Fulls up the StoragesContainingActialHash of the artefacts
+/// Fulls up the StoragesContainingActualHash of the artefacts
 let fillinArtefactContainingStoragesAsync (artefacts:ArtefactVertex seq) (getContainingStorageNames: (HashString option array -> Async<(string list) array>)) =
     async {
         // we fill in only artefacts that are on disk
-        let artefactsArray = Seq.filter (fun (art:ArtefactVertex) -> art.ActualHash.IsSome ) artefacts |> Array.ofSeq
+        let artefactItemHashes = 
+            artefacts
+            |> Seq.filter (fun (art:ArtefactVertex) -> art.ActualHash.IsSome) 
+            |> Seq.map(fun artefact -> artefact.ActualHash.Value |> MdMap.toSeq |> Seq.filter (snd >> Option.isSome) |> Seq.map(fun (key, hash) -> hash))
+            |> Seq.concat
+            |> Array.ofSeq
 
-        let artefactVersions = artefactsArray |> Array.map (fun (art:ArtefactVertex) -> art.ActualHash)
-        let! containigStorages = getContainingStorageNames artefactVersions
-        Array.iter2 (fun (art:ArtefactVertex) storages -> art.StoragesContainingActualHash <- storages ) artefactsArray containigStorages
+        let! containigStorages = getContainingStorageNames artefactItemHashes
+        Array.iter2 (fun (art:ArtefactVertex) storages -> art.StoragesContainingActualHash <- storages ) artefactItemHashes containigStorages
     }
 
 /// fills up Inputs and Outputs of methods with the information about the storages that contain the mentioned versions
@@ -424,7 +426,7 @@ let fillinMethodEdgeContainingStoragesAsync (methods:MethodVertex seq) (getConta
                     yield! computedVertex.Inputs;
                     yield! computedVertex.Outputs
                 }
-        let allVersions = methodsArray |> Seq.collect extractExpectedVersions |> Seq.map (fun art -> art.Version) |> Array.ofSeq
+        let allVersions = methodsArray |> Seq.collect extractExpectedVersions |> Seq.map (fun art -> art.ExpectedVersion) |> Array.ofSeq
         let! containingStorages = getContainingStorageNames allVersions
         let storagesMap = Seq.zip allVersions containingStorages |> Map.ofSeq
         

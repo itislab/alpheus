@@ -36,7 +36,7 @@ type SourceGraphNode(orphanArtefact:DependencyGraph.VersionedArtefact) =
         // source method is always up to date, thus succeeds                        
         let result = {
             Id = orphanArtefact.Artefact.Id;
-            IsUpToDate = (not isOnDisk) || (orphanArtefact.Artefact.ActualHash.Value = orphanArtefact.Version.Value);
+            IsUpToDate = (not isOnDisk) || (orphanArtefact.Artefact.ActualHash.Value = orphanArtefact.ExpectedVersion.Value);
             IsOnDisk = isOnDisk;
             IsTracked = orphanArtefact.Artefact.IsTracked
             ProducedVersionStorages = orphanArtefact.StoragesContainingVersion
@@ -89,9 +89,9 @@ type NotSourceGraphNode(methodVertex:DependencyGraph.CommandLineVertex) =
         else                    
             if
                 // Checking b)
-                (Seq.exists (fun (input:DependencyGraph.VersionedArtefact) -> isVersionMismatch input.Version input.Artefact.ActualHash) methodVertex.Inputs) ||
+                (Seq.exists (fun (input:DependencyGraph.VersionedArtefact) -> isVersionMismatch input.ExpectedVersion input.Artefact.ActualHash) methodVertex.Inputs) ||
                 // Checking c)
-                (Seq.exists (fun (output:DependencyGraph.VersionedArtefact) -> isVersionMismatch output.Version output.Artefact.ActualHash) methodVertex.Outputs) then
+                (Seq.exists (fun (output:DependencyGraph.VersionedArtefact) -> isVersionMismatch output.ExpectedVersion output.Artefact.ActualHash) methodVertex.Outputs) then
                 outdatedResult            
             else
                 let results = List.init methodVertex.Outputs.Count (fun i -> outputToStatus i true:> Artefact)

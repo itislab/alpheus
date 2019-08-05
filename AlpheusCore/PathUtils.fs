@@ -2,6 +2,7 @@
 
 open System
 open System.IO
+open Angara.Data
 
 /// conversion to OS specific directory delimiter
 let internal normalizePath (path:string) = path.Replace('/', Path.DirectorySeparatorChar).Trim()
@@ -105,21 +106,23 @@ let idToAlphFileFullPath (experimentRoot: string) (artefactId:ArtefactId) : stri
     Path.Combine(experimentRoot, idToAlphFilePath artefactId)
 
 
-let enumeratePath (artefactPath:string) =
+let enumeratePath (artefactPath:string) : MdMap<string, string> =
     let isDirectory = isDirectory artefactPath
     let isHidden (name:string) = name.StartsWith(".")
     let isPattern (name:string) = name.Contains("*")
     
-    let rec enumerate (path: string) (parts : string list) : string seq =
+    let rec enumerate (path: string) (parts: string list) : MdMap<string, string> =
         match parts with
         | [] -> 
-            Seq.singleton path
+            MdMap.scalar path
         | head :: _ when isHidden head ->
-            Seq.empty
+            MdMap.empty
         | [head] when isDirectory -> 
             DirectoryInfo(path).GetDirectories(head) |> Seq.filter(fun fi -> not(isHidden fi.Name)) |> Seq.map(fun fi -> fi.FullName)     
+            |> Seq.fold (fun map fi -> map |> MdMap.add [fi] fi) MdMap.empty
         | [head] -> 
             DirectoryInfo(path).GetFiles(head) |> Seq.filter(fun fi -> not(isHidden fi.Name)) |> Seq.map(fun fi -> fi.FullName)     
+            |> Seq.fold (fun map fi -> map |> MdMap.add [fi] fi) MdMap.empty
         | head :: tail ->
             sprintf "%s :: %A" head tail |> Logger.logInfo Logger.Test
             sprintf "Looking for %s in %s" head path |> Logger.logInfo Logger.Test
@@ -127,9 +130,11 @@ let enumeratePath (artefactPath:string) =
             sprintf "Found %A" found |> Logger.logInfo Logger.Test
             DirectoryInfo(path).GetDirectories(head) 
             |> Seq.filter(fun fi -> not(isHidden fi.Name)) 
-            |> Seq.map(fun fi -> enumerate fi.FullName tail) 
-            |> Seq.concat 
+            |> Seq.map(fun fi -> (fi.FullName, enumerate fi.FullName tail)) 
+            |> Seq.fold(fun map (fi, mapForFi) -> map |> MdMap.set [fi] mapForFi) MdMap.empty
 
+           
+    // Combines the top items of the path unless a pattern item is found.
     let rec rootPath path (parts : string list) : (string * string list) =
         match parts with
         | [] -> (path, [])
@@ -144,4 +149,6 @@ let enumeratePath (artefactPath:string) =
 let enumerateItems (experimentRoot: string) (artefactId: ArtefactId) =
     let artefactPath = artefactId |> idToFullPath experimentRoot 
     enumeratePath artefactPath
+
+
 

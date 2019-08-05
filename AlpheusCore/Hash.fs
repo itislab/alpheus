@@ -5,6 +5,7 @@ open System
 open System.Text
 open ItisLab.Alpheus
 open AlphFiles
+open Angara.Data
 
         
 let hashToString (data : byte array) : HashString = System.BitConverter.ToString(data).Replace("-", System.String.Empty)
@@ -107,7 +108,7 @@ let hashPathAsync fullPath =
     }
     
 /// optimization that caches the computed hashes into *.hash files
-let fastHashPathAsync (fullPath:string) =
+let hashPathAndSave (fullPath:string) =
     let hashFilePath = PathUtils.pathToHashFile fullPath
     let hashAndSave() =            
         async {
@@ -159,6 +160,15 @@ let fastHashPathAsync (fullPath:string) =
         else
             return! hashAndSave()
     }
+
+/// The give path can contain patterns and is resolved into the actual list of files so for each of the files
+/// the hash is computed and saved into a file.
+let hashVectorPathAndSave (fullPath:string) =
+    async {
+        let resolvedFullPaths = PathUtils.enumeratePath fullPath
+        return! resolvedFullPaths |> AsyncUtils.mapAsync (fun (_, path) -> hashPathAndSave path)
+    }
+
 
 /// Computes signature of supplied computeSection (Signature and isTracked member inside this computeSection is ignored during hash calculation)
 let getSignature (computeSection:CommandOutput) =
