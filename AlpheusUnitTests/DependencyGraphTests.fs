@@ -36,7 +36,7 @@ let ``GetOrAllocateComputeMethod returns single vertex for the same artefact ID`
 let ``AllocateSnapshotVertex creates single vertex`` () =
     let g = DependencyGraph.Graph()
     let ident = ArtefactId.Path  @"dir1/testfile.txt"
-    let vertex1 = g.AllocateSourceMethod ident
+    let vertex1 = g.AddSource ident
     let producerVertex = MethodVertex.Source vertex1
     
     Assert.Equal(1,g.ArtefactsCount) // as AllocateSnapshotVertex allocates artefact if it is not allocated

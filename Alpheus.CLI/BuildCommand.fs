@@ -23,5 +23,5 @@ let run (buildArgs:ParseResults<BuildArgs>) =
             match roots with
             | [] -> Error "An output artefact is not specified"
             | [None] -> Error "Not an experiment folder: .alpheus"
-            | [Some experimentRoot] -> API.buildAsync experimentRoot deps outputs command doNotCleanOutputs |> Async.RunSynchronously
+            | [Some experimentRoot] -> Error "NOT IMPLEMENTED" // API.buildAsync experimentRoot deps outputs command doNotCleanOutputs |> Async.RunSynchronously
             | _ -> Error "Not all of the input or output artefacts are under the same experiment root folder"

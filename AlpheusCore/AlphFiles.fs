@@ -14,9 +14,12 @@ open Angara.Data
 //  alph file: file/vector-vector.txt.alph
 //  SourceOrigin.RelativePath: */*.txt
 
+
+type ArtefactVersion = MdMap<string, HashString option>
+
 type VersionedArtefact = {
     RelativePath: AlphRelativePath
-    Hash: MdMap<string, HashString option>
+    Hash: ArtefactVersion
 }
 
 type CommandOutput =  {

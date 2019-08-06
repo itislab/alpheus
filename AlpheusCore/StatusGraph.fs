@@ -25,13 +25,13 @@ type StatusGraphNode(depCount,outCount) =
     member s.OutputCount =
         outCount
 
-type SourceGraphNode(orphanArtefact:DependencyGraph.VersionedArtefact) =
+type SourceGraphNode(orphanArtefact:DependencyGraph.LinkToArtefact, experimentRoot: string) =
     inherit StatusGraphNode(0,1)
 
     override s.Execute(_, _) = //ignoring inputs and checkpoint.
         // Just utilizing parallel method computation feature of AngaraFlow to check the statuses of all method vertex
 
-        let isOnDisk = orphanArtefact.Artefact.ActualHash.IsSome
+        let isOnDisk = orphanArtefact.Artefact.ActualVersion.IsSome
 
         // source method is always up to date, thus succeeds                        
         let result = {
@@ -46,7 +46,7 @@ type SourceGraphNode(orphanArtefact:DependencyGraph.VersionedArtefact) =
         seq{ yield [result :> Artefact], null }
 
 type NotSourceGraphNode(methodVertex:DependencyGraph.CommandLineVertex) =
-    inherit StatusGraphNode(methodVertex.Inputs.Count, methodVertex.Outputs.Count)
+    inherit StatusGraphNode(methodVertex.Inputs.Length, methodVertex.Outputs.Length)
 
     member s.FirstOutputID =
         methodVertex.MethodId
@@ -100,7 +100,7 @@ type NotSourceGraphNode(methodVertex:DependencyGraph.CommandLineVertex) =
 let buildStatusGraph (g:DependencyGraph.Graph) =    
     let factory method : StatusGraphNode =
         match method with
-        |   DependencyGraph.Source(source) -> upcast SourceGraphNode(source.Artefact)
+        |   DependencyGraph.Source(source) -> upcast SourceGraphNode(source.Output)
         |   DependencyGraph.Command(computed) -> upcast NotSourceGraphNode(computed)
     g |> DependencyGraphToAngaraWrapper |> AngaraTranslator.translate factory
         

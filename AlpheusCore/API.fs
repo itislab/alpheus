@@ -11,25 +11,23 @@ open ItisLab.Alpheus
 open System.IO
 open Angara.Data
 
-let buildDependencyGraphAsync experimentRoot artefactList =
+let buildDependencyGraphAsync experimentRoot artefactIds =
     async {
         let! config = Config.openExperimentDirectoryAsync experimentRoot
 
-        let g = DependencyGraph.Graph()
-        let vertexList = List.map g.GetOrAllocateArtefact artefactList
         Logger.logVerbose Logger.API "Building the dependency graph"
-        let! _ = g.LoadDependenciesAsync vertexList experimentRoot
+        let g = artefactIds |> DependencyGraph.Graph.Build experimentRoot
         logVerbose LogCategory.API (sprintf "Dependency graph is built (%d artefacts; %d methods)" g.ArtefactsCount g.MethodsCount)
+
         // Filling in actual hashes
-        do! fillinActualHashesAsync g.Artefacts experimentRoot
-        Logger.logInfo Logger.API "Actual hashes are loaded"
+        do! g.UpdateActualVersions |> doAndLogElapsedTime (Logger.logInfo Logger.API) "Actual hashes are loaded"
 
         let storages = config.ConfigFile.Storage
         let storagePresenceChecker = StorageFactory.getPresenseChecker experimentRoot (Map.toSeq storages)
 
         // Filling in with information about which storages hold the versions of the artefacts
-        let! _ = Async.Parallel [|fillinArtefactContainingStoragesAsync g.Artefacts storagePresenceChecker; fillinMethodEdgeContainingStoragesAsync g.Methods storagePresenceChecker|]
-        Logger.logVerbose Logger.API "Artefact presence in storages checked"
+        //let! _ = Async.Parallel [|fillinArtefactContainingStoragesAsync g.Artefacts storagePresenceChecker; fillinMethodEdgeContainingStoragesAsync g.Methods storagePresenceChecker|]
+        //Logger.logVerbose Logger.API "Artefact presence in storages checked"
         return g
     }
 
@@ -121,164 +119,168 @@ let compute (experimentRoot, artefactId) =
 
 /// Prints to the stdout the textural statuses of the artefact and its provenance
 let status (experimentRoot, artefactId) =
-    async {
-        let! g = buildDependencyGraphAsync experimentRoot [artefactId]
-        let flowGraph = StatusGraph.buildStatusGraph g
-        return StatusGraph.printStatuses flowGraph
-    } |> Async.RunSynchronously
+    failwith "Not implemented" |> ignore
+    //async {
+    //    let! g = buildDependencyGraphAsync experimentRoot [artefactId]
+    //    let flowGraph = StatusGraph.buildStatusGraph g
+    //    return StatusGraph.printStatuses flowGraph
+    //} |> Async.RunSynchronously
 
 /// Tries to restore the artefact to the version stored in .alph file using all available storages
-let restoreAsync (experimentRoot, artefactId : ArtefactId) =
-    let restoreSingleItem path versionToRestore =
-        async {
-            match versionToRestore with
-            | None -> 
-                return Error (sprintf "%A: hash is missing for %s" artefactId path)
-            | Some versionToRestore ->
-                let! config = Config.openExperimentDirectoryAsync experimentRoot
-                let checker = config.ConfigFile.Storage |> Map.toSeq |> StorageFactory.getPresenseChecker experimentRoot
-                let! restoreSourcesResults = checker [| Some versionToRestore |]
-                let restoreSources = restoreSourcesResults.[0]
-                if List.length restoreSources = 0 then
-                    return Error (sprintf "%A:%s is not found in any registered storages" artefactId (versionToRestore.Substring(0,6)))
-                else
-                    let restoreSource = List.head restoreSources
-                    logVerbose LogCategory.API (sprintf "Restoring %A:%s from %s storage" artefactId (versionToRestore.Substring(0,6)) restoreSource)
-                    let restore = StorageFactory.getStorageRestore experimentRoot (Map.find restoreSource config.ConfigFile.Storage)
-                    do! restore artefactId versionToRestore
-                    return Ok()
-        }
+let restoreAsync (experimentRoot, artefactId : ArtefactId) = 
+    failwith "not implemented" |> ignore
+    //let restoreSingleItem path versionToRestore =
+    //    async {
+    //        match versionToRestore with
+    //        | None -> 
+    //            return Error (sprintf "%A: hash is missing for %s" artefactId path)
+    //        | Some versionToRestore ->
+    //            let! config = Config.openExperimentDirectoryAsync experimentRoot
+    //            let checker = config.ConfigFile.Storage |> Map.toSeq |> StorageFactory.getPresenseChecker experimentRoot
+    //            let! restoreSourcesResults = checker [| Some versionToRestore |]
+    //            let restoreSources = restoreSourcesResults.[0]
+    //            if List.length restoreSources = 0 then
+    //                return Error (sprintf "%A:%s is not found in any registered storages" artefactId (versionToRestore.Substring(0,6)))
+    //            else
+    //                let restoreSource = List.head restoreSources
+    //                logVerbose LogCategory.API (sprintf "Restoring %A:%s from %s storage" artefactId (versionToRestore.Substring(0,6)) restoreSource)
+    //                let restore = StorageFactory.getStorageRestore experimentRoot (Map.find restoreSource config.ConfigFile.Storage)
+    //                do! restore artefactId versionToRestore
+    //                return Ok()
+    //    }
 
 
-    async {
-        let alphFile = artefactId |> idToAlphFileFullPath experimentRoot
-        let! loadResults = AlphFiles.tryLoadAsync alphFile                            
-        match loadResults with
-        | None ->
-            return Error (sprintf "There is no artefact %A on disk to fetch the restore version from" artefactId)
-        | Some(alphFile) ->
-            let versionToRestore =
-                match alphFile.Origin with
-                |   SourceOrigin(ver) -> ver.Hash
-                |   CommandOrigin(cmd) -> cmd.Outputs.[cmd.OutputIndex].Hash
-            let! results = versionToRestore |> AsyncUtils.mapAsync (fun (paths, hash) -> restoreSingleItem (paths |> List.last) hash)
-            if results |> MdMap.toSeq |> Seq.forall (fun (_, r) -> match r with Ok _ -> true | Error _ -> false)
-                then return Ok()
-            else
-                return Error (sprintf "%A: some of its items couldn't be restored" artefactId)
-    }
+    //async {
+    //    let alphFile = artefactId |> idToAlphFileFullPath experimentRoot
+    //    let! loadResults = AlphFiles.tryLoadAsync alphFile                            
+    //    match loadResults with
+    //    | None ->
+    //        return Error (sprintf "There is no artefact %A on disk to fetch the restore version from" artefactId)
+    //    | Some(alphFile) ->
+    //        let versionToRestore =
+    //            match alphFile.Origin with
+    //            |   SourceOrigin(ver) -> ver.Hash
+    //            |   CommandOrigin(cmd) -> cmd.Outputs.[cmd.OutputIndex].Hash
+    //        let! results = versionToRestore |> AsyncUtils.mapAsync (fun (paths, hash) -> restoreSingleItem (paths |> List.last) hash)
+    //        if results |> MdMap.toSeq |> Seq.forall (fun (_, r) -> match r with Ok _ -> true | Error _ -> false)
+    //            then return Ok()
+    //        else
+    //            return Error (sprintf "%A: some of its items couldn't be restored" artefactId)
+    //}
 
 /// Saves the supplied artefact to the supplied storage.
 /// saveAll means to save all dependencies for the specified artefact
 let saveAsync (experimentRoot, artefactId) storageName saveAll =
-    let alphFilePath = artefactId |> idToAlphFileFullPath experimentRoot
-    let artefactPath = artefactId |> idToFullPath experimentRoot
-    async {
-        let! alphFile =
-            async {
-                let! loadResults = AlphFiles.tryLoadAsync alphFilePath                                                                        
-                match loadResults with
-                | None ->                                
-                    // This is a "source" file without .alph file created yet. creating an .alphfile for it                                                                                
-                    let! hashResult = Hash.hashVectorPathAndSave artefactPath
-                    let snapshotSection : AlphFiles.VersionedArtefact =
-                        { Hash = hashResult
-                          RelativePath = relativePath alphFilePath artefactPath }
-                    return 
-                        { IsTracked = true
-                          Origin = SourceOrigin snapshotSection }
-                | Some(alphFile) ->
-                    return { alphFile with IsTracked = true }                             
-        }                                       
-        do! AlphFiles.saveAsync alphFile alphFilePath
+    failwith "not implemented"
+    //let alphFilePath = artefactId |> idToAlphFileFullPath experimentRoot
+    //let artefactPath = artefactId |> idToFullPath experimentRoot
+    //async {
+    //    let! alphFile =
+    //        async {
+    //            let! loadResults = AlphFiles.tryLoadAsync alphFilePath                                                                        
+    //            match loadResults with
+    //            | None ->                                
+    //                // This is a "source" file without .alph file created yet. creating an .alphfile for it                                                                                
+    //                let! hashResult = Hash.hashVectorPathAndSave artefactPath
+    //                let snapshotSection : AlphFiles.VersionedArtefact =
+    //                    { Hash = hashResult
+    //                      RelativePath = relativePath alphFilePath artefactPath }
+    //                return 
+    //                    { IsTracked = true
+    //                      Origin = SourceOrigin snapshotSection }
+    //            | Some(alphFile) ->
+    //                return { alphFile with IsTracked = true }                             
+    //    }                                       
+    //    do! AlphFiles.saveAsync alphFile alphFilePath
                     
-        let! g = buildDependencyGraphAsync experimentRoot [artefactId]                                                                            
+    //    let! g = buildDependencyGraphAsync experimentRoot [artefactId]                                                                            
                     
-        let artefactsToSave =
-            if saveAll then
-                g.Artefacts |> Seq.filter (fun art -> art.IsTracked) |> Array.ofSeq
-            else
-                [| g.GetOrAllocateArtefact artefactId |]
+    //    let artefactsToSave =
+    //        if saveAll then
+    //            g.Artefacts |> Seq.filter (fun art -> art.IsTracked) |> Array.ofSeq
+    //        else
+    //            [| g.GetOrAllocateArtefact artefactId |]
                                                 
-        let! config = Config.openExperimentDirectoryAsync experimentRoot
-        let storageToSaveToOption =                                
-            config.ConfigFile.Storage |> Map.toSeq |> Seq.filter (fun pair -> let k,_ = pair in k=storageName) |> Seq.map snd |> Seq.tryHead
+    //    let! config = Config.openExperimentDirectoryAsync experimentRoot
+    //    let storageToSaveToOption =                                
+    //        config.ConfigFile.Storage |> Map.toSeq |> Seq.filter (fun pair -> let k,_ = pair in k=storageName) |> Seq.map snd |> Seq.tryHead
           
-        match storageToSaveToOption with
-        | Some storageToSaveTo ->
-            let save = StorageFactory.getStorageSaver experimentRoot storageToSaveTo
-            let saveDescriptors = 
-                artefactsToSave 
-                |> Array.map (fun art -> art.ActualHash.Value |> MdMap.toSeq |> Seq.map (fun (paths, hash) -> paths |> List.last, hash.Value))
-                |> Seq.concat
-                |> Seq.toArray
-            let! _ = save saveDescriptors
+    //    match storageToSaveToOption with
+    //    | Some storageToSaveTo ->
+    //        let save = StorageFactory.getStorageSaver experimentRoot storageToSaveTo
+    //        let saveDescriptors = 
+    //            artefactsToSave 
+    //            |> Array.map (fun art -> art.ActualVersion.Value |> MdMap.toSeq |> Seq.map (fun (paths, hash) -> paths |> List.last, hash.Value))
+    //            |> Seq.concat
+    //            |> Seq.toArray
+    //        let! _ = save saveDescriptors
 
-            // adding the saved artefact into the gitignore
-            let newIgnoreEntry (art:ArtefactVertex) = art.Id |> idToExperimentPath |> unixPath
-            let newIgnoreEntries = artefactsToSave |> Array.map newIgnoreEntry
-            let gitIgnorePath = Path.Combine(experimentRoot,".gitignore")
-            do! GitIgnoreManager.addEntriesAsync gitIgnorePath newIgnoreEntries
+    //        // adding the saved artefact into the gitignore
+    //        let newIgnoreEntry (art:ArtefactVertex) = art.Id |> idToExperimentPath |> unixPath
+    //        let newIgnoreEntries = artefactsToSave |> Array.map newIgnoreEntry
+    //        let gitIgnorePath = Path.Combine(experimentRoot,".gitignore")
+    //        do! GitIgnoreManager.addEntriesAsync gitIgnorePath newIgnoreEntries
 
-            return Ok()
-        | None ->
-            // specified storage is not found
-            let storageNames = config.ConfigFile.Storage |> Map.toSeq |> Seq.map fst |> List.ofSeq
-            let errMsg = 
-                sprintf "The storage name you've specified (\"%s\") does not exist. Please use one of the available storages %A or register a new one." storageName storageNames
-            return Error errMsg
-    }
+    //        return Ok()
+    //    | None ->
+    //        // specified storage is not found
+    //        let storageNames = config.ConfigFile.Storage |> Map.toSeq |> Seq.map fst |> List.ofSeq
+    //        let errMsg = 
+    //            sprintf "The storage name you've specified (\"%s\") does not exist. Please use one of the available storages %A or register a new one." storageName storageNames
+    //        return Error errMsg
+    //}
 
 
 /// Adds one more method vertex to the experiment graph
 /// deps: a list of paths to the input artefacts. outputs: a list of paths to the produced artefacts
 let buildAsync experimentRoot deps outputs command doNotCleanOutputs =
-    let getId = pathToId experimentRoot
-    let fullInputIDs = List.map getId deps
-    let fullOutputIDs = List.map getId outputs
-    logVerbose LogCategory.API (sprintf "Dependencies: %A" fullInputIDs)
-    logVerbose LogCategory.API (sprintf "Outputs: %A" fullOutputIDs)
-    logVerbose LogCategory.API (sprintf "Command: \"%s\"" command)
+    failwith "not implemented" |> ignore
+    //let getId = pathToId experimentRoot
+    //let fullInputIDs = List.map getId deps
+    //let fullOutputIDs = List.map getId outputs
+    //logVerbose LogCategory.API (sprintf "Dependencies: %A" fullInputIDs)
+    //logVerbose LogCategory.API (sprintf "Outputs: %A" fullOutputIDs)
+    //logVerbose LogCategory.API (sprintf "Command: \"%s\"" command)
 
-    command |> MethodCommand.validate (fullInputIDs.Length, fullOutputIDs.Length)
+    //command |> MethodCommand.validate (fullInputIDs.Length, fullOutputIDs.Length)
 
-    async {
-        let! g = buildDependencyGraphAsync experimentRoot fullInputIDs
-        let inputVertices = List.map g.GetOrAllocateArtefact fullInputIDs                     
-        let inputVersionedVertices = List.map getVersionedArtefact inputVertices
-        let outputVertices = List.map g.GetOrAllocateArtefact fullOutputIDs
-        let outputVersionedVertices = List.map getVersionedArtefact outputVertices
-        // traceVerbose(sprintf "Graph artefacts: %A" graphArtefacts)
-        // adding method vertex                
-        let methodVertex = g.AddMethod inputVersionedVertices outputVersionedVertices
+    //async {
+    //    let! g = buildDependencyGraphAsync experimentRoot fullInputIDs
+    //    let inputVertices = List.map g.GetOrAllocateArtefact fullInputIDs                     
+    //    let inputVersionedVertices = List.map getVersionedArtefact inputVertices
+    //    let outputVertices = List.map g.GetOrAllocateArtefact fullOutputIDs
+    //    let outputVersionedVertices = List.map getVersionedArtefact outputVertices
+    //    // traceVerbose(sprintf "Graph artefacts: %A" graphArtefacts)
+    //    // adding method vertex                
+    //    let methodVertex = g.AddMethod inputVersionedVertices outputVersionedVertices
     
-        // saving command and current working dir
-        let cwd = Directory.GetCurrentDirectory()
-        let rootBasedCwd = Path.GetRelativePath(experimentRoot, cwd) + Path.DirectorySeparatorChar.ToString()
-        methodVertex.WorkingDirectory <- rootBasedCwd
-        methodVertex.Command <- command
+    //    // saving command and current working dir
+    //    let cwd = Directory.GetCurrentDirectory()
+    //    let rootBasedCwd = Path.GetRelativePath(experimentRoot, cwd) + Path.DirectorySeparatorChar.ToString()
+    //    methodVertex.WorkingDirectory <- rootBasedCwd
+    //    methodVertex.Command <- command
 
-        methodVertex.DoNotCleanOutputs <- doNotCleanOutputs
-        if doNotCleanOutputs then
-            Logger.logInfo Logger.API "Clearing of outputs by alpheus is disabled for this computation"
+    //    methodVertex.DoNotCleanOutputs <- doNotCleanOutputs
+    //    if doNotCleanOutputs then
+    //        Logger.logInfo Logger.API "Clearing of outputs by alpheus is disabled for this computation"
 
-        Logger.logVerbose Logger.API (sprintf "Dependency graph is built (%d artefacts; %d methods)" g.ArtefactsCount g.MethodsCount)
-        Logger.logVerbose Logger.API (sprintf "Graph artefacts: %A" g.Artefacts)
-        // dumping outputs as .alph files
-        // all outputs share the same compute section                    
-        let updateAlphFileAsync alphFilePath artefact =
-            async {
-                let alphFilePath =
-                    if Seq.exists (fun c -> (c=Path.DirectorySeparatorChar) || (c=Path.AltDirectorySeparatorChar)) alphFilePath then
-                        alphFilePath
-                    else
-                        Path.Combine(".",alphFilePath)
-                let alphFileFullPath = Path.GetFullPath(alphFilePath)
-                let alphFile = DependencyGraph.artefactToAlphFile artefact alphFileFullPath experimentRoot                                                
-                do! AlphFiles.saveAsync alphFile alphFilePath
-            }
-        let outputAlphPaths = List.map pathToAlphFile outputs
-        let! _ = List.map2 updateAlphFileAsync outputAlphPaths outputVertices |> Async.Parallel
+    //    Logger.logVerbose Logger.API (sprintf "Dependency graph is built (%d artefacts; %d methods)" g.ArtefactsCount g.MethodsCount)
+    //    Logger.logVerbose Logger.API (sprintf "Graph artefacts: %A" g.Artefacts)
+    //    // dumping outputs as .alph files
+    //    // all outputs share the same compute section                    
+    //    let updateAlphFileAsync alphFilePath artefact =
+    //        async {
+    //            let alphFilePath =
+    //                if Seq.exists (fun c -> (c=Path.DirectorySeparatorChar) || (c=Path.AltDirectorySeparatorChar)) alphFilePath then
+    //                    alphFilePath
+    //                else
+    //                    Path.Combine(".",alphFilePath)
+    //            let alphFileFullPath = Path.GetFullPath(alphFilePath)
+    //            let alphFile = DependencyGraph.artefactToAlphFile artefact alphFileFullPath experimentRoot                                                
+    //            do! AlphFiles.saveAsync alphFile alphFilePath
+    //        }
+    //    let outputAlphPaths = List.map pathToAlphFile outputs
+    //    let! _ = List.map2 updateAlphFileAsync outputAlphPaths outputVertices |> Async.Parallel
 
-        return Ok()
-    }
+    //    return Ok()
+    //}

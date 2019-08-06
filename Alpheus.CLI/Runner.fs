@@ -62,14 +62,16 @@ let run (programName:string) (parseResults:ParseResults<AlpheusArgs>) : Result<u
             let statusArgs = parseResults.GetResult <@ Status @>
             let artefactPath = statusArgs.GetResult <@ StatusArgs.File  @>
             let! artefact = API.artefactFor artefactPath
-            return! API.status artefact
+            return! Error "NOT IMPLEMENTED"
+            //return! API.status artefact
         }
     elif parseResults.Contains Restore then
         result {
             let restoreArgs = parseResults.GetResult <@ Restore @>
             let artefactPath = restoreArgs.GetResult <@ RestoreArgs.Path @>
             let! artefact = API.artefactFor artefactPath
-            return! API.restoreAsync artefact |> Async.RunSynchronously
+            return! Error "NOT IMPLEMENTED"
+            //return! API.restoreAsync artefact |> Async.RunSynchronously
         }
     elif parseResults.Contains Save then
         result {

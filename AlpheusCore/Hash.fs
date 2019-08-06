@@ -176,24 +176,26 @@ let getSignature (computeSection:CommandOutput) =
     let addHash (str:string) =
         let bytes = System.Text.Encoding.UTF8.GetBytes(str)
         sha.TransformBlock(bytes,0,bytes.Length,bytes,0) |> ignore
-        ()
     addHash computeSection.Command 
     addHash computeSection.WorkingDirectory
     let hashArtefact art =
         addHash art.RelativePath
-        addHash art.Hash
-    Seq.iter hashArtefact (Seq.append computeSection.Inputs  computeSection.Outputs)
+        art.Hash |> MdMap.toSeq |> Seq.map(snd >> Option.map addHash) |> ignore
+    Seq.iter hashArtefact (Seq.append computeSection.Inputs computeSection.Outputs)
     sha.TransformFinalBlock(Array.zeroCreate<byte> 0,0,0) |> ignore
     hashToString sha.Hash
 
-let checkSignature (computeSection:CommandOutput) =
+/// Computes the actual signature and compares with the expected.
+/// If they are different, the hash invalidates in the computeSection.
+let validateSignature (computeSection:CommandOutput) =
     let readSignature = computeSection.Signature
-    let expectedSignature = getSignature computeSection
-    if readSignature = expectedSignature then
+    let actualSignature = getSignature computeSection
+    if readSignature = actualSignature then
         computeSection
     else
+        let invalidate (version:ArtefactVersion) : ArtefactVersion = version |> MdMap.map(fun _ -> None)
         // wiping out result hashes
         {
             computeSection with
-                Outputs = Array.map (fun x -> {x with Hash=""}) computeSection.Outputs
+                Outputs = computeSection.Outputs |> Array.map (fun output -> {output with Hash = invalidate output.Hash}) 
         }

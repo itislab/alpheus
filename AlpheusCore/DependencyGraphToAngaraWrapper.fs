@@ -13,7 +13,7 @@ type DependencyGraphToAngaraWrapper(graph: Graph) =
 
         member x.OutputsOf method =
             match method with
-            | Source src -> Seq.singleton src.Artefact.Artefact
+            | Source src -> Seq.singleton src.Output.Artefact
             | Command cmd -> cmd.Outputs |> Seq.map (fun a -> a.Artefact)
 
         member x.ProducedBy artefact = artefact.ProducedBy
