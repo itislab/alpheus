@@ -13,21 +13,12 @@ open Angara.Data
 
 let buildDependencyGraphAsync experimentRoot artefactIds =
     async {
-        let! config = Config.openExperimentDirectoryAsync experimentRoot
-
         Logger.logVerbose Logger.API "Building the dependency graph"
         let g = artefactIds |> DependencyGraph.Graph.Build experimentRoot
         logVerbose LogCategory.API (sprintf "Dependency graph is built (%d artefacts; %d methods)" g.ArtefactsCount g.MethodsCount)
 
         // Filling in actual hashes
         do! g.UpdateActualVersions |> doAndLogElapsedTime (Logger.logInfo Logger.API) "Actual hashes are loaded"
-
-        let storages = config.ConfigFile.Storage
-        let storagePresenceChecker = StorageFactory.getPresenseChecker experimentRoot (Map.toSeq storages)
-
-        // Filling in with information about which storages hold the versions of the artefacts
-        //let! _ = Async.Parallel [|fillinArtefactContainingStoragesAsync g.Artefacts storagePresenceChecker; fillinMethodEdgeContainingStoragesAsync g.Methods storagePresenceChecker|]
-        //Logger.logVerbose Logger.API "Artefact presence in storages checked"
         return g
     }
 
@@ -234,53 +225,28 @@ let saveAsync (experimentRoot, artefactId) storageName saveAll =
 /// Adds one more method vertex to the experiment graph
 /// deps: a list of paths to the input artefacts. outputs: a list of paths to the produced artefacts
 let buildAsync experimentRoot deps outputs command doNotCleanOutputs =
-    failwith "not implemented" |> ignore
-    //let getId = pathToId experimentRoot
-    //let fullInputIDs = List.map getId deps
-    //let fullOutputIDs = List.map getId outputs
-    //logVerbose LogCategory.API (sprintf "Dependencies: %A" fullInputIDs)
-    //logVerbose LogCategory.API (sprintf "Outputs: %A" fullOutputIDs)
-    //logVerbose LogCategory.API (sprintf "Command: \"%s\"" command)
+    let getId = pathToId experimentRoot
+    let inputIDs = List.map getId deps
+    let outputIDs = List.map getId outputs
+    logVerbose LogCategory.API (sprintf "Dependencies: %A" inputIDs)
+    logVerbose LogCategory.API (sprintf "Outputs: %A" outputIDs)
+    logVerbose LogCategory.API (sprintf "Command: \"%s\"" command)
 
-    //command |> MethodCommand.validate (fullInputIDs.Length, fullOutputIDs.Length)
+    command |> MethodCommand.validate (inputIDs.Length, outputIDs.Length)
 
-    //async {
-    //    let! g = buildDependencyGraphAsync experimentRoot fullInputIDs
-    //    let inputVertices = List.map g.GetOrAllocateArtefact fullInputIDs                     
-    //    let inputVersionedVertices = List.map getVersionedArtefact inputVertices
-    //    let outputVertices = List.map g.GetOrAllocateArtefact fullOutputIDs
-    //    let outputVersionedVertices = List.map getVersionedArtefact outputVertices
-    //    // traceVerbose(sprintf "Graph artefacts: %A" graphArtefacts)
-    //    // adding method vertex                
-    //    let methodVertex = g.AddMethod inputVersionedVertices outputVersionedVertices
+    async {
+        let! g = buildDependencyGraphAsync experimentRoot inputIDs
+        let! methodVertex = g.AddMethod command inputIDs outputIDs
     
-    //    // saving command and current working dir
-    //    let cwd = Directory.GetCurrentDirectory()
-    //    let rootBasedCwd = Path.GetRelativePath(experimentRoot, cwd) + Path.DirectorySeparatorChar.ToString()
-    //    methodVertex.WorkingDirectory <- rootBasedCwd
-    //    methodVertex.Command <- command
+        // saving command and current working dir
+        let cwd = Directory.GetCurrentDirectory()
+        let rootBasedCwd = Path.GetRelativePath(experimentRoot, cwd) + Path.DirectorySeparatorChar.ToString()
+        methodVertex.WorkingDirectory <- rootBasedCwd
+        methodVertex.DoNotCleanOutputs <- doNotCleanOutputs
+        if doNotCleanOutputs then
+            Logger.logInfo Logger.API "Clearing of outputs by alpheus is disabled for this computation"
 
-    //    methodVertex.DoNotCleanOutputs <- doNotCleanOutputs
-    //    if doNotCleanOutputs then
-    //        Logger.logInfo Logger.API "Clearing of outputs by alpheus is disabled for this computation"
-
-    //    Logger.logVerbose Logger.API (sprintf "Dependency graph is built (%d artefacts; %d methods)" g.ArtefactsCount g.MethodsCount)
-    //    Logger.logVerbose Logger.API (sprintf "Graph artefacts: %A" g.Artefacts)
-    //    // dumping outputs as .alph files
-    //    // all outputs share the same compute section                    
-    //    let updateAlphFileAsync alphFilePath artefact =
-    //        async {
-    //            let alphFilePath =
-    //                if Seq.exists (fun c -> (c=Path.DirectorySeparatorChar) || (c=Path.AltDirectorySeparatorChar)) alphFilePath then
-    //                    alphFilePath
-    //                else
-    //                    Path.Combine(".",alphFilePath)
-    //            let alphFileFullPath = Path.GetFullPath(alphFilePath)
-    //            let alphFile = DependencyGraph.artefactToAlphFile artefact alphFileFullPath experimentRoot                                                
-    //            do! AlphFiles.saveAsync alphFile alphFilePath
-    //        }
-    //    let outputAlphPaths = List.map pathToAlphFile outputs
-    //    let! _ = List.map2 updateAlphFileAsync outputAlphPaths outputVertices |> Async.Parallel
-
-    //    return Ok()
-    //}
+        Logger.logVerbose Logger.API (sprintf "Dependency graph is built (%d artefacts; %d methods)" g.ArtefactsCount g.MethodsCount)
+        Logger.logVerbose Logger.API (sprintf "Graph artefacts: %A" g.Artefacts)
+        return Ok()
+    }

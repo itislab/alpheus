@@ -2,8 +2,9 @@
 
 open System
 open System.IO
-open Newtonsoft.Json
 open Angara.Data
+open Newtonsoft.Json
+open CustomSerializers
 
 // Example 1:
 //  artefact id: files/*.txt
@@ -44,9 +45,11 @@ type AlphFile = {
     IsTracked: bool
 }
 
+
 let saveAsync (alphfile:AlphFile) (filepath:string) =
     async {
-        let serialized = JsonConvert.SerializeObject(alphfile,Formatting.Indented)
+        let keyMapping key = IO.Path.GetRelativePath(filepath, key)
+        let serialized = JsonConvert.SerializeObject(alphfile,Formatting.Indented, MdMapConverter<HashString>(keyMapping))
         use sw = new StreamWriter(filepath)
         do! Async.AwaitTask(sw.WriteAsync(serialized))
     }

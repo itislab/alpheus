@@ -16,6 +16,9 @@ type ResultBuilder() =
     member __.Bind((value, predicate, error): ('T * ('T -> bool) * 'E), f) = 
         if predicate value then Ok value else Error error
         |> Result.bind f
+    member __.Bind((assertion, error): (bool * 'E), f) = 
+        if assertion then Ok() else Error error
+        |> Result.bind f
     member __.Zero() = None
     member __.Combine(m, f) = Result.bind f m
     member __.Delay(f: unit -> _) = f

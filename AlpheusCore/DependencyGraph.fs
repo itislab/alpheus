@@ -8,6 +8,7 @@ open System.Diagnostics
 open ItisLab.Alpheus
 open ItisLab.Alpheus.PathUtils
 open Angara.Data
+open FSharp.Control
 
 let ts = TraceSource("Dependency Graph")
 
@@ -152,7 +153,7 @@ and CommandLineVertex(methodId : MethodId, inputs: LinkToArtefact list, outputs:
         Object.ReferenceEquals(s,obj1)
 
 
-
+/// Prepares AlphFile for the given artefact.
 let artefactToAlphFile (artefact:ArtefactVertex) (alphFileFullPath:string) (experimentRoot:string): AlphFile =
     if not (Path.IsPathRooted alphFileFullPath) then
         raise(ArgumentException(sprintf "artefactToAlphFile argument alphFileFullPath must contain rooted full path, but the following was received: %s" alphFileFullPath))
@@ -223,6 +224,26 @@ type Graph (experimentRoot:string) =
         let initialArtefacts = artefactIds |> Seq.map(fun id -> g.GetOrAddArtefact id) |> Seq.toList
         g.LoadDependencies initialArtefacts experimentRootPath |> ignore
         g
+
+    /// Adds new command line method to the graph with the given inputs and outputs.
+    /// If some input/output artefact has no actual version, the empty version is used as expected.
+    /// Creates/rewrites the .alph files corresponding to the output artefacts.
+    /// Returns the added method.
+    member s.AddMethod (command:string) (inputIds: ArtefactId seq) (outputIds: ArtefactId seq) =
+        async {
+            let idToLink = s.GetOrAddArtefact >> (fun a -> { Artefact = a; ExpectedVersion = a.ActualVersion |> Option.defaultValue MdMap.empty })
+            let inputs = inputIds |> Seq.map idToLink  
+            let outputs = outputIds |> Seq.map idToLink
+            let method = s.AddCommand command inputs outputs
+
+            do! outputs 
+                |> AsyncSeq.ofSeq
+                |> AsyncSeq.iterAsyncParallel (fun output -> 
+                    let alphPath = output.Artefact.Id |> PathUtils.idToAlphFileFullPath experimentRoot
+                    let alphFileContent = artefactToAlphFile output.Artefact alphPath experimentRoot
+                    AlphFiles.saveAsync alphFileContent alphPath)
+            return method
+        }
 
     /// Takes a list of outputs and builds (recreates using .alph files) a dependency graph
     /// Returns all found dependencies incl. original "outputs" vertices
