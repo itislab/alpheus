@@ -51,3 +51,15 @@ let split (command:string) =
             (command.Substring(0, pos+1).Trim(), command.Substring(pos+1).Trim())
        else
             (command, "")
+
+/// Substitutes index of string values into a pattern command, e.g. "/files/*/*".
+/// Note that index length is allowed to be less or equal to the rank of the command.
+let rec applyIndex (index: string list) (command: string) =
+    match index with
+    | [] -> command
+    | head :: tail ->
+        let idx = command.IndexOf "*"
+        if idx < 0 then failwith "Rank of the command is less than rank of the index"
+        else 
+            let newCommand = command.Substring(0, idx) + head + command.Substring(idx+1)
+            applyIndex tail newCommand

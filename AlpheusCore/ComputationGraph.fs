@@ -149,9 +149,16 @@ type CommandMethod(command: CommandLineVertex, experimentRoot) =
             if not exists then failwithf "Input %s does not exist" (if isDirectory path then"directory" else "file"))
 
         let logVerbose str = Logger.logVerbose Logger.Execution (sprintf "%20s:\t\t%s" command.MethodId str)
+        let index = 
+            (inputItems 
+             |> Seq.fold(fun max item -> if max |> Option.isNone then Some item else if item.Index.Length > max.Value.Index.Length then Some item else max) None
+             |> Option.get).Index
+        // todo: what if values of the indices of inputs are different???
 
         //let inputVertices = methodVertex.Inputs |> Set.toList |> List.sortBy (fun x -> x.Artefact.FullID)
-        let outputs = command.Outputs // the order is important here
+        let outputs = 
+            command.Outputs // the order is important here
+            |> List.map(fun out -> out.Artefact.Id |> PathUtils.idToFullPath experimentRoot |> MethodCommand.applyIndex index)
 
         // intermediate graph node is actually a command execution
         // First, we need to decide whether the computation can be bypassed (the node is up to date) or the computation must be invoked               
