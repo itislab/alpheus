@@ -15,11 +15,12 @@ open CustomSerializers
 //  alph file: file/vector-vector.txt.alph
 //  SourceOrigin.RelativePath: */*.txt
 
-
+/// Identifies a version of an artefact (either scalar or vector) using a hash string (can be neither null nor empty).
 type ArtefactVersion = MdMap<string, HashString option>
 
 type VersionedArtefact = {
     RelativePath: AlphRelativePath
+    /// In case of a vector, intermediate keys contain a concrete replacement string for an asterisk; at a leaf the key contains a full path to the file/directory.
     Hash: ArtefactVersion
 }
 
@@ -45,11 +46,10 @@ type AlphFile = {
     IsTracked: bool
 }
 
-
 let saveAsync (alphfile:AlphFile) (filepath:string) =
     async {
-        let keyMapping key = IO.Path.GetRelativePath(filepath, key)
-        let serialized = JsonConvert.SerializeObject(alphfile,Formatting.Indented, MdMapConverter<HashString>(keyMapping))
+        let converter = ArtefactVersionConverter()
+        let serialized = JsonConvert.SerializeObject(alphfile,Formatting.Indented, converter)
         use sw = new StreamWriter(filepath)
         do! Async.AwaitTask(sw.WriteAsync(serialized))
     }
@@ -58,7 +58,8 @@ let tryLoad (filepath:string) =
     if File.Exists(filepath) then
         use sr = new StreamReader(filepath)
         let read = sr.ReadToEnd()
-        let alphFile = JsonConvert.DeserializeObject<AlphFile>(read)
+        let converter = ArtefactVersionConverter()
+        let alphFile = JsonConvert.DeserializeObject<AlphFile>(read, converter)
         Some(alphFile)
     else
         None
