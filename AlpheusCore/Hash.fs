@@ -50,6 +50,25 @@ let hashFileAsync fullPath =
         return hash
     }
 
+/// Wraps File.GetAttributes into async
+let private getFileAttributesAsync filename = async { return File.GetAttributes filename }
+
+
+/// filter the hidden files among filenames which are described by corresponding fileAttributes.
+/// Returns the file name of the non-hidden files
+let filterOutHidden filenames fileAttributes = 
+    let zippedFile = Array.zip filenames fileAttributes
+
+    /// chooses non-hidden file(directory) names
+    let regularChooser file_pair =
+        let name,(attrs:FileAttributes) = file_pair
+        if (FileAttributes.Hidden &&& attrs) = FileAttributes.Hidden then
+            None
+        else
+            Some(name)
+
+    Array.choose regularChooser zippedFile // omitting hidden files
+
 let rec hashDirectoryAsync (fullPath:string) =
     async {
         let fullPath =
@@ -63,6 +82,9 @@ let rec hashDirectoryAsync (fullPath:string) =
             // Assuming that if the code traverses .alph file, it means that the parent directory is being referenced by alpheus
             // And standalong files (also referenced by alpheus and having .alph files) within this directory should not influence the hash of the parent dir
             |> Array.sort
+        let! fileAttributes = Array.map getFileAttributesAsync fileNamesAbs |> Async.Parallel
+
+        let fileNamesAbs = filterOutHidden fileNamesAbs fileAttributes
         let fileNamesRel =
             fileNamesAbs
             |> Array.map (fun path -> path.Remove(0,fullPath.Length)) // removing abs path part
@@ -71,7 +93,7 @@ let rec hashDirectoryAsync (fullPath:string) =
 
         let dirNamesAbs =
             Directory.GetDirectories fullPath
-            |> Array.sort       
+            |> Array.sort
         let dirNames = //relative names
             dirNamesAbs 
             |> Array.map (fun x -> x.Remove(0,fullPath.Length))
@@ -121,31 +143,44 @@ let fastHashPathAsync (fullPath:string) =
                 Logger.logVerbose Logger.ExperimentFolder (sprintf "writing %s " hashFilePath)
                 do! File.WriteAllTextAsync(hashFilePath, hashStr) |> Async.AwaitTask
                 Logger.logVerbose Logger.ExperimentFolder (sprintf "%s written successfully" hashFilePath)
-                // File.SetAttributes(hashFilePath, FileAttributes.Hidden)
                 return Some(hashStr)
         }
-    let rec getDirLastWriteTimeDeepUTC dirpath = 
-        let curDirtime = Directory.GetLastWriteTimeUtc(dirpath)
-        let subDirs = Directory.GetDirectories(dirpath) 
-        let subFiles = Directory.GetFiles(dirpath) |> Array.filter (fun name -> not(name.EndsWith(".hash")))
-        let subDirTimes = Array.map getDirLastWriteTimeDeepUTC subDirs
-        let subFilesTimes = Array.map File.GetLastWriteTimeUtc subFiles
-        if subDirTimes.Length > 0 || subFilesTimes.Length > 0 then
-            let maxSubTimes = Seq.append subFilesTimes subDirTimes |> Seq.max
-            max curDirtime maxSubTimes
-        else // empty directory
-            curDirtime
+    let getFileLastWriteTimeUTCAsync filepath =
+        async { return File.GetLastWriteTimeUtc filepath }
+
+    let rec getDirLastWriteTimeDeepUTCAsync dirpath = 
+        async {
+            let curDirtime = Directory.GetLastWriteTimeUtc(dirpath)
+            let subDirs = Directory.GetDirectories(dirpath) 
+            let subFiles = Directory.GetFiles(dirpath) |> Array.filter (fun name -> not(name.EndsWith(".hash")))
+            let! fileAttributes = Array.map getFileAttributesAsync subFiles |> Async.Parallel
+            let subFiles = filterOutHidden subFiles fileAttributes // we do not account hidden files
+            let subDirTimesAsyncs = Array.map getDirLastWriteTimeDeepUTCAsync subDirs
+            let subFilesTimesTasks = Array.map (fun x -> getFileLastWriteTimeUTCAsync x |> Async.StartAsTask ) subFiles
+            let subFilesTimesAsyncs = Array.map Async.AwaitTask subFilesTimesTasks
+            if subDirTimesAsyncs.Length > 0 || subFilesTimesAsyncs.Length > 0 then
+                let! subTimes = Array.append subFilesTimesAsyncs subDirTimesAsyncs |> Async.Parallel
+                let maxSubTimes = Array.max subTimes
+                return max curDirtime maxSubTimes
+            else // empty directory
+                return curDirtime
+        }
+
     async {        
         if File.Exists hashFilePath then
             Logger.logVerbose Logger.ExperimentFolder (sprintf "%s hash file exists" hashFilePath)
             let precomHashTime = File.GetLastWriteTimeUtc hashFilePath
-            let dataTime =
-                if File.Exists fullPath then
-                    Some(File.GetLastWriteTimeUtc fullPath)
-                elif Directory.Exists fullPath then
-                    Some(getDirLastWriteTimeDeepUTC fullPath)
-                else
-                    None
+            let! dataTime =
+                async {
+                    if File.Exists fullPath then
+                        return Some(File.GetLastWriteTimeUtc fullPath)
+                    elif Directory.Exists fullPath then
+                        let! lastWriteTimeUTC = getDirLastWriteTimeDeepUTCAsync fullPath
+                        return Some(lastWriteTimeUTC)
+                    else
+                        return None
+                }
+            Logger.logVerbose Logger.ExperimentFolder (sprintf "%s artefact modification time extracted" fullPath)
             match dataTime with
             |   None -> //data not exists
                 Logger.logVerbose Logger.ExperimentFolder (sprintf "deleteing %s hash file as the artefact is absent" hashFilePath)
