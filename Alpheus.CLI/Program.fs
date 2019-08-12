@@ -13,6 +13,13 @@ let main argv =
     let programName = "alpheus"
     let parser = ArgumentParser.Create<AlpheusArgs>(programName = programName)
     
+    // registering some CLI event handlers
+    // Ctrl+C and Ctrl+Brake (stated in docs)
+    // unix SIGINT and SIGTERM ?
+    Console.CancelKeyPress.AddHandler(ConsoleCancelEventHandler(fun _ args ->
+        Logger.logInfo Logger.LogCategory.CLI (sprintf "Got %A. Closing active subprocesses if any" args.SpecialKey)
+        ExecuteCommand.terminateAllSubprocesses()))
+
     try 
         let parseResults = parser.ParseCommandLine(argv,ignoreMissing=false,ignoreUnrecognized=true,raiseOnUsage=false)
         match parseResults |> run programName with
