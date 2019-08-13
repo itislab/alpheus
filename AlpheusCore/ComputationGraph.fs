@@ -119,16 +119,7 @@ type SourceMethod(source: SourceVertex, experimentRoot) =
                 ()
         | Some diskVersion when artefact.IsTracked ->
             // if alph file exists on disk (e.g. isTracked), we need to re-save it to update the expected version
-            async {
-                let artefactFullPath = idToFullPath experimentRoot artefact.Id
-                let alphFileFullPath = idToAlphFileFullPath experimentRoot artefact.Id
-                let alphFileSection : AlphFiles.VersionedArtefact = 
-                    { RelativePath = relativePath alphFileFullPath artefactFullPath
-                      Hash = diskVersion }
-                let alphFile = artefactToAlphFile artefact artefactFullPath experimentRoot
-                let alphFile = { alphFile with Origin = SourceOrigin alphFileSection }
-                do! AlphFiles.saveAsync alphFile alphFileFullPath
-            } |> Async.RunSynchronously  
+            artefact.SaveAlphFile() |> Async.RunSynchronously
         | Some _ -> // not tracked
             ()
 
@@ -152,9 +143,6 @@ type CommandMethod(command: CommandLineVertex, experimentRoot) =
         | None -> None
 
 
-    // todo: input must contain (for each artefact):
-    //  - full path
-    //  - vector of indices (replacements for asterisks), e.g. "files", "cities.txt", (1) to be substituted in the output pattern and (2) to get hash from vector of hashes (version).
     override s.Execute(inputs, _) = // ignoring checkpoints
         let inputItems = inputs |> List.map (fun inp -> inp :?> ArtefactItem)
         inputItems 
@@ -162,18 +150,19 @@ type CommandMethod(command: CommandLineVertex, experimentRoot) =
         |> Seq.iter (fun path -> 
             let exists = if isDirectory path then Directory.Exists path else File.Exists path
             if not exists then failwithf "Input %s does not exist" (if isDirectory path then"directory" else "file"))
-
-        let logVerbose str = Logger.logVerbose Logger.Execution (sprintf "%s: %s" command.MethodId str)
+                    
         let index = 
             inputItems 
             |> Seq.map(fun item -> item.Index)
             |> Seq.fold(fun (max: string list) index -> if index.Length > max.Length then index else max) []
-        logVerbose (sprintf "Index: %A" index)
+        let methodItemId = command.MethodId |> applyIndex index
+        let logVerbose str = Logger.logVerbose Logger.Execution (sprintf "%s: %s" methodItemId str)
+        logVerbose "Started."
 
         // Build the output paths by applying the index of this method.
         let outputPaths = 
             command.Outputs // the order is important here
-            |> List.map(fun out -> out.Artefact.Id |> PathUtils.idToFullPath experimentRoot |> MethodCommand.applyIndex index)
+            |> List.map(fun out -> out.Artefact.Id |> PathUtils.idToFullPath experimentRoot |> applyIndex index)
 
         // intermediate graph node is actually a command execution
         // First, we need to decide whether the computation can be bypassed (the node is up to date) or the computation must be invoked               
@@ -210,45 +199,25 @@ type CommandMethod(command: CommandLineVertex, experimentRoot) =
 
             // 2) executing a command
             let print (s:string) = Console.WriteLine s
-            let input idx = command.Inputs.[idx-1].Artefact.Id |> idToFullPath experimentRoot |> MethodCommand.applyIndex index
-            let output idx = command.Outputs.[idx-1].Artefact.Id |> idToFullPath experimentRoot |> MethodCommand.applyIndex index
+            let input idx = command.Inputs.[idx-1].Artefact.Id |> idToFullPath experimentRoot |> applyIndex index
+            let output idx = command.Outputs.[idx-1].Artefact.Id |> idToFullPath experimentRoot |> applyIndex index
             let context : ComputationContext = { ExperimentRoot = experimentRoot; Print = print  }
             let exitCode = command |> ExecuteCommand.runCommandLineMethodAndWait context (input, output) 
-            ()
 
-        //    // 3) upon 0 exit code hash the outputs
-        //    if exitCode <> 0 then
-        //        raise(InvalidOperationException(sprintf "Process exited with exit code %d" exitCode))
-        //    else
-        //        // 4a) hashing outputs disk content                
-        //        let hashComputeation = DependencyGraph.fillinActualHashesAsync (outputs |> Seq.map (fun art -> art.Artefact)) experimentRoot
-        //        logVerbose (sprintf "Calculated successfully. Calculating output hashes")
-        //        Async.RunSynchronously hashComputeation
-  
-        //        // 4b) updating dependency versions in dependency graph
-        //        let updateVersion (art:DependencyGraph.VersionedArtefact) = 
-        //            { art with ExpectedVersion = art.Artefact.ActualHash }
-        //        comp.UpdateArtefacts updateVersion
-
-        //        // 5) dumping updated alph files to disk
-        //        async {                        
-        //            let idToFullAlphPath versionedArtefact = versionedArtefact.Artefact.Id |> idToAlphFileFullPath experimentRoot
-        //            let outputAlphfilePaths = Seq.map idToFullAlphPath outputs |> Seq.toArray
-
-        //            let updateAlphFileAsync (alphFilePath:string) artefact =
-        //                async {
-        //                    let alphFileFullPath = Path.GetFullPath(alphFilePath)
-        //                    let alphFile = DependencyGraph.artefactToAlphFile artefact.Artefact alphFileFullPath experimentRoot
-        //                    do! AlphFiles.saveAsync alphFile alphFilePath
-        //                }
-              
-        //            let alphUpdatesComputations = Seq.map2 updateAlphFileAsync outputAlphfilePaths outputs
-        //            let! _ = Async.Parallel alphUpdatesComputations
-        //            return ()
-        //        } |> Async.RunSynchronously
-        //        logVerbose "Outputs metadata saved"
-        //else
-        //    logVerbose "skipping as up to date"
+            // 3) upon 0 exit code hash the outputs
+            if exitCode <> 0 then
+                raise(InvalidOperationException(sprintf "Process exited with exit code %d" exitCode))
+            else
+                logVerbose (sprintf "Program succeeded. Calculating hashes of the outputs...")
+                async {
+                    // 4a) hashing outputs disk content                
+                    // 4b) updating dependency versions in dependency graph
+                    // 5) dumping updated alph files to disk
+                    do! command.OnSucceeded(index)
+                } |> Async.RunSynchronously
+                logVerbose "Outputs metadata saved"
+        else
+            logVerbose "skipping as up to date"
         //comp.Outputs |> Seq.map (fun (output:DependencyGraph.VersionedArtefact) -> output.ExpectedVersion) |> List.ofSeq
 
         Seq.singleton(outputPaths |> List.map(fun outputPath -> upcast { FullPath = outputPath; Index = index }), null)

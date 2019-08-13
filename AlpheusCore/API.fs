@@ -18,7 +18,7 @@ let buildDependencyGraphAsync experimentRoot artefactIds =
         logVerbose LogCategory.API (sprintf "Dependency graph is built (%d artefacts; %d methods)" g.ArtefactsCount g.MethodsCount)
 
         // Filling in actual hashes
-        do! g.UpdateActualVersions |> doAndLogElapsedTime (Logger.logInfo Logger.API) "Actual hashes are loaded"
+        do! g.ReadActualVersions |> doAndLogElapsedTime (Logger.logInfo Logger.API) "Actual hashes are loaded"
         return g
     }
 

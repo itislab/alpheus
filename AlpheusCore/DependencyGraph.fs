@@ -23,6 +23,7 @@ type ArtefactVertex(id:ArtefactId) =
     let mutable isTracked = false
     /// None means that file/dir does not exist on disk or is not computed yet.
     let mutable actualVersion : ArtefactVersion option = None 
+    let lockObj = obj()
     
     member s.Id = id
 
@@ -41,12 +42,87 @@ type ArtefactVertex(id:ArtefactId) =
         with get() = isTracked
         and set v = isTracked <- v
     
-    /// Gets or sets the version calculated from the data on the disk.
-    member s.ActualVersion with get() = actualVersion and set v = actualVersion <- v
+    /// Gets the version calculated from the data on the disk.
+    member s.ActualVersion = actualVersion
 
     member s.Rank = Artefacts.rank id
 
     member s.AddUsedIn method = usedIn <- usedIn |> Set.add method 
+
+    /// Computes actual version for the graph artefact item from the disk and updates the *.alph file.
+    /// Updates value of ArtefactVertex.ActualVersion.
+    /// Updates .hash file on a disk.
+    member s.UpdateActualVersion () : Async<unit> =
+        async {
+            let fullPath = s.Id |> idToFullPath s.ProducedBy.ExperimentRoot 
+            let! hash = Hash.hashVectorPathAndSave fullPath
+
+            lock lockObj (fun () ->
+                actualVersion <- Some hash
+                s.SaveAlphFile() |> Async.RunSynchronously
+            )
+        }
+
+    /// Computes actual version for the graph artefact item from the disk and updates the *.alph file.
+    /// Updates value of ArtefactVertex.ActualVersion.
+    /// Updates .hash file on a disk.
+    member s.UpdateActualVersion (index: string list) : Async<unit> =
+        async {
+            let fullPath = s.Id |> idToFullPath s.ProducedBy.ExperimentRoot |> applyIndex index
+            let! hash = Hash.hashPathAndSave fullPath
+
+            lock lockObj (fun () ->
+                let v = actualVersion |> Option.defaultValue MdMap.empty
+                actualVersion <- v |> MdMap.add index hash |> Some
+                s.SaveAlphFile() |> Async.RunSynchronously
+            )
+        }
+
+    
+    /// Builds an AlphFile instance describing the artefact.
+    member s.SaveAlphFile() : Async<unit> =
+        let alphFileFullPath = s.Id |> PathUtils.idToAlphFileFullPath s.ProducedBy.ExperimentRoot
+        if not (Path.IsPathRooted alphFileFullPath) then
+            raise(ArgumentException(sprintf "alphFileFullPath must contain rooted full path: %s" alphFileFullPath))
+        let content = 
+            // Fills in Signature field in compute section object with correct value       
+            match s.ProducedBy with
+            | MethodVertex.Source(sourceVertex) ->
+                let experimentRoot = sourceVertex.ExperimentRoot
+                let expectedVersion = sourceVertex.Output.ExpectedVersion
+                let artefactPath = sourceVertex.Output.Artefact.Id |> idToFullPath experimentRoot
+                let snapshotSection : AlphFiles.VersionedArtefact = 
+                    { Hash = expectedVersion
+                      RelativePath = relativePath alphFileFullPath artefactPath }
+                {
+                    Origin = SourceOrigin snapshotSection
+                    IsTracked = sourceVertex.Output.Artefact.IsTracked
+                }            
+            | MethodVertex.Command(commandVertex) ->
+                // dependency graph contains all paths relative to project root
+                // alpheus files contains all paths relative to alph file   
+                let experimentRoot = commandVertex.ExperimentRoot
+                let computeSection =
+                    let alphFileRelativeWorkingDir = 
+                        let workingDirFull = Path.GetFullPath(Path.Combine(experimentRoot,commandVertex.WorkingDirectory))
+                        let candidate = relativePath alphFileFullPath workingDirFull
+                        if candidate = "" then ("." + string Path.DirectorySeparatorChar) else candidate
+                    let toSection (a:LinkToArtefact) = 
+                        let relative = relativePath alphFileFullPath (a.Artefact.Id |> idToFullPath experimentRoot)
+                        { RelativePath = relative; Hash = a.ExpectedVersion}
+    
+                    { Inputs = commandVertex.Inputs |> Seq.map toSection |> Array.ofSeq
+                      Outputs = commandVertex.Outputs |> Seq.map toSection |> Array.ofSeq
+                      OutputIndex = commandVertex.Outputs |> Seq.findIndex (fun output -> output.Artefact.Id = s.Id)
+                      Command = commandVertex.Command                
+                      WorkingDirectory = alphFileRelativeWorkingDir
+                      Signature = String.Empty
+                      OutputsCleanDisabled = commandVertex.DoNotCleanOutputs }
+                {
+                    Origin = DataOrigin.CommandOrigin { computeSection with Signature = Hash.getSignature computeSection}
+                    IsTracked = s.IsTracked
+                }
+        AlphFiles.saveAsync content alphFileFullPath
         
     interface System.IComparable with
         member s.CompareTo(other) =
@@ -67,11 +143,23 @@ type ArtefactVertex(id:ArtefactId) =
         sprintf "Artefact(%s|%s)" (s.Id.ToString()) version
 
 /// Represents a link to a specific version of an artefact.
-and LinkToArtefact = 
-    { Artefact: ArtefactVertex
+and LinkToArtefact(artefact: ArtefactVertex, expectedVersion: ArtefactVersion) = 
+    let mutable expected = expectedVersion
+
+    /// Creates a link to the artefact which expects the given actual version.
+    new(artefact) = LinkToArtefact(artefact, artefact.ActualVersion |> Option.defaultValue MdMap.empty)
+
+    member s.Artefact : ArtefactVertex = artefact
+
       /// What version of the corresponding artefact is expected to work with. Empty version means that the artefact version was never fixed.
       /// If the actual version differs from the expected, it should be handled specifically.
-      ExpectedVersion: ArtefactVersion }
+    member s.ExpectedVersion : ArtefactVersion = expected
+
+    /// Makes the link to expect the actual version.
+    /// The actual version MUST be available.
+    member s.ExpectActualVersion(index: string list) = 
+        let actual = artefact.ActualVersion.Value |> MdMap.get index
+        expected <- expected |> MdMap.set index actual
 
 
 and [<CustomEquality; CustomComparison>] MethodVertex =
@@ -84,6 +172,11 @@ and [<CustomEquality; CustomComparison>] MethodVertex =
             match x with
             | Source src -> src.MethodId
             | Command cmd -> cmd.MethodId
+
+        member x.ExperimentRoot : string = 
+            match x with
+            | Source src -> src.ExperimentRoot
+            | Command cmd -> cmd.ExperimentRoot
 
         interface IComparable<MethodVertex> with
             member x.CompareTo other = x.MethodId.CompareTo (other.MethodId)  
@@ -100,20 +193,22 @@ and [<CustomEquality; CustomComparison>] MethodVertex =
         override x.GetHashCode() = x.MethodId.GetHashCode()
 
 /// The vertex produces single artefact out of void
-and SourceVertex(methodId: MethodId, output: LinkToArtefact) =
-
+and SourceVertex(methodId: MethodId, output: LinkToArtefact, experimentRoot: string) =
     /// Gets the artefact produced by this source vertex. 
     /// We keep the version of the artefact, so we know what data should be restored if there is just an alph file.
-    member s.Output = output
-    member s.MethodId = methodId
+    member s.Output : LinkToArtefact = output
+    member s.MethodId : MethodId = methodId
+    member s.ExperimentRoot : string = experimentRoot
+
 
 /// Represents a method defined as a command line.
-and CommandLineVertex(methodId : MethodId, inputs: LinkToArtefact list, outputs: LinkToArtefact list, command: string) =
+and CommandLineVertex(methodId : MethodId, experimentRoot: string, inputs: LinkToArtefact list, outputs: LinkToArtefact list, command: string) =
     let mutable workingDirectory: ExperimentRelativePath = String.Empty
     let mutable doNotClean = false
     let mutable commandExitCode: int option = None
 
     member s.MethodId = methodId    
+    member s.ExperimentRoot = experimentRoot
 
     /// For each of the input artefact, we keep the expected version, i.e. what version was used to produce the current outputs.
     member s.Inputs = inputs
@@ -143,6 +238,18 @@ and CommandLineVertex(methodId : MethodId, inputs: LinkToArtefact list, outputs:
         with get() = doNotClean
         and set v = doNotClean <- v
 
+    /// Reads the actual version of the output artefacts, 
+    /// updates the expected versions for the input and output artefacts,
+    /// and updates the *.alph file.
+    member s.OnSucceeded(index: string list) : Async<unit> =
+        s.Outputs 
+        |> Seq.map(fun out -> async { 
+                do! out.Artefact.UpdateActualVersion index
+                out.ExpectActualVersion index
+            }) 
+        |> Async.Parallel
+        |> Async.Ignore
+
     interface System.IComparable with
         member s.CompareTo(other) =
            let typedOther:CommandLineVertex = downcast other
@@ -152,49 +259,8 @@ and CommandLineVertex(methodId : MethodId, inputs: LinkToArtefact list, outputs:
         Object.ReferenceEquals(s,obj1)
 
 
-/// Prepares AlphFile for the given artefact.
-let artefactToAlphFile (artefact:ArtefactVertex) (alphFileFullPath:string) (experimentRoot:string): AlphFile =
-    if not (Path.IsPathRooted alphFileFullPath) then
-        raise(ArgumentException(sprintf "artefactToAlphFile argument alphFileFullPath must contain rooted full path, but the following was received: %s" alphFileFullPath))
-
-    // Fills in Signature field in compute section object with correct value       
-    match artefact.ProducedBy with
-    | MethodVertex.Source(sourceVertex) ->
-        let expectedVersion = sourceVertex.Output.ExpectedVersion
-        let artefactPath = sourceVertex.Output.Artefact.Id |> idToFullPath experimentRoot
-        let snapshotSection : AlphFiles.VersionedArtefact = 
-            { Hash = expectedVersion
-              RelativePath = relativePath alphFileFullPath artefactPath }
-        {
-            Origin = SourceOrigin snapshotSection
-            IsTracked = sourceVertex.Output.Artefact.IsTracked
-        }            
-    | MethodVertex.Command(commandVertex) ->
-        // dependency graph contains all paths relative to project root
-        // alpheus files contains all paths relative to alph file        
-        let computeSection =
-            let alphFileRelativeWorkingDir = 
-                let workingDirFull = Path.GetFullPath(Path.Combine(experimentRoot,commandVertex.WorkingDirectory))
-                let candidate = relativePath alphFileFullPath workingDirFull
-                if candidate = "" then ("." + string Path.DirectorySeparatorChar) else candidate
-            let toSection (a:LinkToArtefact) = 
-                let relative = relativePath alphFileFullPath (a.Artefact.Id |> idToFullPath experimentRoot)
-                { RelativePath = relative; Hash = a.ExpectedVersion}
-
-            { Inputs = commandVertex.Inputs |> Seq.map toSection |> Array.ofSeq
-              Outputs = commandVertex.Outputs |> Seq.map toSection |> Array.ofSeq
-              OutputIndex = commandVertex.Outputs |> Seq.findIndex (fun output -> output.Artefact.Id = artefact.Id)
-              Command = commandVertex.Command                
-              WorkingDirectory = alphFileRelativeWorkingDir
-              Signature = String.Empty
-              OutputsCleanDisabled = commandVertex.DoNotCleanOutputs }
-        {
-            Origin = DataOrigin.CommandOrigin { computeSection with Signature = Hash.getSignature computeSection}
-            IsTracked = artefact.IsTracked
-        }
-
 /// Alpheus dependencies graph
-type Graph (experimentRoot:string) = 
+and Graph (experimentRoot:string) = 
     // todo: these collections are populated non-atomically and cause misleading
     let mutable methodVertices : Map<MethodId,MethodVertex> = Map.empty
     let mutable artefactVertices: Map<ArtefactId,ArtefactVertex> = Map.empty 
@@ -230,7 +296,7 @@ type Graph (experimentRoot:string) =
     /// Returns the added method.
     member s.AddMethod (command:string) (inputIds: ArtefactId seq) (outputIds: ArtefactId seq) =
         async {
-            let idToLink = s.GetOrAddArtefact >> (fun a -> { Artefact = a; ExpectedVersion = a.ActualVersion |> Option.defaultValue MdMap.empty })
+            let idToLink = s.GetOrAddArtefact >> LinkToArtefact
             let inputs = inputIds |> Seq.map idToLink  
             let outputs = outputIds |> Seq.map idToLink
             let method = s.AddCommand command inputs outputs
@@ -239,8 +305,7 @@ type Graph (experimentRoot:string) =
                 |> AsyncSeq.ofSeq
                 |> AsyncSeq.iterAsyncParallel (fun output -> 
                     let alphPath = output.Artefact.Id |> PathUtils.idToAlphFileFullPath experimentRoot
-                    let alphFileContent = artefactToAlphFile output.Artefact alphPath experimentRoot
-                    AlphFiles.saveAsync alphFileContent alphPath)
+                    output.Artefact.SaveAlphFile())
             return method
         }
 
@@ -265,28 +330,24 @@ type Graph (experimentRoot:string) =
                 // We must create it now and fix current disk data version in it
                 // so calculating actual disk data version
                 let calculatedVersion = Hash.hashVectorPathAndSave fullOutputPath |> Async.RunSynchronously
-                s.AddSource { Artefact = dequeuedArtefact; ExpectedVersion = calculatedVersion } |> ignore
+                s.AddSource (LinkToArtefact(dequeuedArtefact, calculatedVersion)) |> ignore
 
             | Some(alphFile) ->
                 // Alph file exists
                 dequeuedArtefact.IsTracked <- alphFile.IsTracked
                 match alphFile.Origin with
                 | SourceOrigin(alphSource) -> // Snapshot in .alph file means that is was snapshoted, thus Tracked
-                    s.AddSource { Artefact = dequeuedArtefact; ExpectedVersion = alphSource.Hash } |> ignore
+                    s.AddSource (LinkToArtefact(dequeuedArtefact, alphSource.Hash)) |> ignore
 
                 | CommandOrigin(alphCommand) -> // produced by some method.
                     // checking weather the internals were modified (wether the output hashes mentioned are valid)
                     let alphCommand = Hash.validateSignature(alphCommand)
-                                                    
-                    let inputs = 
-                        alphCommand.Inputs |> Array.map (fun inp -> 
-                            let artefact = inp.RelativePath |> alphRelativePathToId alphFileFullPath experimentRootPath |> s.GetOrAddArtefact
-                            { Artefact = artefact; ExpectedVersion = inp.Hash }) 
-                                                                                
-                    let outputs = 
-                        alphCommand.Outputs |> Array.map (fun out -> 
-                            let artefact = out.RelativePath |> alphRelativePathToId alphFileFullPath experimentRootPath |> s.GetOrAddArtefact
-                            { Artefact = artefact; ExpectedVersion = out.Hash }) 
+
+                    let makeLink versionArtefact =  
+                        let artefact = versionArtefact.RelativePath |> alphRelativePathToId alphFileFullPath experimentRootPath |> s.GetOrAddArtefact
+                        LinkToArtefact(artefact, versionArtefact.Hash)                    
+                    let inputs = alphCommand.Inputs |> Array.map makeLink                                                                                
+                    let outputs = alphCommand.Outputs |> Array.map makeLink
 
                     let method = s.AddCommand alphCommand.Command inputs outputs 
                     method.DoNotCleanOutputs <- alphCommand.OutputsCleanDisabled
@@ -305,18 +366,9 @@ type Graph (experimentRoot:string) =
     /// Computes actual versions for the graph artefacts from the disk.
     /// Updates values of ArtefactVertex.ActualVersion for all of the graph artefacts (unless this method is called, the property returns None).
     /// Updates .hash files on a disk.
-    member s.UpdateActualVersions() =
+    member s.ReadActualVersions() =
         async {
-            let artefacts = s.Artefacts
-            let fullPaths = artefacts |> Array.map (fun (a:ArtefactVertex) -> idToFullPath experimentRoot a.Id) 
-            let fullPathsDistinct = Array.distinct fullPaths
-            let lookupTable = fullPathsDistinct |> Seq.mapi (fun i x -> x,i) |> Map.ofSeq 
-            let! hashes = fullPathsDistinct |> Seq.map Hash.hashVectorPathAndSave |> Async.Parallel            
-            Seq.iter2 (fun fullPath (artefact:ArtefactVertex) -> 
-                let idx = lookupTable |> Map.find fullPath 
-                let hash = hashes.[idx] 
-                artefact.ActualVersion <- Some hash) 
-                fullPaths artefacts  
+            do! s.Artefacts |> Seq.map (fun a -> a.UpdateActualVersion()) |> Async.Parallel |> Async.Ignore
         }
 
     member private s.GetOrAddArtefact artefactId =
@@ -333,7 +385,7 @@ type Graph (experimentRoot:string) =
         let methodId = getMethodId (Seq.singleton output.Artefact.Id)
         if Map.containsKey methodId methodVertices then
             invalidOp (sprintf "attempt to allocate new vertex \"%s\", but the vertex with this ID is already allocated" methodId)
-        let vertex = SourceVertex(methodId, output)
+        let vertex = SourceVertex(methodId, output, experimentRoot)
         output.Artefact.ProducedBy <- Source vertex
         methodVertices <- methodVertices |> Map.add methodId (Source vertex) 
         vertex
@@ -343,7 +395,7 @@ type Graph (experimentRoot:string) =
         let methodId = getMethodId (outputs |> Seq.map(fun out -> out.Artefact.Id))
         if Map.containsKey methodId methodVertices then
             invalidOp (sprintf "attempt to allocate new vertex \"%s\", but the vertex with this ID is already allocated" methodId)
-        let vertex = CommandLineVertex (methodId, inputs |> Seq.toList, outputs |> Seq.toList, command)
+        let vertex = CommandLineVertex (methodId, experimentRoot, inputs |> Seq.toList, outputs |> Seq.toList, command)
         inputs |> Seq.iter(fun inp -> inp.Artefact.AddUsedIn vertex)
         outputs |> Seq.iter(fun out -> out.Artefact.ProducedBy <- Command vertex)
         methodVertices <- methodVertices |> Map.add methodId (Command vertex) 

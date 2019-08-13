@@ -155,9 +155,24 @@ let enumerateItems (experimentRoot: string) (artefactId: ArtefactId) =
     let artefactPath = artefactId |> idToFullPath experimentRoot 
     enumeratePath artefactPath
 
+/// If exists, deletes a file or a directory (recursively) given the path.
 let deletePath (path:string) =
     let path = normalizePath path
     if path.EndsWith(Path.DirectorySeparatorChar) then
         Directory.Delete(path,true)
     else
         File.Delete path
+
+
+/// Substitutes index of string values into a pattern command, e.g. "/files/*/*".
+/// Note that index length is allowed to be less or equal to the rank of the command.
+let rec applyIndex (index: string list) (path: string) =
+    match index with
+    | [] -> path
+    | head :: tail ->
+        let idx = path.IndexOf "*"
+        if idx < 0 then 
+            path
+        else 
+            let newCommand = path.Substring(0, idx) + head + path.Substring(idx+1)
+            applyIndex tail newCommand
