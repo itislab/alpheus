@@ -137,6 +137,21 @@ type SourceMethod(source: SourceVertex, experimentRoot) =
 type CommandMethod(command: CommandLineVertex, experimentRoot) =
     inherit ComputationGraphNode(DependencyGraph.Command command, experimentRoot)
 
+    let resolveIndex (index:string list) (map: MdMap<string, 'a option>) =
+        let rec resolveInTree (index:string list) (map: MdMapTree<string, 'a option>) =
+            match map, index with
+            | _,[] -> Some map
+            | MdMapTree.Value value,_ -> Some map // index length > rank of the map
+            | MdMapTree.Map values, k :: tail ->
+                match values |> Map.tryFind k with
+                | Some value -> resolveInTree tail value
+                | None -> None
+        match resolveInTree index (map |> MdMap.toTree) with
+        | Some(MdMapTree.Value v) -> v
+        | Some(MdMapTree.Map _) -> invalidOp "Only one-to-one vectors are supported at the moment"
+        | None -> None
+
+
     // todo: input must contain (for each artefact):
     //  - full path
     //  - vector of indices (replacements for asterisks), e.g. "files", "cities.txt", (1) to be substituted in the output pattern and (2) to get hash from vector of hashes (version).
@@ -148,61 +163,58 @@ type CommandMethod(command: CommandLineVertex, experimentRoot) =
             let exists = if isDirectory path then Directory.Exists path else File.Exists path
             if not exists then failwithf "Input %s does not exist" (if isDirectory path then"directory" else "file"))
 
-        let logVerbose str = Logger.logVerbose Logger.Execution (sprintf "%20s:\t\t%s" command.MethodId str)
+        let logVerbose str = Logger.logVerbose Logger.Execution (sprintf "%s: %s" command.MethodId str)
         let index = 
-            (inputItems 
-             |> Seq.fold(fun max item -> if max |> Option.isNone then Some item else if item.Index.Length > max.Value.Index.Length then Some item else max) None
-             |> Option.get).Index
-        // todo: what if values of the indices of inputs are different???
+            inputItems 
+            |> Seq.map(fun item -> item.Index)
+            |> Seq.fold(fun (max: string list) index -> if index.Length > max.Length then index else max) []
+        logVerbose (sprintf "Index: %A" index)
 
-        //let inputVertices = methodVertex.Inputs |> Set.toList |> List.sortBy (fun x -> x.Artefact.FullID)
-        let outputs = 
+        // Build the output paths by applying the index of this method.
+        let outputPaths = 
             command.Outputs // the order is important here
             |> List.map(fun out -> out.Artefact.Id |> PathUtils.idToFullPath experimentRoot |> MethodCommand.applyIndex index)
 
         // intermediate graph node is actually a command execution
         // First, we need to decide whether the computation can be bypassed (the node is up to date) or the computation must be invoked               
         /// versions present and match
+        let outputVersions =
+            command.Outputs
+            |> List.map(fun out -> 
+                // NOTE: signature is checked during the .alph file reading
+                // if it is invalid, output versions are empty
+                let expected = out.ExpectedVersion |> resolveIndex index
+                let actual = out.Artefact.ActualVersion |> Option.bind (resolveIndex index) 
+                let isInStorage() = false // todo: add lazy check if an external storage contains this artefact
+                expected, actual, isInStorage)
         let versionsMatch v1 v2 =
             match v1,v2 with
             | Some(vv1), Some(vv2) -> vv1 = vv2
             | None, Some(_) | Some(_), None | None, None -> false
-
-        let doComputation = true // todo
-            // NOTE: signature is checked during the .alph file reading
-            // if it is invalid, output versions are empty
-            //let isArtefactAvailable (art:LinkToArtefact) =
-            //    (versionsMatch art.ExpectedVersion art.Artefact.ActualHash) || (not art.StoragesContainingVersion.IsEmpty)
-     
-            //// if any of the outputs is unavailable, we have to run the computation
-            //not(Seq.forall isArtefactAvailable outputs)
+        let doComputations =
+            outputVersions 
+            |> Seq.forall (fun (expected, actual, isInStorage) -> (versionsMatch expected actual) || (isInStorage()))
+            |> not // if any of the outputs is unavailable, we have to run the computation
       
-        //if doComputation then
-        //    // We need to do computation            
-        //    // 1) deleting outputs if they exist            
-        //    // 2) execute external command
-        //    // 3) upon 0 exit code hash the outputs
-        //    // 4) fill in corresponding method vertex (to fix propper versions)
-        //    // 5) write alph files for outputs
+        if doComputations then
+            // We need to do computation            
+            // 1) deleting outputs if they exist            
+            // 2) execute external command
+            // 3) upon 0 exit code hash the outputs
+            // 4) fill in corresponding method vertex (to fix propper versions)
+            // 5) write alph files for outputs
 
-        //    // 1) Deleting outputs
-        //    if not command.DoNotCleanOutputs then
-        //        let deletePath (path:string) =
-        //            if path.EndsWith(Path.DirectorySeparatorChar) then
-        //                if Directory.Exists path then
-        //                    Directory.Delete(path,true)
-        //            else
-        //                if File.Exists path then
-        //                    File.Delete path
-        //        let fullOutputPaths = Seq.map (fun (x:DependencyGraph.VersionedArtefact) -> idToFullPath experimentRoot x.Artefact.Id) comp.Outputs |> List.ofSeq
-        //        List.iter deletePath fullOutputPaths
+            // 1) Deleting outputs
+            if not command.DoNotCleanOutputs then
+                outputPaths |> List.iter deletePath 
 
-        //    // 2) executing a command
-        //    let print (s:string) = Console.WriteLine s
-        //    let input idx = comp.Inputs.[idx-1].Artefact.Id |> idToFullPath experimentRoot
-        //    let output idx = comp.Outputs.[idx-1].Artefact.Id |> idToFullPath experimentRoot
-        //    let context : ComputationContext = { ExperimentRoot = experimentRoot; Print = print  }
-        //    let exitCode = comp |> ExecuteCommand.runCommandLineMethodAndWait context (input, output) 
+            // 2) executing a command
+            let print (s:string) = Console.WriteLine s
+            let input idx = command.Inputs.[idx-1].Artefact.Id |> idToFullPath experimentRoot |> MethodCommand.applyIndex index
+            let output idx = command.Outputs.[idx-1].Artefact.Id |> idToFullPath experimentRoot |> MethodCommand.applyIndex index
+            let context : ComputationContext = { ExperimentRoot = experimentRoot; Print = print  }
+            let exitCode = command |> ExecuteCommand.runCommandLineMethodAndWait context (input, output) 
+            ()
 
         //    // 3) upon 0 exit code hash the outputs
         //    if exitCode <> 0 then
@@ -239,7 +251,7 @@ type CommandMethod(command: CommandLineVertex, experimentRoot) =
         //    logVerbose "skipping as up to date"
         //comp.Outputs |> Seq.map (fun (output:DependencyGraph.VersionedArtefact) -> output.ExpectedVersion) |> List.ofSeq
 
-        invalidOp "Not implemented"
+        Seq.singleton(outputPaths |> List.map(fun outputPath -> upcast { FullPath = outputPath; Index = index }), null)
 
 
 let buildGraph experimentRoot (g:DependencyGraph.Graph) =    

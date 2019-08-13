@@ -109,7 +109,6 @@ and SourceVertex(methodId: MethodId, output: LinkToArtefact) =
 
 /// Represents a method defined as a command line.
 and CommandLineVertex(methodId : MethodId, inputs: LinkToArtefact list, outputs: LinkToArtefact list, command: string) =
-    let mutable command: string = String.Empty
     let mutable workingDirectory: ExperimentRelativePath = String.Empty
     let mutable doNotClean = false
     let mutable commandExitCode: int option = None

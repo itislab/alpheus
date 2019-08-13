@@ -5,7 +5,7 @@ open System.IO
 open Angara.Data
 
 /// conversion to OS specific directory delimiter
-let internal normalizePath (path:string) = path.Replace('/', Path.DirectorySeparatorChar).Trim()
+let internal normalizePath (path:string) = path.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar).Trim()
 let unixPath (path:string) = path.Replace('\\', '/')
 
 let isDirectory (path:string) = path.EndsWith(Path.DirectorySeparatorChar) || path.EndsWith(Path.AltDirectorySeparatorChar)
@@ -108,6 +108,7 @@ let idToAlphFileFullPath (experimentRoot: string) (artefactId:ArtefactId) : stri
 /// Builds an instance of MdMap which contains all files or directories (depending whether the given ends with the sepator or not),
 /// satisfying the given artefact path pattern.
 /// In case of a vector, the keys of the MdMap instance contain a concrete replacement string for every asterisk.
+/// todo: document rules that file is expected to have * instead of file name without extension and that will be the key.
 let enumeratePath (artefactPath:string) : MdMap<string, string> =
     let isDirectory = isDirectory artefactPath
     let isHidden (name:string) = name.StartsWith(".") || name.ToLower().EndsWith(".hash")
@@ -126,7 +127,7 @@ let enumeratePath (artefactPath:string) : MdMap<string, string> =
         | [head] -> 
             DirectoryInfo(path).GetFiles(head) 
             |> Seq.filter(fun fi -> not(isHidden fi.Name)) 
-            |> Seq.fold (fun map fi -> map |> MdMap.add [fi.Name] fi.FullName) MdMap.empty
+            |> Seq.fold (fun map fi -> map |> MdMap.add [Path.GetFileNameWithoutExtension fi.Name] fi.FullName) MdMap.empty
         | head :: tail ->
             sprintf "%s :: %A" head tail |> Logger.logInfo Logger.Test
             sprintf "Looking for %s in %s" head path |> Logger.logInfo Logger.Test
@@ -154,5 +155,9 @@ let enumerateItems (experimentRoot: string) (artefactId: ArtefactId) =
     let artefactPath = artefactId |> idToFullPath experimentRoot 
     enumeratePath artefactPath
 
-
-
+let deletePath (path:string) =
+    let path = normalizePath path
+    if path.EndsWith(Path.DirectorySeparatorChar) then
+        Directory.Delete(path,true)
+    else
+        File.Delete path

@@ -59,7 +59,8 @@ let rec applyIndex (index: string list) (command: string) =
     | [] -> command
     | head :: tail ->
         let idx = command.IndexOf "*"
-        if idx < 0 then failwith "Rank of the command is less than rank of the index"
+        if idx < 0 then 
+            command
         else 
             let newCommand = command.Substring(0, idx) + head + command.Substring(idx+1)
             applyIndex tail newCommand
