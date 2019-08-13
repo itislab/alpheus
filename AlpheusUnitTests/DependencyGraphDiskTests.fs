@@ -36,7 +36,7 @@ type Tests(output) =
     member s.``LoadDependenciesAsync loads two source artefacts``() =
         async {
             let g = DependencyGraph.Graph()
-            let artefactsIdsToTest = Array.take 2 s.FullArtIds
+            let artefactsIdsToTest = Array.take 2 s.ArtefactIds
             let artefactToTest = Array.map g.GetOrAllocateArtefact artefactsIdsToTest
 
             let! resultingVertices = g.LoadDependenciesAsync (List.ofArray artefactToTest) s.RootPath
@@ -75,6 +75,6 @@ type Tests(output) =
             let resultingIDs = Seq.map (fun (x:DependencyGraph.ArtefactVertex) -> x.Id) resultingVertices |> Set.ofSeq
 
             Assert.Equal(5,resultingVertices.Count)
-            Assert.Equal<ArtefactId>(resultingIDs,Set.ofSeq s.FullArtIds)
+            Assert.Equal<ArtefactId>(resultingIDs,Set.ofSeq s.ArtefactIds)
         } |> toAsyncFact
 

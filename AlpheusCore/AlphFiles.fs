@@ -54,6 +54,13 @@ let saveAsync (alphfile:AlphFile) (filepath:string) =
         do! Async.AwaitTask(sw.WriteAsync(serialized))
     }
 
+let save (alphfile:AlphFile) (filepath:string) =
+    let converter = ArtefactVersionConverter()
+    let serialized = JsonConvert.SerializeObject(alphfile,Formatting.Indented, converter)
+    use sw = new StreamWriter(filepath)
+    sw.Write(serialized)
+
+
 let tryLoad (filepath:string) =
     if File.Exists(filepath) then
         use sr = new StreamReader(filepath)

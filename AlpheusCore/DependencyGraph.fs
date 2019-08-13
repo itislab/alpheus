@@ -49,24 +49,20 @@ type ArtefactVertex(id:ArtefactId) =
 
     member s.AddUsedIn method = usedIn <- usedIn |> Set.add method 
 
-    /// Computes actual version for the graph artefact item from the disk and updates the *.alph file.
+    /// Computes actual version for the graph artefact item from the disk.
     /// Updates value of ArtefactVertex.ActualVersion.
     /// Updates .hash file on a disk.
-    member s.UpdateActualVersion () : Async<unit> =
+    member s.ReadActualVersion() : Async<unit> =
         async {
             let fullPath = s.Id |> idToFullPath s.ProducedBy.ExperimentRoot 
             let! hash = Hash.hashVectorPathAndSave fullPath
-
-            lock lockObj (fun () ->
-                actualVersion <- Some hash
-                s.SaveAlphFile() |> Async.RunSynchronously
-            )
+            lock lockObj (fun () -> actualVersion <- Some hash)
         }
 
-    /// Computes actual version for the graph artefact item from the disk and updates the *.alph file.
+    /// Computes actual version for the graph artefact item from the disk.
     /// Updates value of ArtefactVertex.ActualVersion.
     /// Updates .hash file on a disk.
-    member s.UpdateActualVersion (index: string list) : Async<unit> =
+    member s.ReadActualVersion(index: string list) : Async<unit> =
         async {
             let fullPath = s.Id |> idToFullPath s.ProducedBy.ExperimentRoot |> applyIndex index
             let! hash = Hash.hashPathAndSave fullPath
@@ -74,13 +70,11 @@ type ArtefactVertex(id:ArtefactId) =
             lock lockObj (fun () ->
                 let v = actualVersion |> Option.defaultValue MdMap.empty
                 actualVersion <- v |> MdMap.add index hash |> Some
-                s.SaveAlphFile() |> Async.RunSynchronously
             )
         }
-
     
     /// Builds an AlphFile instance describing the artefact.
-    member s.SaveAlphFile() : Async<unit> =
+    member s.SaveAlphFile() =
         let alphFileFullPath = s.Id |> PathUtils.idToAlphFileFullPath s.ProducedBy.ExperimentRoot
         if not (Path.IsPathRooted alphFileFullPath) then
             raise(ArgumentException(sprintf "alphFileFullPath must contain rooted full path: %s" alphFileFullPath))
@@ -122,7 +116,7 @@ type ArtefactVertex(id:ArtefactId) =
                     Origin = DataOrigin.CommandOrigin { computeSection with Signature = Hash.getSignature computeSection}
                     IsTracked = s.IsTracked
                 }
-        AlphFiles.saveAsync content alphFileFullPath
+        lock lockObj (fun() -> AlphFiles.save content alphFileFullPath)
         
     interface System.IComparable with
         member s.CompareTo(other) =
@@ -145,6 +139,7 @@ type ArtefactVertex(id:ArtefactId) =
 /// Represents a link to a specific version of an artefact.
 and LinkToArtefact(artefact: ArtefactVertex, expectedVersion: ArtefactVersion) = 
     let mutable expected = expectedVersion
+    let lockObj = obj()
 
     /// Creates a link to the artefact which expects the given actual version.
     new(artefact) = LinkToArtefact(artefact, artefact.ActualVersion |> Option.defaultValue MdMap.empty)
@@ -158,8 +153,9 @@ and LinkToArtefact(artefact: ArtefactVertex, expectedVersion: ArtefactVersion) =
     /// Makes the link to expect the actual version.
     /// The actual version MUST be available.
     member s.ExpectActualVersion(index: string list) = 
-        let actual = artefact.ActualVersion.Value |> MdMap.get index
-        expected <- expected |> MdMap.set index actual
+        lock lockObj (fun() -> 
+            let actual = artefact.ActualVersion.Value |> MdMap.get index
+            expected <- expected |> MdMap.set index actual)
 
 
 and [<CustomEquality; CustomComparison>] MethodVertex =
@@ -244,8 +240,9 @@ and CommandLineVertex(methodId : MethodId, experimentRoot: string, inputs: LinkT
     member s.OnSucceeded(index: string list) : Async<unit> =
         s.Outputs 
         |> Seq.map(fun out -> async { 
-                do! out.Artefact.UpdateActualVersion index
+                do! out.Artefact.ReadActualVersion index
                 out.ExpectActualVersion index
+                out.Artefact.SaveAlphFile()
             }) 
         |> Async.Parallel
         |> Async.Ignore
@@ -283,11 +280,11 @@ and Graph (experimentRoot:string) =
     member s.MethodsCount =
         Map.count methodVertices
 
-    static member Build (experimentRootPath: string) (artefactIds: ArtefactId seq) =
+    static member Build (experimentRootPath: string, artefactIds: ArtefactId seq) =
         let experimentRootPath = normalizePath experimentRootPath
         let g = Graph(experimentRootPath)
         let initialArtefacts = artefactIds |> Seq.map(fun id -> g.GetOrAddArtefact id) |> Seq.toList
-        g.LoadDependencies initialArtefacts experimentRootPath |> ignore
+        g.LoadDependencies initialArtefacts |> ignore
         g
 
     /// Adds new command line method to the graph with the given inputs and outputs.
@@ -303,15 +300,13 @@ and Graph (experimentRoot:string) =
 
             do! outputs 
                 |> AsyncSeq.ofSeq
-                |> AsyncSeq.iterAsyncParallel (fun output -> 
-                    let alphPath = output.Artefact.Id |> PathUtils.idToAlphFileFullPath experimentRoot
-                    output.Artefact.SaveAlphFile())
+                |> AsyncSeq.iterAsyncParallel (fun output -> System.Threading.Tasks.Task.Run(fun () -> output.Artefact.SaveAlphFile()) |> Async.AwaitTask)
             return method
         }
 
     /// Takes a list of outputs and builds (recreates using .alph files) a dependency graph
     /// Returns all found dependencies incl. original "outputs" vertices
-    member s.LoadDependencies (outputs:ArtefactVertex list) (experimentRootPath: string) =
+    member s.LoadDependencies (outputs:ArtefactVertex list)  =
         let mutable processedOutputs : Set<ArtefactVertex> = Set.empty   
           
         let queue = Queue<ArtefactVertex>()
@@ -321,8 +316,8 @@ and Graph (experimentRoot:string) =
             // Processing the graph artefact vertex
             // to process a vertex A means 1) to allocate verteces for direct A's producer method and it's direct inputs; 2) connect them 3) Enqueue them to be processed
             let dequeuedArtefact = queue.Dequeue()
-            let fullOutputPath = dequeuedArtefact.Id |> idToFullPath experimentRootPath
-            let alphFileFullPath = dequeuedArtefact.Id |> idToAlphFileFullPath experimentRootPath
+            let fullOutputPath = dequeuedArtefact.Id |> idToFullPath experimentRoot
+            let alphFileFullPath = dequeuedArtefact.Id |> idToAlphFileFullPath experimentRoot
             match tryLoad alphFileFullPath with
             | None -> 
                 // Absence of .alph file means that the artefact is initial (not produced)
@@ -344,7 +339,7 @@ and Graph (experimentRoot:string) =
                     let alphCommand = Hash.validateSignature(alphCommand)
 
                     let makeLink versionArtefact =  
-                        let artefact = versionArtefact.RelativePath |> alphRelativePathToId alphFileFullPath experimentRootPath |> s.GetOrAddArtefact
+                        let artefact = versionArtefact.RelativePath |> alphRelativePathToId alphFileFullPath experimentRoot |> s.GetOrAddArtefact
                         LinkToArtefact(artefact, versionArtefact.Hash)                    
                     let inputs = alphCommand.Inputs |> Array.map makeLink                                                                                
                     let outputs = alphCommand.Outputs |> Array.map makeLink
@@ -354,7 +349,7 @@ and Graph (experimentRoot:string) =
                               
                     let expRootRelatedWorkingDir : ExperimentRelativePath = 
                         let alphFileDir = Path.GetDirectoryName(normalizePath(alphFileFullPath))
-                        let path = Path.GetRelativePath(experimentRootPath, Path.GetFullPath(Path.Combine(alphFileDir, alphCommand.WorkingDirectory)))
+                        let path = Path.GetRelativePath(experimentRoot, Path.GetFullPath(Path.Combine(alphFileDir, alphCommand.WorkingDirectory)))
                         if path.EndsWith(Path.DirectorySeparatorChar) then path else path + string Path.DirectorySeparatorChar
                     method.WorkingDirectory <- expRootRelatedWorkingDir
 
@@ -365,10 +360,10 @@ and Graph (experimentRoot:string) =
 
     /// Computes actual versions for the graph artefacts from the disk.
     /// Updates values of ArtefactVertex.ActualVersion for all of the graph artefacts (unless this method is called, the property returns None).
-    /// Updates .hash files on a disk.
+    /// Updates .hash files.
     member s.ReadActualVersions() =
         async {
-            do! s.Artefacts |> Seq.map (fun a -> a.UpdateActualVersion()) |> Async.Parallel |> Async.Ignore
+            do! s.Artefacts |> Seq.map (fun a -> a.ReadActualVersion()) |> Async.Parallel |> Async.Ignore
         }
 
     member private s.GetOrAddArtefact artefactId =

@@ -7,6 +7,7 @@ open System.Threading.Tasks
 open ItisLab.Alpheus.Tests.Utils
 open ItisLab.Alpheus.AlphFiles
 open ItisLab.Alpheus
+open Angara.Data
 
 type AlphFileSerializationTests(output)=
     inherit SingleUseOneTimeDirectory(output)
@@ -15,10 +16,10 @@ type AlphFileSerializationTests(output)=
     member s.``Alph file round serialization-deserialization``() =
         async {
             let artefactPath = Path.Combine(s.Path, "test.dat")
-            let snapshortSection : VersionedArtefact = { RelativePath = artefactPath; Hash = "0000"}
+            let snapshotSection : VersionedArtefact = { RelativePath = artefactPath; Hash = MdMap.scalar (Some "0000") }
             let alphFile : AlphFile = {
                 IsTracked = true
-                Origin = DataOrigin.SourceOrigin snapshortSection
+                Origin = DataOrigin.SourceOrigin snapshotSection
             }
             let path = Path.Combine(s.Path,"test.json")
             do! saveAsync alphFile path

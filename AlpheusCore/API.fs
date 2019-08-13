@@ -14,7 +14,7 @@ open Angara.Data
 let buildDependencyGraphAsync experimentRoot artefactIds =
     async {
         Logger.logVerbose Logger.API "Building the dependency graph"
-        let g = artefactIds |> DependencyGraph.Graph.Build experimentRoot
+        let g = DependencyGraph.Graph.Build(experimentRoot, artefactIds)
         logVerbose LogCategory.API (sprintf "Dependency graph is built (%d artefacts; %d methods)" g.ArtefactsCount g.MethodsCount)
 
         // Filling in actual hashes
@@ -119,7 +119,9 @@ let status (experimentRoot, artefactId) =
 
 /// Tries to restore the artefact to the version stored in .alph file using all available storages
 let restoreAsync (experimentRoot, artefactId : ArtefactId) = 
-    failwith "not implemented" |> ignore
+    async {
+        return Error "not implemented"
+    }
     //let restoreSingleItem path versionToRestore =
     //    async {
     //        match versionToRestore with

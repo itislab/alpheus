@@ -119,7 +119,7 @@ type SourceMethod(source: SourceVertex, experimentRoot) =
                 ()
         | Some diskVersion when artefact.IsTracked ->
             // if alph file exists on disk (e.g. isTracked), we need to re-save it to update the expected version
-            artefact.SaveAlphFile() |> Async.RunSynchronously
+            artefact.SaveAlphFile()
         | Some _ -> // not tracked
             ()
 

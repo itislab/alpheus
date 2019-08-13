@@ -68,8 +68,8 @@ type DepGraphConstruction(output) =
     [<Fact>]
     member s.``dependencyGraph loads for all at once``() =
         async {
-            Logger.logInfo Logger.Test (sprintf "testing %A" s.FullArtIds)
-            let! graph = buildDependencyGraphAsync s.RootPath (List.ofArray s.FullArtIds)
+            Logger.logInfo Logger.Test (sprintf "testing %A" s.ArtefactIds)
+            let! graph = buildDependencyGraphAsync s.RootPath (List.ofArray s.ArtefactIds)
             Assert.True(graph.ArtefactsCount>0,"Graph must be non-empty")
             } |> toAsyncFact
 
@@ -79,7 +79,7 @@ type DepGraphConstruction(output) =
     member s.``build: finishes``(testCase) =
         async {
             // preparing and running build command
-            let inputIDs = testCase.inputsIndices |> Array.map (fun idx -> s.FullArtIds.[idx].ToString()) |> List.ofArray
+            let inputIDs = testCase.inputsIndices |> Array.map (fun idx -> s.ArtefactIds.[idx].ToString()) |> List.ofArray
             let inputPaths = inputIDs |> List.map (fun x -> Path.Combine(s.Path,x))
             let outputPaths = testCase.OutputIDs |> Array.map (fun x -> Path.Combine(s.Path,x)) |> List.ofArray
             let! buildResult = buildAsync s.RootPath inputPaths outputPaths "../copy_prog $in1 $out1" false
@@ -92,7 +92,7 @@ type DepGraphConstruction(output) =
     member s.``build: vertex count check``(testCase) =
         async {
             // preparing and running build command
-            let inputIDs = testCase.inputsIndices |> Array.map (fun idx -> s.FullArtIds.[idx].ToString()) |> List.ofArray
+            let inputIDs = testCase.inputsIndices |> Array.map (fun idx -> s.ArtefactIds.[idx].ToString()) |> List.ofArray
             let inputPaths = inputIDs |> List.map (fun x -> Path.Combine(s.Path,x))
             let outputPaths = testCase.OutputIDs |> Array.map (fun x -> Path.Combine(s.Path,x)) |> List.ofArray
             let! buildResult = buildAsync s.RootPath inputPaths outputPaths "../copy_prog $in1 $out1" false
@@ -117,7 +117,7 @@ type DepGraphConstruction(output) =
     member s.``build: new artefact deps check``(testCase) =
         async {
             // preparing and running build command
-            let inputIDs = testCase.inputsIndices |> Array.map (fun idx -> s.FullArtIds.[idx]) |> List.ofArray
+            let inputIDs = testCase.inputsIndices |> Array.map (fun idx -> s.ArtefactIds.[idx]) |> List.ofArray
             let inputPaths = inputIDs |> List.map (fun x -> Path.Combine(s.Path,x.ToString()))
             let outputPaths = testCase.OutputIDs |> Array.map (fun x -> Path.Combine(s.Path,x)) |> List.ofArray
             let! buildResult = buildAsync s.RootPath inputPaths outputPaths "../copy_prog $in1 $out1" false
@@ -128,12 +128,12 @@ type DepGraphConstruction(output) =
             let checkGraphAsync outputId = 
                 async {
                     let! graph = buildDependencyGraphAsync s.RootPath [outputId]
-                    let output = graph.GetOrAllocateArtefact outputId
+                    let output = graph.Artefacts |> Seq.find (fun a -> a.Id = outputId)
                     let expectedDependecies = inputIDs |> Set.ofList
                     let actualDependecies =
                         match output.ProducedBy with
                         |   MethodVertex.Source(s) -> Assert.True(false, "the artefact must be produced by compute method, not source"); failwith ":("
-                        |   MethodVertex.Command(comp) -> comp.Inputs |> Seq.map (fun (x:VersionedArtefact) -> x.Artefact.Id) |> Set.ofSeq
+                        |   MethodVertex.Command(comp) -> comp.Inputs |> Seq.map (fun x -> x.Artefact.Id) |> Set.ofSeq
                     Assert.Equal<ArtefactId>(expectedDependecies, actualDependecies)
                 }
 
@@ -196,7 +196,7 @@ type DepGraphSaveRestore(output) =
     [<Fact>]
     member s.``API Save-Restore: file artefact saves & restores``() =
         async {
-            let artId = s.FullArtIds.[0]
+            let artId = s.ArtefactIds.[0]
             let path = artId |> PathUtils.idToFullPath s.FullPath
 
             // local storage is available by default

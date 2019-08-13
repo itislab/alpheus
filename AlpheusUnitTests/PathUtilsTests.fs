@@ -157,7 +157,7 @@ type PathUtilsTests(output)=
         Directory.CreateDirectory(Path.GetDirectoryName(alphFilePath)) |> ignore
         let artefactPath = Path.Combine(s.Path, "source", "test.dat")
         let relativeArtefactPath     = relativePath alphFilePath artefactPath
-        let snapshortSection : AlphFiles.VersionedArtefact = { RelativePath = relativeArtefactPath; Hash = "0000"}
+        let snapshortSection : AlphFiles.VersionedArtefact = { RelativePath = relativeArtefactPath; Hash = MdMap.scalar (Some "0000") }
         let alphFile : AlphFiles.AlphFile = {
             IsTracked = true
             Origin = AlphFiles.SourceOrigin snapshortSection
