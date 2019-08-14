@@ -157,6 +157,8 @@ and LinkToArtefact(artefact: ArtefactVertex, expectedVersion: ArtefactVersion) =
             let actual = artefact.ActualVersion.Value |> MdMap.get index
             expected <- expected |> MdMap.set index actual)
 
+    override s.ToString() = sprintf "LinkToArtefact %A [expected version %A]" artefact expected
+
 
 and [<CustomEquality; CustomComparison>] MethodVertex =
     /// The vertex produces single artefact out of void
@@ -296,8 +298,7 @@ and Graph (experimentRoot:string) =
             let idToLink = s.GetOrAddArtefact >> LinkToArtefact
             let inputs = inputIds |> Seq.map idToLink  
             let outputs = outputIds |> Seq.map idToLink
-            let method = s.AddCommand command inputs outputs
-
+            let method = s.AddOrGetCommand command inputs outputs
             do! outputs 
                 |> AsyncSeq.ofSeq
                 |> AsyncSeq.iterAsyncParallel (fun output -> System.Threading.Tasks.Task.Run(fun () -> output.Artefact.SaveAlphFile()) |> Async.AwaitTask)
@@ -325,14 +326,14 @@ and Graph (experimentRoot:string) =
                 // We must create it now and fix current disk data version in it
                 // so calculating actual disk data version
                 let calculatedVersion = Hash.hashVectorPathAndSave fullOutputPath |> Async.RunSynchronously
-                s.AddSource (LinkToArtefact(dequeuedArtefact, calculatedVersion)) |> ignore
+                s.AddOrGetSource (LinkToArtefact(dequeuedArtefact, calculatedVersion)) |> ignore
 
             | Some(alphFile) ->
                 // Alph file exists
                 dequeuedArtefact.IsTracked <- alphFile.IsTracked
                 match alphFile.Origin with
                 | SourceOrigin(alphSource) -> // Snapshot in .alph file means that is was snapshoted, thus Tracked
-                    s.AddSource (LinkToArtefact(dequeuedArtefact, alphSource.Hash)) |> ignore
+                    s.AddOrGetSource (LinkToArtefact(dequeuedArtefact, alphSource.Hash)) |> ignore
 
                 | CommandOrigin(alphCommand) -> // produced by some method.
                     // checking weather the internals were modified (wether the output hashes mentioned are valid)
@@ -344,15 +345,13 @@ and Graph (experimentRoot:string) =
                     let inputs = alphCommand.Inputs |> Array.map makeLink                                                                                
                     let outputs = alphCommand.Outputs |> Array.map makeLink
 
-                    let method = s.AddCommand alphCommand.Command inputs outputs 
+                    let method = s.AddOrGetCommand alphCommand.Command inputs outputs 
                     method.DoNotCleanOutputs <- alphCommand.OutputsCleanDisabled
-                              
                     let expRootRelatedWorkingDir : ExperimentRelativePath = 
                         let alphFileDir = Path.GetDirectoryName(normalizePath(alphFileFullPath))
                         let path = Path.GetRelativePath(experimentRoot, Path.GetFullPath(Path.Combine(alphFileDir, alphCommand.WorkingDirectory)))
                         if path.EndsWith(Path.DirectorySeparatorChar) then path else path + string Path.DirectorySeparatorChar
                     method.WorkingDirectory <- expRootRelatedWorkingDir
-
                     inputs |> Seq.map (fun inp -> inp.Artefact) |> Seq.filter(not << processedOutputs.Contains) |> Seq.iter (fun (x:ArtefactVertex) -> queue.Enqueue x)                         
 
                 processedOutputs <- Set.add dequeuedArtefact processedOutputs
@@ -375,23 +374,29 @@ and Graph (experimentRoot:string) =
             artefactVertices <- artefactVertices |> Map.add artefactId vertex 
             vertex
     
-    /// Adds a method vertex for the given artefact (fails if it is already added).
-    member private s.AddSource (output: LinkToArtefact) : SourceVertex =
+    /// Adds a method vertex for the given artefact.
+    member private s.AddOrGetSource (output: LinkToArtefact) : SourceVertex =
         let methodId = getMethodId (Seq.singleton output.Artefact.Id)
-        if Map.containsKey methodId methodVertices then
-            invalidOp (sprintf "attempt to allocate new vertex \"%s\", but the vertex with this ID is already allocated" methodId)
-        let vertex = SourceVertex(methodId, output, experimentRoot)
-        output.Artefact.ProducedBy <- Source vertex
-        methodVertices <- methodVertices |> Map.add methodId (Source vertex) 
-        vertex
+        match methodVertices |> Map.tryFind methodId with
+        | Some (Source m) -> m
+        | Some (_) -> invalidOp (sprintf "Method %A already exists but has wrong type" methodId)
+        | None ->
+            let vertex = SourceVertex(methodId, output, experimentRoot)
+            output.Artefact.ProducedBy <- Source vertex
+            methodVertices <- methodVertices |> Map.add methodId (Source vertex) 
+            vertex
 
-    /// Adds a method vertex for the given command and its inputs/outputs (fails if it is already added).
-    member private s.AddCommand (command: string) (inputs: LinkToArtefact seq) (outputs: LinkToArtefact seq) : CommandLineVertex = 
+    /// Adds a method vertex for the given command and its inputs/outputs.
+    /// Returns a method if it was added or if it already exists and has the expected type.
+    /// Otherwise throws.
+    member private s.AddOrGetCommand (command: string) (inputs: LinkToArtefact seq) (outputs: LinkToArtefact seq) : CommandLineVertex = 
         let methodId = getMethodId (outputs |> Seq.map(fun out -> out.Artefact.Id))
-        if Map.containsKey methodId methodVertices then
-            invalidOp (sprintf "attempt to allocate new vertex \"%s\", but the vertex with this ID is already allocated" methodId)
-        let vertex = CommandLineVertex (methodId, experimentRoot, inputs |> Seq.toList, outputs |> Seq.toList, command)
-        inputs |> Seq.iter(fun inp -> inp.Artefact.AddUsedIn vertex)
-        outputs |> Seq.iter(fun out -> out.Artefact.ProducedBy <- Command vertex)
-        methodVertices <- methodVertices |> Map.add methodId (Command vertex) 
-        vertex
+        match methodVertices |> Map.tryFind methodId with
+        | Some (Command m) -> m
+        | Some (_) -> invalidOp (sprintf "Method %A already exists but has wrong type" methodId)
+        | None ->
+            let vertex = CommandLineVertex (methodId, experimentRoot, inputs |> Seq.toList, outputs |> Seq.toList, command)
+            inputs |> Seq.iter(fun inp -> inp.Artefact.AddUsedIn vertex)
+            outputs |> Seq.iter(fun out -> out.Artefact.ProducedBy <- Command vertex)
+            methodVertices <- methodVertices |> Map.add methodId (Command vertex) 
+            vertex

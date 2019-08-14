@@ -108,11 +108,16 @@ let idToAlphFileFullPath (experimentRoot: string) (artefactId:ArtefactId) : stri
 /// Builds an instance of MdMap which contains all files or directories (depending whether the given ends with the sepator or not),
 /// satisfying the given artefact path pattern.
 /// In case of a vector, the keys of the MdMap instance contain a concrete replacement string for every asterisk.
-/// todo: document rules that file is expected to have * instead of file name without extension and that will be the key.
 let enumeratePath (artefactPath:string) : MdMap<string, string> =
     let isDirectory = isDirectory artefactPath
     let isHidden (name:string) = name.StartsWith(".") || name.ToLower().EndsWith(".hash")
-    let isPattern (name:string) = name.Contains("*")
+    let isNotPattern (name:string) = not(name.Contains '*')
+    let assertCorrectDirPattern (name:string) = if name <> "*" then invalidArg "artefactPath" "Directory pattern must be an asterisk (*) without any other symbols" 
+    let assertCorrectFilePattern (name:string) = if not(name.StartsWith "*.") then invalidArg "artefactPath" "File pattern must be an asterisk with an extension (*.ext)" 
+    let assertFileExists path = if not(File.Exists path) then invalidOp (sprintf "File doesn't exist: %s" path)
+    let assertDirExists path = if not(Directory.Exists path) then invalidOp (sprintf "Directory doesn't exist: %s" path)
+    let subdirs path name = DirectoryInfo(path).GetDirectories(name) |> Seq.filter(fun d -> not(isHidden d.Name)) 
+    let files path name = DirectoryInfo(path).GetFiles(name) |> Seq.filter(fun f -> not(isHidden f.Name)) 
     
     let rec enumerate (path: string) (parts: string list) : MdMap<string, string> =
         match parts with
@@ -120,30 +125,38 @@ let enumeratePath (artefactPath:string) : MdMap<string, string> =
             MdMap.scalar path
         | head :: _ when isHidden head ->
             MdMap.empty
-        | [head] when isDirectory -> 
-            DirectoryInfo(path).GetDirectories(head) 
-            |> Seq.filter(fun fi -> not(isHidden fi.Name)) 
-            |> Seq.fold (fun map fi -> map |> MdMap.add [fi.Name] fi.FullName) MdMap.empty
-        | [head] -> 
-            DirectoryInfo(path).GetFiles(head) 
-            |> Seq.filter(fun fi -> not(isHidden fi.Name)) 
-            |> Seq.fold (fun map fi -> map |> MdMap.add [Path.GetFileNameWithoutExtension fi.Name] fi.FullName) MdMap.empty
-        | head :: tail ->
-            sprintf "%s :: %A" head tail |> Logger.logInfo Logger.Test
-            sprintf "Looking for %s in %s" head path |> Logger.logInfo Logger.Test
-            let found = Directory.EnumerateDirectories(path, head) |> Seq.toArray
-            sprintf "Found %A" found |> Logger.logInfo Logger.Test
-            DirectoryInfo(path).GetDirectories(head) 
-            |> Seq.filter(fun fi -> not(isHidden fi.Name)) 
-            |> Seq.map(fun fi -> (fi.Name, enumerate fi.FullName tail)) 
-            |> Seq.fold(fun map (fi, mapForFi) -> map |> MdMap.set [fi] mapForFi) MdMap.empty
+        | [file] when (isNotPattern file) && (not isDirectory) ->
+            let newPath = Path.Combine(path, file)
+            assertFileExists newPath
+            enumerate newPath []
+        | dir :: tail when isNotPattern dir ->
+            let newPath = Path.Combine(path, dir)
+            assertDirExists newPath
+            enumerate newPath tail
+
+        // All following cases are for the pattern head.
+        | [dir] when isDirectory -> 
+            assertCorrectDirPattern dir
+            subdirs path dir
+            |> Seq.fold (fun map d -> map |> MdMap.add [d.Name] d.FullName) MdMap.empty
+        | [file] -> 
+            assertCorrectFilePattern file
+            files path file
+            |> Seq.fold (fun map f -> map |> MdMap.add [Path.GetFileNameWithoutExtension f.Name] f.FullName) MdMap.empty
+
+        | dir :: tail ->
+            assertCorrectDirPattern dir
+            subdirs path dir
+            |> Seq.fold(fun map d -> 
+                let subItems = enumerate d.FullName tail 
+                map |> MdMap.set [d.Name] subItems) MdMap.empty
 
            
     // Combines the top items of the path unless a pattern item is found.
     let rec rootPath path (parts : string list) : (string * string list) =
         match parts with
         | [] -> (path, [])
-        | head :: tail when not(isPattern(head)) -> rootPath (if String.IsNullOrEmpty(path) then head else Path.Combine(path, head)) tail
+        | head :: tail when isNotPattern head -> rootPath (if String.IsNullOrEmpty(path) then head else Path.Combine(path, head)) tail
         | _ -> (path, parts)
 
     let parts = artefactPath.Split([|Path.DirectorySeparatorChar; Path.AltDirectorySeparatorChar|], StringSplitOptions.RemoveEmptyEntries) |> List.ofArray

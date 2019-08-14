@@ -47,7 +47,7 @@ type SampleExperiment(output) =
                 |> Array.iteri (fun i x -> File.WriteAllText(x,sprintf "data file %d" i) )
 
             // creating graph
-            let g = DependencyGraph.Graph.Build(rootPath, artefactIds)
+            let g = DependencyGraph.Graph.Build(rootPath, [])
             let! method3 = g.AddMethod "" [artefactIds.[0]; artefactIds.[1]] [artefactIds.[2]] 
             let! method4 = g.AddMethod "" [artefactIds.[0]; artefactIds.[1]] [artefactIds.[3]] 
             let! method5 = g.AddMethod "" [artefactIds.[2]; artefactIds.[3]] [artefactIds.[4]] 
