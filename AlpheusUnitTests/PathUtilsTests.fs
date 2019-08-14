@@ -162,7 +162,7 @@ type PathUtilsTests(output) =
             IsTracked = true
             Origin = AlphFiles.SourceOrigin snapshortSection
         }
-        AlphFiles.saveAsync alphFile alphFilePath |> Async.RunSynchronously
+        AlphFiles.save alphFile alphFilePath
 
         let artefactId = pathToId s.Path alphFilePath 
         Assert.Equal(relativePath s.Path artefactPath, idToExperimentPath artefactId)

@@ -197,5 +197,5 @@ let validateSignature (computeSection:CommandOutput) =
         // wiping out result hashes
         {
             computeSection with
-                Outputs = computeSection.Outputs |> Array.map (fun output -> {output with Hash = invalidate output.Hash}) 
+                Outputs = computeSection.Outputs |> List.map (fun output -> {output with Hash = invalidate output.Hash}) 
         }

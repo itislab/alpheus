@@ -25,8 +25,8 @@ type VersionedArtefact = {
 }
 
 type CommandOutput =  {
-    Inputs: VersionedArtefact array
-    Outputs: VersionedArtefact array
+    Inputs: VersionedArtefact list
+    Outputs: VersionedArtefact list
     OutputIndex: int
     WorkingDirectory: AlphRelativePath
     Command: string    
@@ -46,14 +46,6 @@ type AlphFile = {
     IsTracked: bool
 }
 
-let saveAsync (alphfile:AlphFile) (filepath:string) =
-    async {
-        let converter = ArtefactVersionConverter()
-        let serialized = JsonConvert.SerializeObject(alphfile,Formatting.Indented, converter)
-        use sw = new StreamWriter(filepath)
-        do! Async.AwaitTask(sw.WriteAsync(serialized))
-    }
-
 let save (alphfile:AlphFile) (filepath:string) =
     let converter = ArtefactVersionConverter()
     let serialized = JsonConvert.SerializeObject(alphfile,Formatting.Indented, converter)
@@ -70,15 +62,4 @@ let tryLoad (filepath:string) =
         Some(alphFile)
     else
         None
-
-let tryLoadAsync (filepath:string) =
-    async {
-        if File.Exists(filepath) then
-            use sr = new StreamReader(filepath)
-            let! read = Async.AwaitTask(sr.ReadToEndAsync())
-            let alphFile = JsonConvert.DeserializeObject<AlphFile>(read)
-            return Some(alphFile)
-        else
-            return None
-    }
 

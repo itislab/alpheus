@@ -105,8 +105,8 @@ type ArtefactVertex(id:ArtefactId) =
                         let relative = relativePath alphFileFullPath (a.Artefact.Id |> idToFullPath experimentRoot)
                         { RelativePath = relative; Hash = a.ExpectedVersion}
     
-                    { Inputs = commandVertex.Inputs |> Seq.map toSection |> Array.ofSeq
-                      Outputs = commandVertex.Outputs |> Seq.map toSection |> Array.ofSeq
+                    { Inputs = commandVertex.Inputs |> Seq.map toSection |> List.ofSeq
+                      Outputs = commandVertex.Outputs |> Seq.map toSection |> List.ofSeq
                       OutputIndex = commandVertex.Outputs |> Seq.findIndex (fun output -> output.Artefact.Id = s.Id)
                       Command = commandVertex.Command                
                       WorkingDirectory = alphFileRelativeWorkingDir
@@ -342,8 +342,8 @@ and Graph (experimentRoot:string) =
                     let makeLink versionArtefact =  
                         let artefact = versionArtefact.RelativePath |> alphRelativePathToId alphFileFullPath experimentRoot |> s.GetOrAddArtefact
                         LinkToArtefact(artefact, versionArtefact.Hash)                    
-                    let inputs = alphCommand.Inputs |> Array.map makeLink                                                                                
-                    let outputs = alphCommand.Outputs |> Array.map makeLink
+                    let inputs = alphCommand.Inputs |> List.map makeLink                                                                                
+                    let outputs = alphCommand.Outputs |> List.map makeLink
 
                     let method = s.AddOrGetCommand alphCommand.Command inputs outputs 
                     method.DoNotCleanOutputs <- alphCommand.OutputsCleanDisabled
