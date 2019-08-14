@@ -139,6 +139,7 @@ type CommandMethod(command: CommandLineVertex, experimentRoot) =
                 | None -> None
         match resolveInTree index (map |> MdMap.toTree) with
         | Some(MdMapTree.Value v) -> v
+        | Some(MdMapTree.Map map) when map.IsEmpty -> None
         | Some(MdMapTree.Map _) -> invalidOp "Only one-to-one vectors are supported at the moment"
         | None -> None
 
