@@ -154,6 +154,24 @@ type FastHashTests(output)=
             Assert.True(System.IO.File.Exists(hashFilePath))
         } |> toAsyncFact
 
+    
+    [<Fact>]
+    member s. ``Hidden files are excluded from hash calculation`` () =
+        async {
+            let! hash1 = ItisLab.Alpheus.Hash.hashDirectoryAsync s.Path
+    
+            let hidFileName = System.IO.Path.Combine(s.Path,".gitfile1")
+    
+            do! File.WriteAllTextAsync(hidFileName,"test hidden files") |> Async.AwaitTask
+            let initialAttrs = File.GetAttributes(hidFileName)
+            File.SetAttributes(hidFileName, initialAttrs ||| FileAttributes.Hidden)
+    
+            let! hash2 = ItisLab.Alpheus.Hash.hashDirectoryAsync s.Path
+    
+            assertByteArraysEqual hash1 hash2
+    
+        } |> toAsyncFact
+
     [<Fact>]
     member s.``Fast hash respects up-to-date dot-hash file for file artefact`` () =
         async {
