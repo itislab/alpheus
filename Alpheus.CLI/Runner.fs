@@ -12,7 +12,7 @@ let run (programName:string) (parseResults:ParseResults<AlpheusArgs>) : Result<u
         Ok()
     else if parseResults.Contains Init then
         result {
-            let! cwd = (Directory.GetCurrentDirectory(), Config.isExperimentDirectory, "The current directory is already an Alpheus experiment directory")
+            let! cwd = (Directory.GetCurrentDirectory(), (fun p -> not (Config.isExperimentDirectory p)), "The current directory is already an Alpheus experiment directory")
             return API.createExperimentDirectoryAsync cwd |> Async.RunSynchronously |> ignore
         }
     elif parseResults.Contains Config then
