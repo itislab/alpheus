@@ -8,14 +8,15 @@ open CustomSerializers
 
 // Example 1:
 //  artefact id: files/*.txt
-//  alph file: file/vector.txt.alph
+//  alph file: files/vector.txt.alph
 //  SourceOrigin.RelativePath: *.txt
 // Example 2:
 //  artefact id: files/*/*.txt
-//  alph file: file/vector-vector.txt.alph
+//  alph file: files/vector-vector.txt.alph
 //  SourceOrigin.RelativePath: */*.txt
 
 /// Identifies a version of an artefact (either scalar or vector) using a hash string (can be neither null nor empty).
+/// map: path -> version
 type ArtefactVersion = MdMap<string, HashString option>
 
 type VersionedArtefact = {
@@ -46,12 +47,21 @@ type AlphFile = {
     IsTracked: bool
 }
 
+/// Save the content of alphfile into to file filepath, recreating the file if it exists
 let save (alphfile:AlphFile) (filepath:string) =
     let converter = ArtefactVersionConverter()
     let serialized = JsonConvert.SerializeObject(alphfile,Formatting.Indented, converter)
     use sw = new StreamWriter(filepath)
     sw.Write(serialized)
 
+/// Save the content of alphfile into to file filepath, recreating the file if it exists
+let saveAsync (alphfile:AlphFile) (filepath:string) =
+    async {
+        let converter = ArtefactVersionConverter()
+        let serialized = JsonConvert.SerializeObject(alphfile,Formatting.Indented, converter)
+        use sw = new StreamWriter(filepath)
+        do! Async.AwaitTask(sw.WriteAsync(serialized))
+    }
 
 let tryLoad (filepath:string) =
     if File.Exists(filepath) then
@@ -62,4 +72,17 @@ let tryLoad (filepath:string) =
         Some(alphFile)
     else
         None
+
+let tryLoadAsync (filepath:string) =
+    async {
+        if File.Exists(filepath) then
+            use sr = new StreamReader(filepath)
+            let! read = Async.AwaitTask(sr.ReadToEndAsync())
+            let converter = ArtefactVersionConverter()
+            let alphFile = JsonConvert.DeserializeObject<AlphFile>(read, converter)
+            return Some(alphFile)
+        else
+            return None
+    }
+
 

@@ -37,6 +37,8 @@ type ArtefactVersionConverter() =
                 MdMap.scalar (Some(reader.Value :?> string))
             | JsonToken.Null -> 
                 MdMap.scalar None
+            //| JsonToken.Boolean ->
+            //    MdMap.scalar (Some(reader.Value :?> string))
             | JsonToken.StartObject ->
                 MdMap.Empty 
                 |> Seq.unfold (fun mdMap -> 

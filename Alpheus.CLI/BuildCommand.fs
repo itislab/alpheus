@@ -11,9 +11,9 @@ let run (buildArgs:ParseResults<BuildArgs>) =
         let outputs = buildArgs.GetResults <@ O @>
         let doNotCleanOutputs = buildArgs.Contains Disable_Outputs_Clean
 
-        do! outputs.Length > 0, "Outputs are not specified"
+        do! outputs.Length > 0, UserError "Outputs are not specified"
         let unrecognized = buildArgs.UnrecognizedCliParams
-        do! unrecognized.Length > 0, "Command is not specified"
+        do! unrecognized.Length > 0, UserError "Command is not specified"
 
         let command = String.Join(' ', unrecognized) // buildArgs.TryGetResult <@ Command @>
         // Checking that both dependencies and outputs are under the same experiment folder
@@ -22,8 +22,8 @@ let run (buildArgs:ParseResults<BuildArgs>) =
         traceVerbose(sprintf "Found following experiment roots among the supplied artefact paths: %A" roots)
 
         match roots with
-        | [] -> return! Error "An output artefact is not specified"
-        | [None] -> return! Error "Not an experiment folder: .alpheus"
+        | [] -> return! Error (UserError "An output artefact is not specified")
+        | [None] -> return! Error (UserError "Not an experiment folder: .alpheus")
         | [Some experimentRoot] -> return! (API.buildAsync experimentRoot deps outputs command doNotCleanOutputs |> Async.RunSynchronously)
-        | _ -> return! Error "Not all of the input or output artefacts are under the same experiment root folder"
+        | _ -> return! Error (UserError "Not all of the input or output artefacts are under the same experiment root folder")
     }

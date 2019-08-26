@@ -3,6 +3,12 @@ module ItisLab.Alpheus.Results
 
 open System
 
+type AlpheusError =
+    /// Error which holds the text for the alpheus developers
+    |   SystemError of string
+    /// Error which is caused by invalid user action
+    |   UserError of string
+
 // This code is a modified version of the snippet published in http://fssnip.net/7UJ
 type ResultBuilder() =
     member __.Return(x) = Ok x

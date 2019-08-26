@@ -21,7 +21,7 @@ type ArtefactVertex(id:ArtefactId) =
     let mutable producer : MethodVertex option = None
     let mutable usedIn : Set<CommandLineVertex> = Set.empty
     let mutable isTracked = false
-    /// None means that file/dir does not exist on disk or is not computed yet.
+    /// None means that disk version is not computed yet.
     let mutable actualVersion : ArtefactVersion option = None 
     let lockObj = obj()
     
@@ -43,7 +43,16 @@ type ArtefactVertex(id:ArtefactId) =
         and set v = isTracked <- v
     
     /// Gets the version calculated from the data on the disk.
-    member s.ActualVersion = actualVersion
+    /// Lazy execution. Calulated based on disk data only on the first call. Later returns the hashed results
+    member s.ActualVersionAsync
+        with get() =
+            async {
+                match actualVersion with
+                |   None ->
+                    do! s.ForceActualVersionCalc()
+                    return actualVersion.Value
+                |   Some(v) -> return v
+            }
 
     member s.Rank = Artefacts.rank id
 
@@ -52,7 +61,7 @@ type ArtefactVertex(id:ArtefactId) =
     /// Computes actual version for the graph artefact item from the disk.
     /// Updates value of ArtefactVertex.ActualVersion.
     /// Updates .hash file on a disk.
-    member s.ReadActualVersion() : Async<unit> =
+    member s.ForceActualVersionCalc() : Async<unit> =
         async {
             let fullPath = s.Id |> idToFullPath s.ProducedBy.ExperimentRoot 
             let! hash = Hash.hashVectorPathAndSave fullPath
@@ -62,7 +71,7 @@ type ArtefactVertex(id:ArtefactId) =
     /// Computes actual version for the graph artefact item from the disk.
     /// Updates value of ArtefactVertex.ActualVersion.
     /// Updates .hash file on a disk.
-    member s.ReadActualVersion(index: string list) : Async<unit> =
+    member s.ForceActualVersionCalc(index: string list) : Async<unit> =
         async {
             let fullPath = s.Id |> idToFullPath s.ProducedBy.ExperimentRoot |> applyIndex index
             let! hash = Hash.hashPathAndSave fullPath
@@ -131,9 +140,8 @@ type ArtefactVertex(id:ArtefactId) =
        
     override s.ToString() =
         let version =
-            match s.ActualVersion with
-            |   None -> "not exist"
-            |   Some(hash) -> sprintf "%A" (hash |> MdMap.map(Option.map(fun s -> s.Substring(0,6))))
+            let hash = s.ActualVersionAsync |> Async.RunSynchronously
+            sprintf "%A" (hash |> MdMap.map(Option.map(fun s -> s.Substring(0,6))))
         sprintf "Artefact(%s|%s)" (s.Id.ToString()) version
 
 /// Represents a link to a specific version of an artefact.
@@ -142,7 +150,7 @@ and LinkToArtefact(artefact: ArtefactVertex, expectedVersion: ArtefactVersion) =
     let lockObj = obj()
 
     /// Creates a link to the artefact which expects the given actual version.
-    new(artefact) = LinkToArtefact(artefact, artefact.ActualVersion |> Option.defaultValue MdMap.empty)
+    new(artefact) = LinkToArtefact(artefact, artefact.ActualVersionAsync |> Async.RunSynchronously)
 
     member s.Artefact : ArtefactVertex = artefact
 
@@ -152,10 +160,22 @@ and LinkToArtefact(artefact: ArtefactVertex, expectedVersion: ArtefactVersion) =
 
     /// Makes the link to expect the actual version.
     /// The actual version MUST be available.
-    member s.ExpectActualVersion(index: string list) = 
-        lock lockObj (fun() -> 
-            let actual = artefact.ActualVersion.Value |> MdMap.get index
-            expected <- expected |> MdMap.set index actual)
+    member s.ExpectActualVersionAsync() = 
+        async {
+            let! actual = artefact.ActualVersionAsync
+            lock lockObj (fun() -> 
+                expected <- actual)
+            }        
+
+    /// Makes the link to expect the actual version.
+    /// The actual version MUST be available.
+    member s.ExpectActualVersionAsync(index: string list) = 
+        async {
+            let! actual = artefact.ActualVersionAsync
+            let actual2 = actual |> MdMap.get index
+            lock lockObj (fun() -> 
+                expected <- expected |> MdMap.set index actual2)
+            }
 
     override s.ToString() = sprintf "LinkToArtefact %A [expected version %A]" artefact expected
 
@@ -242,8 +262,8 @@ and CommandLineVertex(methodId : MethodId, experimentRoot: string, inputs: LinkT
     member s.OnSucceeded(index: string list) : Async<unit> =
         s.Outputs 
         |> Seq.map(fun out -> async { 
-                do! out.Artefact.ReadActualVersion index
-                out.ExpectActualVersion index
+                do! out.Artefact.ForceActualVersionCalc index
+                do! out.ExpectActualVersionAsync index
                 out.Artefact.SaveAlphFile()
             }) 
         |> Async.Parallel
@@ -357,14 +377,6 @@ and Graph (experimentRoot:string) =
                 processedOutputs <- Set.add dequeuedArtefact processedOutputs
         processedOutputs
 
-    /// Computes actual versions for the graph artefacts from the disk.
-    /// Updates values of ArtefactVertex.ActualVersion for all of the graph artefacts (unless this method is called, the property returns None).
-    /// Updates .hash files.
-    member s.ReadActualVersions() =
-        async {
-            do! s.Artefacts |> Seq.map (fun a -> a.ReadActualVersion()) |> Async.Parallel |> Async.Ignore
-        }
-
     member private s.GetOrAddArtefact artefactId =
         match artefactVertices |> Map.tryFind artefactId  with
         | Some(vertex) -> 
@@ -374,6 +386,13 @@ and Graph (experimentRoot:string) =
             artefactVertices <- artefactVertices |> Map.add artefactId vertex 
             vertex
     
+    member s.GetArtefact artefactId =
+        match artefactVertices |> Map.tryFind artefactId  with
+        | Some(vertex) -> 
+            Ok vertex
+        | None ->
+            Error (sprintf "ArtefactID %A is not found in the dependency graph" artefactId |> SystemError)
+
     /// Adds a method vertex for the given artefact.
     member private s.AddOrGetSource (output: LinkToArtefact) : SourceVertex =
         let methodId = getMethodId (Seq.singleton output.Artefact.Id)
