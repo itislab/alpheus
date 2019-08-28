@@ -159,7 +159,13 @@ let enumeratePath (artefactPath:string) : MdMap<string, string> =
         | head :: tail when isNotPattern head -> rootPath (if String.IsNullOrEmpty(path) then head else Path.Combine(path, head)) tail
         | _ -> (path, parts)
 
-    let parts = artefactPath.Split([|Path.DirectorySeparatorChar; Path.AltDirectorySeparatorChar|], StringSplitOptions.RemoveEmptyEntries) |> List.ofArray
+    let parts =
+        let p = artefactPath.Split([|Path.DirectorySeparatorChar; Path.AltDirectorySeparatorChar|], StringSplitOptions.RemoveEmptyEntries)
+        if artefactPath.[0] = '/' then // On unix systems, special handling of full path starting with '/'
+            Array.append [|"/"|] p
+        else
+            p
+    let parts = List.ofArray parts
     let (root, partsWithPattern) = rootPath String.Empty parts
     enumerate root partsWithPattern          
 
