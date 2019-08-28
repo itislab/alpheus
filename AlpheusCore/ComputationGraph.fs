@@ -166,34 +166,37 @@ type CommandMethod(command: CommandLineVertex, experimentRoot, checkStoragePrese
         | Some(MdMapTree.Map _) -> invalidOp "Only one-to-one vectors are supported at the moment"
         | None -> None
 
-
+    /// valid are items that either have actual disk data version match expected version, or actual disk data is missing and expected version is restorable from storage
     let areValidItemsVersions expectedVersionHashes actualVersionsHashes =
         if Array.exists Option.isNone expectedVersionHashes then
             // some of the artefact element was not ever produced, this is invalid
             false
         else
-            let isValidOnDisk hash1 hash2 =
+            /// Chooses the pairs that are not valid on disk (filtering out versions match)
+            let invalidOnDiskChooser hash1 hash2 =
                 match hash1,hash2 with
-                |   Some(h1),Some(h2) -> h1 = h2
-                |   _ -> false
-            let localValid = Seq.forall2 isValidOnDisk actualVersionsHashes expectedVersionHashes
-            if localValid then
+                |   Some(h1),Some(h2) ->  if h1 = h2 then None else Some(hash1,hash2)
+                |   _ -> Some(hash1,hash2)
+            let localInvalid = Seq.map2 invalidOnDiskChooser expectedVersionHashes actualVersionsHashes |> Seq.choose id |> Array.ofSeq
+            if Array.length localInvalid = 0 then
                 // valid as actual disk version match expected version. No need to check the storage
                 true
             else
-                let isValidRemoteAll (expected:(HashString option) array) actual =
-                    async {
-                        // we need to check the storage presence only for the disk absent artefact items
-                        // we can do so due to our previous checks
-                        let chooser expected actual =
-                            match expected,actual with
-                            |   Some(v),None -> Some(v)
-                            |   _,_ -> None
-                        let toCheck = Seq.map2 chooser expected actual |> Seq.choose id |> Array.ofSeq
-                        let! checkRes = checkStoragePresence toCheck
-                        return checkRes |> Seq.forall id
-                    }
-                isValidRemoteAll expectedVersionHashes actualVersionsHashes |> Async.RunSynchronously
+                // check if the locally "invalid" are "remote valid" (restorable from storage in case of disk data absence)
+                let eligibleForRemoteCheckChooser pair =
+                    let expected,actual = pair
+                    match expected,actual with
+                    |   Some(v),None -> Some(v)
+                    |   _,_ -> None
+
+                let eligibleForRemoteCheck = Array.choose eligibleForRemoteCheckChooser localInvalid
+                if Array.length eligibleForRemoteCheck = Array.length localInvalid then
+                    // we proceed with the remote checks only if all of the locally invalid items are eligible for remote check
+                    let remotePresence = checkStoragePresence eligibleForRemoteCheck |> Async.RunSynchronously            
+                    Array.forall id remotePresence
+                else
+                    // otherwise at least one unrestorable item exists. Thus invalid
+                    false
 
     let isValid (actualVersion:ArtefactVersion) (expectedVersion:ArtefactVersion) =
         let actVersions = MdMap.toSeq actualVersion |> Array.ofSeq
@@ -225,7 +228,7 @@ type CommandMethod(command: CommandLineVertex, experimentRoot, checkStoragePrese
             |> Seq.fold(fun (max: string list) index -> if index.Length > max.Length then index else max) []
         let methodItemId = command.MethodId |> applyIndex index
         let logVerbose str = Logger.logVerbose Logger.Execution (sprintf "%s: %s" methodItemId str)
-        logVerbose "Started."
+        // logVerbose "Started."
 
         // Build the output paths by applying the index of this method.
         let outputPaths = 

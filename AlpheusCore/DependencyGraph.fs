@@ -50,6 +50,7 @@ type ArtefactVertex(id:ArtefactId, experimentRoot:string) =
             async {
                 match actualVersion with
                 |   None ->
+                    Logger.logVerbose Logger.LogCategory.DependencyGraph (sprintf "Recalculating actual hash of %A" s.Id)
                     do! s.ForceActualVersionCalc()
                     return actualVersion.Value
                 |   Some(v) -> return v
@@ -334,6 +335,7 @@ and Graph (experimentRoot:string) =
             let idToLink = s.GetOrAddArtefact >> LinkToArtefact
             let inputs = inputIds |> Seq.map idToLink  
             let outputs = outputIds |> Seq.map idToLink
+            let outputs = outputs |> Seq.map (fun x -> LinkToArtefact(x.Artefact,x.ExpectedVersion |> MdMap.map(fun _ -> None))) // invalidating outputs (for the case if the previously defined command is updated)
             let method = s.AddOrGetCommand command inputs outputs
             do! outputs 
                 |> AsyncSeq.ofSeq
@@ -359,10 +361,10 @@ and Graph (experimentRoot:string) =
             | None -> 
                 // Absence of .alph file means that the artefact is initial (not produced)
                 // Thus it corresponds to a source vertex (no inputs)
-                // We must create it now and fix current disk data version in it
-                // so calculating actual disk data version
-                let calculatedVersion = Hash.hashVectorPathAndSave fullOutputPath |> Async.RunSynchronously
-                s.AddOrGetSource (LinkToArtefact(dequeuedArtefact, calculatedVersion)) |> ignore
+                // We must create it now
+                
+
+                s.AddOrGetSource (LinkToArtefact(dequeuedArtefact, MdMap.scalar None)) |> ignore
 
             | Some(alphFile) ->
                 // Alph file exists
@@ -370,9 +372,8 @@ and Graph (experimentRoot:string) =
                 match alphFile.Origin with
                 | SourceOrigin(alphSource) -> // Snapshot in .alph file means that is was snapshoted, thus Tracked
                     s.AddOrGetSource (LinkToArtefact(dequeuedArtefact, alphSource.Hash)) |> ignore
-
                 | CommandOrigin(alphCommand) -> // produced by some method.
-                    // checking weather the internals were modified (wether the output hashes mentioned are valid)
+                    // checking weather the internals were modified (weather the output hashes mentioned are valid)
                     let alphCommand = Hash.validateSignature(alphCommand)
 
                     let makeLink versionArtefact =  

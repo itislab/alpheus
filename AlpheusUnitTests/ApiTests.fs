@@ -248,6 +248,14 @@ type ScalarScenarios(output) =
         else
             "/bin/sh -c \"cat $in1 > $out1; cat $in2 >> $out1\""
 
+    // first file is duplicated
+    let concatCommand2 = 
+        if isTestRuntimeWindows then
+            "cmd /C \"cat.cmd $out1 $in1 $in1\""
+        else
+            "/bin/sh -c \"cat $in1 > $out1; cat $in1 >> $out1\""
+
+
     let buildExperiment(path) =
         async {
             let path = Path.GetFullPath path
@@ -285,6 +293,141 @@ type ScalarScenarios(output) =
 
                 do! assertNonEmptyFile(Path.Combine(path,"1_2.txt"))
                 do! assertNonEmptyFile(Path.Combine(path,"1_2_3.txt"))
+            finally
+                Environment.CurrentDirectory <- savedWD            
+        } |> toAsyncFact
+
+    [<Fact>]
+    member s.``Changed input content invalidates vertex``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try            
+                let path = Path.GetFullPath s.Path
+                Environment.CurrentDirectory <- s.Path
+                
+                do! buildExperiment(path)
+                output.WriteLine("TEST: experiment graph is constructed")
+
+                assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt")
+                
+                output.WriteLine("TEST: first time computed 1_2_3.txt")
+
+                do! assertNonEmptyFile(Path.Combine(path,"1_2.txt"))
+                let! content1 = File.ReadAllTextAsync(Path.Combine(path,"1_2_3.txt")) |> Async.AwaitTask
+
+                // now changing 3.txt
+                do! File.WriteAllTextAsync(Path.Combine(path,"3.txt"),"File 3 changed\\r\\n") |> Async.AwaitTask
+
+                // this should change 1_2_3.txt
+                assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt")
+                output.WriteLine("TEST: second time computed 1_2_3.txt")
+                let! content2 = File.ReadAllTextAsync(Path.Combine(path,"1_2_3.txt")) |> Async.AwaitTask
+
+                Assert.True(content1.Length > 0)
+                Assert.True(content2.Length > 0)
+                Assert.NotEqual<string>(content1,content2)
+            finally
+                Environment.CurrentDirectory <- savedWD            
+        } |> toAsyncFact
+
+    [<Fact>]
+    member s.``Changed output content invalidates vertex``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try            
+                let path = Path.GetFullPath s.Path
+                Environment.CurrentDirectory <- s.Path
+                
+                do! buildExperiment(path)
+                output.WriteLine("TEST: experiment graph is constructed")
+
+                assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt")
+                
+                output.WriteLine("TEST: first time computed 1_2_3.txt")
+
+                do! assertNonEmptyFile(Path.Combine(path,"1_2.txt"))
+                let! content1 = File.ReadAllTextAsync(Path.Combine(path,"1_2_3.txt")) |> Async.AwaitTask
+
+                // now changing 3.txt
+                do! File.WriteAllTextAsync(Path.Combine(path,"1_2_3.txt"),"manually changed\\r\\n") |> Async.AwaitTask
+
+                // this should change 1_2_3.txt
+                assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt")
+                output.WriteLine("TEST: second time computed 1_2_3.txt")
+                let! content2 = File.ReadAllTextAsync(Path.Combine(path,"1_2_3.txt")) |> Async.AwaitTask
+
+                Assert.True(content1.Length > 0)
+                Assert.True(content2.Length > 0)
+                Assert.Equal<string>(content1,content2)
+            finally
+                Environment.CurrentDirectory <- savedWD            
+        } |> toAsyncFact
+
+    
+    [<Fact>]
+    member s.``Changed command invalidates vertex``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try            
+                let path = Path.GetFullPath s.Path
+                Environment.CurrentDirectory <- s.Path
+                
+                do! buildExperiment(path)
+                output.WriteLine("TEST: experiment graph is constructed")
+
+                assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt")
+                
+                output.WriteLine("TEST: first time computed 1_2_3.txt")
+
+                do! assertNonEmptyFile(Path.Combine(path,"1_2.txt"))
+                let! content1 = File.ReadAllTextAsync(Path.Combine(path,"1_2_3.txt")) |> Async.AwaitTask
+
+                // now changing 1_2_3.txt producing command
+                let! res2 =  API.buildAsync path ["1_2.txt";"3.txt"] ["1_2_3.txt"] concatCommand2 false // double 
+                assertResultOk res2
+
+                // this should change 1_2_3.txt
+                assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt")
+                output.WriteLine("TEST: second time computed 1_2_3.txt")
+                let! content2 = File.ReadAllTextAsync(Path.Combine(path,"1_2_3.txt")) |> Async.AwaitTask
+
+                Assert.True(content1.Length > 0)
+                Assert.True(content2.Length > 0)
+                Assert.NotEqual<string>(content1,content2)
+            finally
+                Environment.CurrentDirectory <- savedWD            
+        } |> toAsyncFact
+
+    [<Fact>]
+    member s.``Changed inputs order invalidates vertex``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try            
+                let path = Path.GetFullPath s.Path
+                Environment.CurrentDirectory <- s.Path
+                
+                do! buildExperiment(path)
+                output.WriteLine("TEST: experiment graph is constructed")
+
+                assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt")
+                
+                output.WriteLine("TEST: first time computed 1_2_3.txt")
+
+                do! assertNonEmptyFile(Path.Combine(path,"1_2.txt"))
+                let! content1 = File.ReadAllTextAsync(Path.Combine(path,"1_2_3.txt")) |> Async.AwaitTask
+
+                // now changing inputs order 
+                let! res2 =  API.buildAsync path ["3.txt";"1_2.txt"] ["1_2_3.txt"] concatCommand false // double 
+                assertResultOk res2
+
+                // this should change 1_2_3.txt
+                assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt")
+                output.WriteLine("TEST: second time computed 1_2_3.txt")
+                let! content2 = File.ReadAllTextAsync(Path.Combine(path,"1_2_3.txt")) |> Async.AwaitTask
+
+                Assert.True(content1.Length > 0)
+                Assert.True(content2.Length > 0)
+                Assert.NotEqual<string>(content1,content2)
             finally
                 Environment.CurrentDirectory <- savedWD            
         } |> toAsyncFact
