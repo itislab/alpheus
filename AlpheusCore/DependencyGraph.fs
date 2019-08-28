@@ -17,7 +17,8 @@ let ts = TraceSource("Dependency Graph")
 #nowarn "0346"
 
 
-type ArtefactVertex(id:ArtefactId) =    
+type ArtefactVertex(id:ArtefactId, experimentRoot:string) =    
+    // expereiment root is needed to calc actual data versions (via path to the actual data)
     let mutable producer : MethodVertex option = None
     let mutable usedIn : Set<CommandLineVertex> = Set.empty
     let mutable isTracked = false
@@ -63,7 +64,7 @@ type ArtefactVertex(id:ArtefactId) =
     /// Updates .hash file on a disk.
     member s.ForceActualVersionCalc() : Async<unit> =
         async {
-            let fullPath = s.Id |> idToFullPath s.ProducedBy.ExperimentRoot 
+            let fullPath = s.Id |> idToFullPath experimentRoot 
             let! hash = Hash.hashVectorPathAndSave fullPath
             lock lockObj (fun () -> actualVersion <- Some hash)
         }
@@ -73,7 +74,7 @@ type ArtefactVertex(id:ArtefactId) =
     /// Updates .hash file on a disk.
     member s.ForceActualVersionCalc(index: string list) : Async<unit> =
         async {
-            let fullPath = s.Id |> idToFullPath s.ProducedBy.ExperimentRoot |> applyIndex index
+            let fullPath = s.Id |> idToFullPath experimentRoot |> applyIndex index
             let! hash = Hash.hashPathAndSave fullPath
 
             lock lockObj (fun () ->
@@ -84,7 +85,7 @@ type ArtefactVertex(id:ArtefactId) =
     
     /// Builds an AlphFile instance describing the artefact.
     member s.SaveAlphFile() =
-        let alphFileFullPath = s.Id |> PathUtils.idToAlphFileFullPath s.ProducedBy.ExperimentRoot
+        let alphFileFullPath = s.Id |> PathUtils.idToAlphFileFullPath experimentRoot
         if not (Path.IsPathRooted alphFileFullPath) then
             raise(ArgumentException(sprintf "alphFileFullPath must contain rooted full path: %s" alphFileFullPath))
         let content = 
@@ -104,7 +105,7 @@ type ArtefactVertex(id:ArtefactId) =
             | MethodVertex.Command(commandVertex) ->
                 // dependency graph contains all paths relative to project root
                 // alpheus files contains all paths relative to alph file   
-                let experimentRoot = commandVertex.ExperimentRoot
+                let experimentRoot = experimentRoot
                 let computeSection =
                     let alphFileRelativeWorkingDir = 
                         let workingDirFull = Path.GetFullPath(Path.Combine(experimentRoot,commandVertex.WorkingDirectory))
@@ -382,7 +383,7 @@ and Graph (experimentRoot:string) =
         | Some(vertex) -> 
             vertex
         | None ->
-            let vertex = ArtefactVertex(artefactId)
+            let vertex = ArtefactVertex(artefactId,experimentRoot)
             artefactVertices <- artefactVertices |> Map.add artefactId vertex 
             vertex
     
