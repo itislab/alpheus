@@ -89,4 +89,4 @@ let execUnixShellcommand (command:string) =
 let assertResultOk result =
     match result with
     |   Ok(_) -> () // expected successful operation
-    |   Error(e) -> Assert.True(false, sprintf "Expected successful save operation, but got error: %A" e)
+    |   Error(e) -> Assert.True(false, sprintf "Expected successful operation, but got error: %A" e)

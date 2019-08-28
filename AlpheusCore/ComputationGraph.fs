@@ -120,27 +120,31 @@ type SourceMethod(source: SourceVertex, experimentRoot, checkStoragePresence, re
 
         let expectedVersionOpt = expectedArtefact.ExpectedVersion |> ensureScalar
         
-        match expectedVersionOpt with
-        | None -> failwithf "Experiment state error: source artefact %A MUST contain expected version, but it does not" artefact.Id
-        | Some(expectedV) ->
-            let actualVersionRes = artefact.ActualVersionAsync |> Async.RunSynchronously
-            let actualVersionOpt = ensureScalar actualVersionRes
+        let expectedV =
+            match expectedVersionOpt with
+            | None ->
+                // this could be file/dir without alph file.
+                (artefact.ActualVersionAsync |> Async.RunSynchronously |> ensureScalar).Value
+            | Some(v) -> v
 
-            match actualVersionOpt with
-            |   None -> // The artefact does not exist on disk
-                // This may be OK in case the specified version is available in storages
-                // todo: note that in case of vectore, only some of the items can exists/restore/etc.
-                if (checkStoragePresence [|expectedV|] |> Async.RunSynchronously).[0] then
-                    // If some methods needs this artefact as input, the artefact will be restored during the method execution
-                    ()
-                else
-                    failwithf "Source artefact %A is not on disk and can't be found in any of the storages. Consider adding additional storages to look in. Can't proceed with computation." artefact.Id
-            |   Some(_) ->
-                // we now consider actual version as expected
-                source.Output.ExpectActualVersionAsync() |> Async.RunSynchronously
-                // if alph file exists on disk (e.g. isTracked), we need to re-save it to update the expected version
-                if artefact.IsTracked then
-                    artefact.SaveAlphFile()
+        let actualVersionRes = artefact.ActualVersionAsync |> Async.RunSynchronously
+        let actualVersionOpt = ensureScalar actualVersionRes
+
+        match actualVersionOpt with
+        |   None -> // The artefact does not exist on disk
+            // This may be OK in case the specified version is available in storages
+            // todo: note that in case of vectore, only some of the items can exists/restore/etc.
+            if (checkStoragePresence [|expectedV|] |> Async.RunSynchronously).[0] then
+                // If some methods needs this artefact as input, the artefact will be restored during the method execution
+                ()
+            else
+                failwithf "Source artefact %A is not on disk and can't be found in any of the storages. Consider adding additional storages to look in. Can't proceed with computation." artefact.Id
+        |   Some(_) ->
+            // we now consider actual version as expected
+            source.Output.ExpectActualVersionAsync() |> Async.RunSynchronously
+            // if alph file exists on disk (e.g. isTracked), we need to re-save it to update the expected version
+            if artefact.IsTracked then
+                artefact.SaveAlphFile()
                         
         Seq.singleton ([outputArtefact], null)
 
@@ -229,15 +233,15 @@ type CommandMethod(command: CommandLineVertex, experimentRoot, checkStoragePrese
             |> List.map(fun out -> out.Artefact.Id |> PathUtils.idToFullPath experimentRoot |> applyIndex index)
 
         let extractExpectedVersionsFromLinks links =
-            links |> Seq.map (fun (a:LinkToArtefact) -> MdMap.find index a.ExpectedVersion) |> Array.ofSeq
+            links |> Seq.map (fun (a:LinkToArtefact) -> MdMap.find index a.ExpectedVersion)
 
         let extractActualVersionsFromLinks links =
             links
             |> Seq.map (fun (a:LinkToArtefact) -> a.Artefact.ActualVersionAsync)
-            |> Array.ofSeq |> Async.Parallel |> Async.RunSynchronously
+            |> Async.Parallel |> Async.RunSynchronously
             |> Array.map (fun v -> MdMap.find index v)
 
-        let expectedInputItemVersions = extractExpectedVersionsFromLinks command.Inputs
+        let expectedInputItemVersions = extractExpectedVersionsFromLinks command.Inputs |> Array.ofSeq
         let actualInputItemVersions = extractActualVersionsFromLinks command.Inputs
 
         let areInputsValid = areValidItemsVersions expectedInputItemVersions actualInputItemVersions
@@ -250,7 +254,7 @@ type CommandMethod(command: CommandLineVertex, experimentRoot, checkStoragePrese
                 true 
             else
                 // checking outputs
-                let expectedOutputItemVersions = extractExpectedVersionsFromLinks command.Outputs
+                let expectedOutputItemVersions = extractExpectedVersionsFromLinks command.Outputs |> Array.ofSeq
                 let actualOutputItemVersions = extractActualVersionsFromLinks command.Outputs
                 let areOutputsValid = areValidItemsVersions expectedOutputItemVersions actualOutputItemVersions
                 if not areOutputsValid then
@@ -261,7 +265,7 @@ type CommandMethod(command: CommandLineVertex, experimentRoot, checkStoragePrese
         if doComputations then
             // We need to do computation            
             // 1) deleting outputs if they exist   
-            // 2) restoring inputs if it is needed
+            // 2) restoring inputs from storage if it is needed
             // 3) execute external command
             // 4) upon 0 exit code hash the outputs
             // 5) fill in corresponding method vertex (to fix proper versions)
@@ -269,7 +273,24 @@ type CommandMethod(command: CommandLineVertex, experimentRoot, checkStoragePrese
 
             // 1) Deleting outputs
             if not command.DoNotCleanOutputs then
-                outputPaths |> List.iter deletePath 
+                outputPaths |> List.iter deletePath
+
+            // 2) restoring inputs from storage if it is needed
+            let inputChooser (input:LinkToArtefact) =
+                let actualHashOpt = (extractActualVersionsFromLinks [input]).[0]
+                if Option.isSome actualHashOpt then
+                    None
+                else
+                    Some(input)
+            let toRestore = Seq.choose inputChooser command.Inputs |> Array.ofSeq
+            let hashesToRestore = toRestore |> extractExpectedVersionsFromLinks |> Seq.map (fun x -> x.Value)
+            let pathsToRestore = toRestore |> Seq.map (fun x -> idToFullPath experimentRoot x.Artefact.Id |> applyIndex index )
+            let zipped = Seq.zip hashesToRestore pathsToRestore |> Array.ofSeq
+            if Array.length zipped > 0 then
+                logVerbose (sprintf "Restoring missing inputs from storage...")
+                restoreFromStorage zipped |> Async.RunSynchronously
+                logVerbose (sprintf "Inputs are restored")
+
 
             // 3) executing a command
             let print (s:string) = Console.WriteLine s

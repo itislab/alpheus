@@ -54,7 +54,6 @@ type SampleExperiment(output) =
 
             let outputs = List.concat [method3.Outputs; method4.Outputs; method5.Outputs] |> List.map(fun link -> link.Artefact)
             g.LoadDependencies outputs |> ignore
-            // do! g.ReadActualVersions()
             g.Artefacts |> Seq.iter(fun a -> a.SaveAlphFile()) 
 
             // deleting first artefact alph file emulating the file without alph files

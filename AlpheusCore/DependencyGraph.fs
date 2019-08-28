@@ -261,12 +261,27 @@ and CommandLineVertex(methodId : MethodId, experimentRoot: string, inputs: LinkT
     /// updates the expected versions for the input and output artefacts,
     /// and updates the *.alph file.
     member s.OnSucceeded(index: string list) : Async<unit> =
-        s.Outputs 
-        |> Seq.map(fun out -> async { 
-                do! out.Artefact.ForceActualVersionCalc index
-                do! out.ExpectActualVersionAsync index
-                out.Artefact.SaveAlphFile()
-            }) 
+        let outLinksUpdates =
+            s.Outputs 
+            |> Seq.map(fun out -> async { 
+                    if List.isEmpty index then
+                        do! out.Artefact.ForceActualVersionCalc()
+                        do! out.ExpectActualVersionAsync()
+                    else
+                        do! out.Artefact.ForceActualVersionCalc index
+                        do! out.ExpectActualVersionAsync index
+                    out.Artefact.SaveAlphFile()
+                }) 
+        let inputLinksUpdates =
+            s.Inputs 
+            |> Seq.map(fun input -> async { 
+                    if List.isEmpty index then
+                        do! input.ExpectActualVersionAsync()
+                    else
+                        do! input.ExpectActualVersionAsync index
+                    input.Artefact.SaveAlphFile()
+                }) 
+        Seq.append outLinksUpdates inputLinksUpdates
         |> Async.Parallel
         |> Async.Ignore
 

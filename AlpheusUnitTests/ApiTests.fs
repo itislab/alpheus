@@ -144,7 +144,6 @@ type DepGraphConstruction(output) =
 type DepGraphLocalComputation(output) =
     inherit SampleExperiment.SampleExperiment(output)
 
-    
     [<Fact>]
     member s.``API Compute: concat 2 files``() =
         let expRoot = s.FullPath
@@ -162,7 +161,7 @@ type DepGraphLocalComputation(output) =
                 if isTestRuntimeWindows then
                     "cmd /C \"cat.cmd $out1 $in1 $in2\""
                 else
-                    "/bin/sh -c \"cat 1.txt > cat_test.txt; cat 2.txt >> cat_test.txt\""
+                    "/bin/sh -c \"cat $in1 > $out1; cat $in2 >> $out1\""
             let buildResult = API.buildAsync expRoot ["1.txt"; "2.txt"] ["cat_test.txt"] concatCommand false |> Async.RunSynchronously
             assertResultOk buildResult
 
@@ -187,8 +186,6 @@ type DepGraphLocalComputation(output) =
 
         finally
             Environment.CurrentDirectory <- savedWD
-
-
 
 type DepGraphSaveRestore(output) =
     inherit SampleExperiment.SampleExperiment(output)
@@ -241,3 +238,142 @@ type DepGraphSaveRestore(output) =
             Assert.True(Seq.exists (fun s -> s = artIdStr) entries, ".gitignore must contain newly added artefact record")
 
         } |> toAsyncFact
+
+type ScalarScenarios(output) =
+    inherit SingleUseOneTimeDirectory(output)
+
+    let concatCommand = 
+        if isTestRuntimeWindows then
+            "cmd /C \"cat.cmd $out1 $in1 $in2\""
+        else
+            "/bin/sh -c \"cat $in1 > $out1; cat $in2 >> $out1\""
+
+    let buildExperiment(path) =
+        async {
+            let path = Path.GetFullPath path
+            let! _ = API.createExperimentDirectoryAsync path
+            File.Copy("../../../data/cat.cmd",Path.Combine(path,"cat.cmd"))
+
+            do! File.WriteAllTextAsync(Path.Combine(path,"1.txt"),"File 1\\r\\n") |> Async.AwaitTask
+            do! File.WriteAllTextAsync(Path.Combine(path,"2.txt"),"File 2\\r\\n") |> Async.AwaitTask
+            do! File.WriteAllTextAsync(Path.Combine(path,"3.txt"),"File 3\\r\\n") |> Async.AwaitTask
+
+            let! res1 =  API.buildAsync path ["1.txt";"2.txt"] ["1_2.txt"] concatCommand false
+            assertResultOk res1
+            let! res2 =  API.buildAsync path ["1_2.txt";"3.txt"] ["1_2_3.txt"] concatCommand false
+            assertResultOk res2
+            return ()
+        }
+
+    let assertNonEmptyFile path = 
+        async {
+            let! content = File.ReadAllTextAsync(path) |> Async.AwaitTask
+            Assert.True(content.Length > 0)
+        }
+
+    [<Fact>]
+    member s.``Uncomputed chain is computed``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try            
+                let path = Path.GetFullPath s.Path
+                Environment.CurrentDirectory <- s.Path
+                do! buildExperiment(path)
+
+                let res = API.compute(path, ArtefactId.Path "1_2_3.txt")
+                assertResultOk res
+
+                do! assertNonEmptyFile(Path.Combine(path,"1_2.txt"))
+                do! assertNonEmptyFile(Path.Combine(path,"1_2_3.txt"))
+            finally
+                Environment.CurrentDirectory <- savedWD            
+        } |> toAsyncFact
+
+    [<Fact>]
+    member s.``recompute missing intermediate while computing final``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try            
+                let path = Path.GetFullPath s.Path
+                Environment.CurrentDirectory <- s.Path
+                do! buildExperiment(path)
+
+                let res = API.compute(path, ArtefactId.Path "1_2_3.txt") // first compute all
+                assertResultOk res
+
+                File.Delete(Path.Combine(path,"1_2.txt")) // then delete intermediate 
+
+                let res = API.compute(path, ArtefactId.Path "1_2_3.txt") // this computation should rebuild intermediate (as it is not in storage)
+                assertResultOk res
+
+                do! assertNonEmptyFile(Path.Combine(path,"1_2.txt"))
+                
+            finally
+                Environment.CurrentDirectory <- savedWD            
+        } |> toAsyncFact
+
+    [<Fact>]
+    member s.``skip missing (storage present) intermediate while computing final``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try            
+                let path = Path.GetFullPath s.Path
+                Environment.CurrentDirectory <- s.Path
+                do! buildExperiment(path)
+
+                assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt") // first compute all
+
+                let! res = API.saveAsync(path, ArtefactId.Path "1_2.txt") "local" false // saving intermediate
+                assertResultOk res
+
+                File.Delete(Path.Combine(path,"1_2.txt")) // then delete intermediate 
+
+                assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt") // this computation must not recompute intermediate, as it is stored in storage
+                // if needed by further methods, the methods execution can restore the intermediate during inpute restore computation phase
+                
+                Assert.False(File.Exists(Path.Combine(path,"1_2.txt")))
+
+                do! assertNonEmptyFile(Path.Combine(path,"1_2_3.txt"))
+                
+            finally
+                Environment.CurrentDirectory <- savedWD            
+        } |> toAsyncFact
+
+    [<Fact>]
+    member s.``restore only intermediate while computing final``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try            
+                let path = Path.GetFullPath s.Path
+                Environment.CurrentDirectory <- s.Path
+                do! buildExperiment(path)
+
+                assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt") // computing all
+
+                // saving all except final
+                let! res = API.saveAsync(path, ArtefactId.Path "1_2.txt") "local" false // saving intermediate
+                assertResultOk res
+                let! res = API.saveAsync(path, ArtefactId.Path "1.txt") "local" false // saving initial
+                assertResultOk res
+                let! res = API.saveAsync(path, ArtefactId.Path "2.txt") "local" false // saving initial
+                assertResultOk res
+
+
+                //Deleting all
+                [
+                    Path.Combine(path,"1_2_3.txt");
+                    Path.Combine(path,"1_2.txt");
+                    Path.Combine(path,"1.txt");
+                    Path.Combine(path,"2.txt");
+                ] |> List.iter File.Delete
+
+                assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt") // computing all
+
+                do! assertNonEmptyFile(Path.Combine(path,"1_2_3.txt")) // final is recomputed
+                do! assertNonEmptyFile(Path.Combine(path,"1_2.txt")) // intermediate is restored
+                Assert.False(File.Exists(Path.Combine(path,"1.txt"))) // but initials are not restored, a intermediate is sufficient
+                Assert.False(File.Exists(Path.Combine(path,"2.txt"))) // but initials are not restored, a intermediate is sufficient
+            finally
+                Environment.CurrentDirectory <- savedWD            
+        } |> toAsyncFact
+        
