@@ -178,9 +178,11 @@ let enumerateItems (experimentRoot: string) (artefactId: ArtefactId) =
 let deletePath (path:string) =
     let path = normalizePath path
     if path.EndsWith(Path.DirectorySeparatorChar) then
-        Directory.Delete(path,true)
+        if Directory.Exists path then
+            Directory.Delete(path,true)
     else
-        File.Delete path
+        if File.Exists path then
+            File.Delete path
 
 
 /// Substitutes index of string values into a pattern command, e.g. "/files/*/*".

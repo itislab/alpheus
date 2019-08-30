@@ -345,5 +345,5 @@ let doComputations (g:FlowGraph<ComputationGraphNode>) =
         Ok()
     with 
     | :? Control.FlowFailedException as flowExc -> 
-        let failed = String.Join("\n\t", flowExc.InnerExceptions |> Seq.map(fun e -> e.Message))
+        let failed = String.Join("\n\t", flowExc.InnerExceptions |> Seq.map(fun e -> e.ToString()))
         Error(SystemError(sprintf "Failed to compute the artefacts: \n\t%s" failed))
