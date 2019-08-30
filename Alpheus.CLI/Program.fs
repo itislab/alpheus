@@ -24,7 +24,10 @@ let main argv =
         let parseResults = parser.ParseCommandLine(argv,ignoreMissing=false,ignoreUnrecognized=true,raiseOnUsage=false)
         match parseResults |> run programName with
         | Ok() -> 0
-        | Error(m) -> printfn "Error occurred: %s" m; 1
+        | Error(er) ->
+            match er with
+            | UserError m -> printfn "Error occurred: %s" m; 1
+            | SystemError m -> printfn "Internal error occurred: %s" m; 1
     with
     |   :? ArguException as e ->
         printfn "%s" e.Message // argu exception is parse exception. So don't print stack trace. We print only parse error content.

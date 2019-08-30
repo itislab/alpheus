@@ -23,3 +23,6 @@ type ArtefactId =
 
 type MethodId = string
 
+type HashString = string
+
+

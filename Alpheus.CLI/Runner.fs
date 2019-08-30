@@ -5,22 +5,22 @@ open ItisLab.Alpheus.CLI
 open System.IO
 open System.Text
 
-let run (programName:string) (parseResults:ParseResults<AlpheusArgs>) : Result<unit, string> =
+let run (programName:string) (parseResults:ParseResults<AlpheusArgs>) : Result<unit, AlpheusError> =
     let usage = parseResults.Parser.PrintUsage(programName = programName)
     if parseResults.IsUsageRequested then
         printfn "%s" usage
         Ok()
     else if parseResults.Contains Init then
         result {
-            let! cwd = (Directory.GetCurrentDirectory(), Config.isExperimentDirectory, "The current directory is already an Alpheus experiment directory")
+            let! cwd = (Directory.GetCurrentDirectory(), (fun p -> not (Config.isExperimentDirectory p)), (UserError "The current directory is already an Alpheus experiment directory"))
             return API.createExperimentDirectoryAsync cwd |> Async.RunSynchronously |> ignore
         }
     elif parseResults.Contains Config then
         result {
             let configArgs = parseResults.GetResult <@ Config @>
             let cwd = Directory.GetCurrentDirectory()
-            let! experimentRoot = (Config.tryLocateExperimentRoot cwd, "The file you've specified is not under an Alpheus experiment folder")
-            let! storageArgs = (configArgs.TryGetResult <@ CLI.Storage @>, "Please specify what to configure")
+            let! experimentRoot = (Config.tryLocateExperimentRoot cwd, UserError "The file you've specified is not under an Alpheus experiment folder")
+            let! storageArgs = (configArgs.TryGetResult <@ CLI.Storage @>, UserError  "Please specify what to configure")
             return! async {                                
                 if storageArgs.Contains AddLocal then
                     let name,dirPath = storageArgs.GetResult <@ AddLocal @>                                        
@@ -47,7 +47,7 @@ let run (programName:string) (parseResults:ParseResults<AlpheusArgs>) : Result<u
                     do! API.configRemoveStorageAsync experimentRoot nameToRemove
                     return Ok()
                 else
-                    return Error "Please specify what to do with storage configuration"
+                    return Error (UserError "Please specify what to do with storage configuration")
             }|> Async.RunSynchronously
         }
     elif parseResults.Contains Compute then
@@ -62,14 +62,16 @@ let run (programName:string) (parseResults:ParseResults<AlpheusArgs>) : Result<u
             let statusArgs = parseResults.GetResult <@ Status @>
             let artefactPath = statusArgs.GetResult <@ StatusArgs.File  @>
             let! artefact = API.artefactFor artefactPath
-            return! API.status artefact
+            return! Error (SystemError "NOT IMPLEMENTED")
+            //return! API.status artefact
         }
     elif parseResults.Contains Restore then
         result {
             let restoreArgs = parseResults.GetResult <@ Restore @>
             let artefactPath = restoreArgs.GetResult <@ RestoreArgs.Path @>
             let! artefact = API.artefactFor artefactPath
-            return! API.restoreAsync artefact |> Async.RunSynchronously
+            return! Error (SystemError "NOT IMPLEMENTED")
+            //return! API.restoreAsync artefact |> Async.RunSynchronously
         }
     elif parseResults.Contains Save then
         result {
@@ -83,5 +85,5 @@ let run (programName:string) (parseResults:ParseResults<AlpheusArgs>) : Result<u
     elif parseResults.Contains Build then                
         BuildCommand.run (parseResults.GetResult <@ Build @>)
     else
-        Error usage
+        Error (UserError usage)
 

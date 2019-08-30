@@ -17,14 +17,16 @@
     <AssemblyName>Alpheus</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="AsyncUtils.fs" />
+    <Compile Include="CustomSerializers.fs" />
     <Compile Include="ResultBuilder.fs" />
     <Compile Include="Logger.fs" />
     <Compile Include="AngaraTranslator.fs" />
     <None Include="app.config" />
-    <Compile Include="Hash.fs" />
     <Compile Include="Experiment.fs" />
     <Compile Include="AlphFiles.fs" />
     <Compile Include="PathUtils.fs" />
+    <Compile Include="Hash.fs" />
     <Compile Include="AfterfactId.fs" />
     <Compile Include="MethodCommand.fs" />
     <Compile Include="Storage.fs" />
@@ -34,8 +36,9 @@
     <Compile Include="ArtefactArchiver.fs" />
     <Compile Include="StorageFactory.fs" />
     <Compile Include="DependencyGraph.fs" />
+    <Compile Include="DependencyGraphUtils.fs" />
     <Compile Include="DependencyGraphToAngaraWrapper.fs" />
-    <Compile Include="StatusGraph.fs" />
+    <None Include="StatusGraph.fs" />
     <Compile Include="ComputationContext.fs" />
     <Compile Include="ExecuteCommand.fs" />
     <Compile Include="ComputationGraph.fs" />
@@ -44,6 +47,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="FSharp.Control.AsyncSeq" Version="2.0.21" />
     <PackageReference Include="Itis.Angara.Flow" Version="0.1.3" />
     <PackageReference Include="Newtonsoft.Json" Version="11.0.2" />
     <PackageReference Include="System.Reactive" Version="4.1.2" />

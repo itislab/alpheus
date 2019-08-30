@@ -3,6 +3,12 @@ module ItisLab.Alpheus.Results
 
 open System
 
+type AlpheusError =
+    /// Error which holds the text for the alpheus developers
+    |   SystemError of string
+    /// Error which is caused by invalid user action
+    |   UserError of string
+
 // This code is a modified version of the snippet published in http://fssnip.net/7UJ
 type ResultBuilder() =
     member __.Return(x) = Ok x
@@ -15,6 +21,9 @@ type ResultBuilder() =
         |> Result.bind f
     member __.Bind((value, predicate, error): ('T * ('T -> bool) * 'E), f) = 
         if predicate value then Ok value else Error error
+        |> Result.bind f
+    member __.Bind((assertion, error): (bool * 'E), f) = 
+        if assertion then Ok() else Error error
         |> Result.bind f
     member __.Zero() = None
     member __.Combine(m, f) = Result.bind f m

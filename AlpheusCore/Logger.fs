@@ -1,5 +1,7 @@
 ﻿module ItisLab.Alpheus.Logger
 
+open System.Diagnostics
+
 let internal showVerbose = true
 
 type LogCategory =
@@ -39,3 +41,12 @@ let logError (category: LogCategory) (message:string) =
 
 let logException (category: LogCategory) (e:exn) =
     LogFunction category (e.ToString())
+
+
+let doAndLogElapsedTime (log: string -> unit) (message: string) (func: unit -> Async<unit>) = 
+    async {
+        let sw = Stopwatch.StartNew()
+        let! result = func()
+        sw.Stop()
+        log (sprintf "%s (%A)" message sw.Elapsed)
+    }

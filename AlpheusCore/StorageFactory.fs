@@ -78,15 +78,11 @@ let getPresenseChecker (projectRoot:string) (storages:(string*Config.Storage) se
         let (name:string),storageDef = pair
         
         let storage = createStorage projectRoot storageDef
-        let check (versions:(Hash.HashString option) seq) =
+        let check (versions:HashString seq) =
             async {
                 let versionsArray = Array.ofSeq versions
-                let saveCheck v =                     
-                    match v with
-                    |   None -> async { return ArtefactType.Absent}
-                    |   Some(ver) -> storage.IsInStorageAsync ver
-                        
-                let! isInStorage = versionsArray |> Array.map saveCheck |> Async.Parallel
+                
+                let! isInStorage = versionsArray |> Array.map storage.IsInStorageAsync |> Async.Parallel
                 let mapper checkResult =
                     match checkResult with
                     |   ArtefactType.SingleFile -> Some(name)
@@ -96,7 +92,7 @@ let getPresenseChecker (projectRoot:string) (storages:(string*Config.Storage) se
                 return namedResults
             }
         check
-    let check (versions:(Hash.HashString option) array) =
+    let check (versions:HashString array) =
         async {            
             let N = Array.length versions
             let checkers = Seq.map singleStorageChecker storages |> Array.ofSeq
@@ -119,7 +115,7 @@ let maxDirChunks = 16
 let getStorageSaver (projectRoot:string)  storageDef =    
     let storage = createStorage projectRoot storageDef
 
-    let singleArtefactSaver (artefactFullPath:string) (version:Hash.HashString) =
+    let singleArtefactSaver (artefactFullPath:string) (version:HashString) =
         async {            
             if version.Length = 0 then
                 return ()
@@ -189,39 +185,41 @@ let getStorageSaver (projectRoot:string)  storageDef =
         }
     saver
 
-//returns fullID -> version -> Async<unit>
-let getStorageRestore (projectRoot:string)  (storageDef:Config.Storage) =    
-    let restore (artefactId:ArtefactId) (version:Hash.HashString) =
+/// returns (path -> version -> Async<Result<unit,AlpheusError>>)
+let getStorageRestore projectRoot (storageDef:Config.Storage) =    
+    let restore path (version:HashString) =
         async {                
-                let absPath = idToFullPath projectRoot artefactId
-                let storage = createStorage projectRoot storageDef                         
-                Logger.logVerbose Logger.Storage (sprintf "restoring  %A:%s" artefactId (version.Substring(0,8).ToLower()))
-                let! checkResult = storage.IsInStorageAsync version                            
-                match checkResult with
-                |   SingleFile ->
-                    let! stream = storage.getFileRestoreStreamAsync version
-                    do! ArtefactArchiver.artefactFromArchiveStreamAsync absPath stream true
-                    stream.Dispose()
-                |   ArtefactType.Directory ->
-                    let! streams = storage.getDirRestoreStreamsAsync version
-                    let streamsCount = Array.length streams
-                    let extracter stream = 
-                        async {
-                            // printfn "WP: starting async artefact restore"
-                            do! ArtefactArchiver.artefactFromArchiveStreamAsync absPath stream false
-                            // printfn "WP: async artefact restore done"
-                            stream.Dispose()
-                            //printfn "Last op of the work package"
-                            }
-                    let extractionComps = streams |> Array.map extracter
-                    let concurrencyLevel = System.Environment.ProcessorCount*2
-                    Logger.logVerbose Logger.Storage (sprintf "using pool of %d concurrent extractors to extract %d buckets" concurrencyLevel streamsCount)
-                    let bucketProcessor,waitComplete = throttlingAgent concurrencyLevel
-                    bucketProcessor.Post (ExpectedCount (Array.length extractionComps))
-                    extractionComps |> Array.iter (fun x -> bucketProcessor.Post (Enqueue x))                    
-                    do! waitComplete
-                |   Absent -> raise(InvalidDataException("Artefact is absent in storage"))        
-                logInfo LogCategory.Storage (sprintf "restored  %A:%s" artefactId (version.Substring(0,8).ToLower()))
-                return ()            
+            let storage = createStorage projectRoot storageDef                         
+            Logger.logVerbose Logger.Storage (sprintf "restoring  %A:%s" path (version.Substring(0,8).ToLower()))
+            let! checkResult = storage.IsInStorageAsync version                            
+            match checkResult with
+            |   SingleFile ->
+                let! stream = storage.getFileRestoreStreamAsync version
+                do! ArtefactArchiver.artefactFromArchiveStreamAsync path stream true
+                stream.Dispose()
+                logInfo LogCategory.Storage (sprintf "restored file %A:%s" path (version.Substring(0,8).ToLower()))
+                return Ok()            
+            |   ArtefactType.Directory ->
+                let! streams = storage.getDirRestoreStreamsAsync version
+                let streamsCount = Array.length streams
+                let extracter stream = 
+                    async {
+                        // printfn "WP: starting async artefact restore"
+                        do! ArtefactArchiver.artefactFromArchiveStreamAsync path stream false
+                        // printfn "WP: async artefact restore done"
+                        stream.Dispose()
+                        //printfn "Last op of the work package"
+                        }
+                let extractionComps = streams |> Array.map extracter
+                let concurrencyLevel = System.Environment.ProcessorCount*2
+                Logger.logVerbose Logger.Storage (sprintf "using pool of %d concurrent extractors to extract %d buckets" concurrencyLevel streamsCount)
+                let bucketProcessor,waitComplete = throttlingAgent concurrencyLevel
+                bucketProcessor.Post (ExpectedCount (Array.length extractionComps))
+                extractionComps |> Array.iter (fun x -> bucketProcessor.Post (Enqueue x))                    
+                do! waitComplete
+                logInfo LogCategory.Storage (sprintf "restored dir %A:%s" path (version.Substring(0,8).ToLower()))
+                return Ok()            
+            |   Absent ->
+                return Error(SystemError(sprintf "Artefact %A is absent in storage" (version.Substring(0,8).ToLower())))
         }
     restore

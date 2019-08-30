@@ -3,8 +3,10 @@
 open System.IO
 open System
 open System.Text
+open ItisLab.Alpheus
+open AlphFiles
+open Angara.Data
 
-type HashString = string
         
 let hashToString (data : byte array) : HashString = System.BitConverter.ToString(data).Replace("-", System.String.Empty)
 
@@ -80,7 +82,7 @@ let rec hashDirectoryAsync (fullPath:string) =
             Directory.GetFiles fullPath            
             |> Array.filter (fun name -> not(name.EndsWith(".hash") || name.EndsWith(".alph"))) // ignoring hash file and .alph files
             // Assuming that if the code traverses .alph file, it means that the parent directory is being referenced by alpheus
-            // And standalong files (also referenced by alpheus and having .alph files) within this directory should not influence the hash of the parent dir
+            // And standalone files (also referenced by alpheus and having .alph files) within this directory should not influence the hash of the parent dir
             |> Array.sort
         let! fileAttributes = Array.map getFileAttributesAsync fileNamesAbs |> Async.Parallel
 
@@ -115,7 +117,8 @@ let rec hashDirectoryAsync (fullPath:string) =
 
 let hashPathAsync fullPath =
     async {
-            Logger.logVerbose Logger.ExperimentFolder (sprintf "Hashing %s ..." fullPath)
+            // Logger.logVerbose Logger.ExperimentFolder (sprintf "Hashing %s ..." fullPath)
+            // todo: let items = PathUtils.enumeratePath fullPath
             if File.Exists fullPath then
                 let! hash = hashFileAsync fullPath
                 return Some(hashToString hash)
@@ -127,22 +130,17 @@ let hashPathAsync fullPath =
     }
     
 /// optimization that caches the computed hashes into *.hash files
-let fastHashPathAsync (fullPath:string) =
-    let hashFilePath =
-        let prefix =
-            if fullPath.EndsWith(Path.DirectorySeparatorChar) then
-                fullPath.Substring(0,fullPath.Length-1)
-            else fullPath
-        sprintf "%s.hash" prefix
+let hashPathAndSave (fullPath:string) =
+    let hashFilePath = PathUtils.pathToHashFile fullPath
     let hashAndSave() =            
         async {
             let! hashStr = hashPathAsync fullPath
             match hashStr with
             |   None -> return None
             |   Some(hashStr) ->
-                Logger.logVerbose Logger.ExperimentFolder (sprintf "writing %s " hashFilePath)
+                // Logger.logVerbose Logger.ExperimentFolder (sprintf "writing %s " hashFilePath)
                 do! File.WriteAllTextAsync(hashFilePath, hashStr) |> Async.AwaitTask
-                Logger.logVerbose Logger.ExperimentFolder (sprintf "%s written successfully" hashFilePath)
+                // Logger.logVerbose Logger.ExperimentFolder (sprintf "%s written successfully" hashFilePath)
                 return Some(hashStr)
         }
     let getFileLastWriteTimeUTCAsync filepath =
@@ -166,9 +164,10 @@ let fastHashPathAsync (fullPath:string) =
                 return curDirtime
         }
 
-    async {        
+    async { 
+        Logger.logVerbose Logger.ExperimentFolder (sprintf "Artefact %s - acquiring data hash..." fullPath)
         if File.Exists hashFilePath then
-            Logger.logVerbose Logger.ExperimentFolder (sprintf "%s hash file exists" hashFilePath)
+            // Logger.logVerbose Logger.ExperimentFolder (sprintf "%s hash file exists" hashFilePath)
             let precomHashTime = File.GetLastWriteTimeUtc hashFilePath
             let! dataTime =
                 async {
@@ -180,20 +179,64 @@ let fastHashPathAsync (fullPath:string) =
                     else
                         return None
                 }
-            Logger.logVerbose Logger.ExperimentFolder (sprintf "%s artefact modification time extracted" fullPath)
+            // Logger.logVerbose Logger.ExperimentFolder (sprintf "%s artefact modification time extracted" fullPath)
             match dataTime with
             |   None -> //data not exists
-                Logger.logVerbose Logger.ExperimentFolder (sprintf "deleteing %s hash file as the artefact is absent" hashFilePath)
+                // Logger.logVerbose Logger.ExperimentFolder (sprintf "deleteing %s hash file as the artefact is absent" hashFilePath)
                 File.Delete hashFilePath
-                Logger.logVerbose Logger.ExperimentFolder (sprintf "sucessfuly deleted %s hash file" hashFilePath)
+                // Logger.logVerbose Logger.ExperimentFolder (sprintf "sucessfuly deleted %s hash file" hashFilePath)
                 return None
             |   Some(dataWriteTime) ->                               
                     if precomHashTime > dataWriteTime then // considered up to date
                         let! hashStr = File.ReadAllTextAsync(hashFilePath) |> Async.AwaitTask
                         let hashStr2 : HashString = hashStr.Trim()
+                        Logger.logVerbose Logger.ExperimentFolder (sprintf "Artefact %s hash is extracted from up-to-date .hash file" fullPath)
                         return Some(hashStr2)
                     else
-                        return! hashAndSave()                
+                        let! res =  hashAndSave()
+                        Logger.logVerbose Logger.ExperimentFolder (sprintf "Artefact %s hash is recalculated due to data change since the .hash file was written" fullPath)
+                        return res
         else
-            return! hashAndSave()
+            let! res = hashAndSave()
+            Logger.logVerbose Logger.ExperimentFolder (sprintf "Artefact %s hash is calculated (didn't find precomputed .hash file)" fullPath)
+            return res
     }
+
+/// The give path can contain patterns and is resolved into the actual list of files so for each of the files
+/// the hash is computed and saved into a file.
+let hashVectorPathAndSave (fullPath:string) =
+    async {
+        let resolvedFullPaths = PathUtils.enumeratePath fullPath
+        return! resolvedFullPaths |> AsyncUtils.mapAsync (fun (_, path) -> hashPathAndSave path)
+    }
+
+
+/// Computes signature of supplied computeSection (Signature and isTracked member inside this computeSection is ignored during hash calculation)
+let getSignature (computeSection:CommandOutput) =
+    use sha = System.Security.Cryptography.SHA1.Create()
+    let addHash (str:string) =
+        let bytes = System.Text.Encoding.UTF8.GetBytes(str)
+        sha.TransformBlock(bytes,0,bytes.Length,bytes,0) |> ignore
+    addHash computeSection.Command 
+    addHash computeSection.WorkingDirectory
+    let hashArtefact art =
+        addHash art.RelativePath
+        art.Hash |> MdMap.toSeq |> Seq.map(snd >> Option.map addHash) |> ignore
+    Seq.iter hashArtefact (Seq.append computeSection.Inputs computeSection.Outputs)
+    sha.TransformFinalBlock(Array.zeroCreate<byte> 0,0,0) |> ignore
+    hashToString sha.Hash
+
+/// Computes the actual signature and compares with the expected.
+/// If they are different, the hash invalidates in the computeSection.
+let validateSignature (computeSection:CommandOutput) =
+    let readSignature = computeSection.Signature
+    let actualSignature = getSignature computeSection
+    if readSignature = actualSignature then
+        computeSection
+    else
+        let invalidate (version:ArtefactVersion) : ArtefactVersion = version |> MdMap.map(fun _ -> None)
+        // wiping out result hashes
+        {
+            computeSection with
+                Outputs = computeSection.Outputs |> List.map (fun output -> {output with Hash = invalidate output.Hash}) 
+        }

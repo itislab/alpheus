@@ -135,7 +135,7 @@ type FastHashTests(output)=
             System.IO.File.WriteAllText(path,"Test content")
 
             Assert.False(System.IO.File.Exists(hashFilePath))
-            let! hash1 = ItisLab.Alpheus.Hash.fastHashPathAsync path
+            let! hash1 = ItisLab.Alpheus.Hash.hashPathAndSave path
             Assert.True(System.IO.File.Exists(hashFilePath))
         } |> toAsyncFact
 
@@ -150,7 +150,7 @@ type FastHashTests(output)=
             do! Async.AwaitTask(System.IO.File.WriteAllTextAsync(filePath,"Test content"))
 
             Assert.False(System.IO.File.Exists(hashFilePath))
-            let! hash1 = ItisLab.Alpheus.Hash.fastHashPathAsync dirPath
+            let! hash1 = ItisLab.Alpheus.Hash.hashPathAndSave dirPath
             Assert.True(System.IO.File.Exists(hashFilePath))
         } |> toAsyncFact
 
@@ -188,7 +188,7 @@ type FastHashTests(output)=
 
             System.IO.File.WriteAllText(hashFilePath,hashText)
 
-            let! hash1res = ItisLab.Alpheus.Hash.fastHashPathAsync path            
+            let! hash1res = ItisLab.Alpheus.Hash.hashPathAndSave path            
             match hash1res with
             |   Some hash1 ->
                 Assert.Equal(hash1,hashText)
@@ -214,7 +214,7 @@ type FastHashTests(output)=
             do! Async.Sleep 100
             do! Async.AwaitTask(System.IO.File.WriteAllTextAsync(path,"Test content"))
             
-            let! hash1res = ItisLab.Alpheus.Hash.fastHashPathAsync path            
+            let! hash1res = ItisLab.Alpheus.Hash.hashPathAndSave path            
             match hash1res with
             |   Some hash1 ->
                 Assert.NotEqual<string>(hash1,hashText)
@@ -243,7 +243,7 @@ type FastHashTests(output)=
 
             System.IO.File.WriteAllText(hashFilePath,hashText)
 
-            let! hash1res = ItisLab.Alpheus.Hash.fastHashPathAsync dirPath            
+            let! hash1res = ItisLab.Alpheus.Hash.hashPathAndSave dirPath            
             match hash1res with
             |   Some hash1 ->
                 Assert.Equal(hash1,hashText)
@@ -273,7 +273,7 @@ type FastHashTests(output)=
             Directory.CreateDirectory(subdirPath) |> ignore
             do! Async.AwaitTask(System.IO.File.WriteAllTextAsync(filePath,"Test content"))
                 
-            let! hash1res = ItisLab.Alpheus.Hash.fastHashPathAsync dirPath
+            let! hash1res = ItisLab.Alpheus.Hash.hashPathAndSave dirPath
             match hash1res with
             |   Some hash1 ->
                 Assert.NotEqual<string>(hash1,hashText)
@@ -288,7 +288,7 @@ type FastHashTests(output)=
         async {
             let path = System.IO.Path.Combine(s.Path,"file1.txt")
             
-            let! hash1res = ItisLab.Alpheus.Hash.fastHashPathAsync path     
+            let! hash1res = ItisLab.Alpheus.Hash.hashPathAndSave path     
             match hash1res with
             |   Some hash1 ->
                 Assert.True(false,"Hash is not expected to be read from disk")
@@ -302,7 +302,7 @@ type FastHashTests(output)=
             let path = System.IO.Path.Combine(s.Path,"file1.txt")
             do! Async.AwaitTask(System.IO.File.WriteAllTextAsync(path+".hash","00000"))
         
-            let! hash1res = ItisLab.Alpheus.Hash.fastHashPathAsync path     
+            let! hash1res = ItisLab.Alpheus.Hash.hashPathAndSave path     
             match hash1res with
             |   Some hash1 ->
                 Assert.True(false,"Hash is not expected to be read from disk")

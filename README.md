@@ -136,15 +136,7 @@ Just delete corresponding `*.alph` files. Note that you can break the dependenci
 
 ### Getting status of an experiment
 
-### Implicit dependencies 
-
-Let there are following methods:
-  - Method M produces folder `data/`.
-  - Method N depends on `data/birds.csv`.
-
-N shouldn't be run unless M completes, since potentially M can change `data/birds.csv`. So the rule is:
-
-If a method dependency path is under or equal an output path of another method, then the first method runs after the second method ends.
+_todo_
 
 ### Vector operations
 
@@ -160,6 +152,15 @@ there will be text files with same name containing counts in the `count` folder.
 Maximum number of asterisks in the inputs and number of asterisks in the outputs must be same.
 Number of asterisks define dimensionality of the vector operations.
 
+Notes:
+- The rule is: an asterisk in a path item (i.e. between directory separators) indicates a directory (e.g. `*/data.csv`);
+an asterisk with an extension means a file (e.g. `data/*.csv`)
+- An asterisk in the input can change its type in the output (e.g. the input files `data/*.csv` to the output directories `metadata/*/`).
+- When a vector method instance runs, an asterisk in the output path is replaced with the value of the corresponding asterisk in the input.
+This also means that it is possible to change an extension of the output file (e.g. the input `data/*.csv` to the output `metadata/*.json`).
+- Only one input can be a vector (i.e. contain one or more asterisks), others must be scalar. Reason for that
+are two unclear issues so far: (1) if there are two vector inputs, what is the joint input? is it cartaesian product of the two or just
+pairs with same indices? if the latter, how to order input items? (2) how to name outputs in this case?
 
 ### Using external storage for artefacts
 

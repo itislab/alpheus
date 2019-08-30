@@ -68,8 +68,8 @@ type DepGraphConstruction(output) =
     [<Fact>]
     member s.``dependencyGraph loads for all at once``() =
         async {
-            Logger.logInfo Logger.Test (sprintf "testing %A" s.FullArtIds)
-            let! graph = buildDependencyGraphAsync s.RootPath (List.ofArray s.FullArtIds)
+            Logger.logInfo Logger.Test (sprintf "testing %A" s.ArtefactIds)
+            let! graph = buildDependencyGraphAsync s.RootPath (List.ofArray s.ArtefactIds)
             Assert.True(graph.ArtefactsCount>0,"Graph must be non-empty")
             } |> toAsyncFact
 
@@ -79,7 +79,7 @@ type DepGraphConstruction(output) =
     member s.``build: finishes``(testCase) =
         async {
             // preparing and running build command
-            let inputIDs = testCase.inputsIndices |> Array.map (fun idx -> s.FullArtIds.[idx].ToString()) |> List.ofArray
+            let inputIDs = testCase.inputsIndices |> Array.map (fun idx -> s.ArtefactIds.[idx].ToString()) |> List.ofArray
             let inputPaths = inputIDs |> List.map (fun x -> Path.Combine(s.Path,x))
             let outputPaths = testCase.OutputIDs |> Array.map (fun x -> Path.Combine(s.Path,x)) |> List.ofArray
             let! buildResult = buildAsync s.RootPath inputPaths outputPaths "../copy_prog $in1 $out1" false
@@ -92,7 +92,7 @@ type DepGraphConstruction(output) =
     member s.``build: vertex count check``(testCase) =
         async {
             // preparing and running build command
-            let inputIDs = testCase.inputsIndices |> Array.map (fun idx -> s.FullArtIds.[idx].ToString()) |> List.ofArray
+            let inputIDs = testCase.inputsIndices |> Array.map (fun idx -> s.ArtefactIds.[idx].ToString()) |> List.ofArray
             let inputPaths = inputIDs |> List.map (fun x -> Path.Combine(s.Path,x))
             let outputPaths = testCase.OutputIDs |> Array.map (fun x -> Path.Combine(s.Path,x)) |> List.ofArray
             let! buildResult = buildAsync s.RootPath inputPaths outputPaths "../copy_prog $in1 $out1" false
@@ -117,7 +117,7 @@ type DepGraphConstruction(output) =
     member s.``build: new artefact deps check``(testCase) =
         async {
             // preparing and running build command
-            let inputIDs = testCase.inputsIndices |> Array.map (fun idx -> s.FullArtIds.[idx]) |> List.ofArray
+            let inputIDs = testCase.inputsIndices |> Array.map (fun idx -> s.ArtefactIds.[idx]) |> List.ofArray
             let inputPaths = inputIDs |> List.map (fun x -> Path.Combine(s.Path,x.ToString()))
             let outputPaths = testCase.OutputIDs |> Array.map (fun x -> Path.Combine(s.Path,x)) |> List.ofArray
             let! buildResult = buildAsync s.RootPath inputPaths outputPaths "../copy_prog $in1 $out1" false
@@ -128,12 +128,12 @@ type DepGraphConstruction(output) =
             let checkGraphAsync outputId = 
                 async {
                     let! graph = buildDependencyGraphAsync s.RootPath [outputId]
-                    let output = graph.GetOrAllocateArtefact outputId
+                    let output = graph.Artefacts |> Seq.find (fun a -> a.Id = outputId)
                     let expectedDependecies = inputIDs |> Set.ofList
                     let actualDependecies =
                         match output.ProducedBy with
                         |   MethodVertex.Source(s) -> Assert.True(false, "the artefact must be produced by compute method, not source"); failwith ":("
-                        |   MethodVertex.Command(comp) -> comp.Inputs |> Seq.map (fun (x:VersionedArtefact) -> x.Artefact.Id) |> Set.ofSeq
+                        |   MethodVertex.Command(comp) -> comp.Inputs |> Seq.map (fun x -> x.Artefact.Id) |> Set.ofSeq
                     Assert.Equal<ArtefactId>(expectedDependecies, actualDependecies)
                 }
 
@@ -144,7 +144,6 @@ type DepGraphConstruction(output) =
 type DepGraphLocalComputation(output) =
     inherit SampleExperiment.SampleExperiment(output)
 
-    
     [<Fact>]
     member s.``API Compute: concat 2 files``() =
         let expRoot = s.FullPath
@@ -162,7 +161,7 @@ type DepGraphLocalComputation(output) =
                 if isTestRuntimeWindows then
                     "cmd /C \"cat.cmd $out1 $in1 $in2\""
                 else
-                    "/bin/sh -c \"cat 1.txt > cat_test.txt; cat 2.txt >> cat_test.txt\""
+                    "/bin/sh -c \"cat $in1 > $out1; cat $in2 >> $out1\""
             let buildResult = API.buildAsync expRoot ["1.txt"; "2.txt"] ["cat_test.txt"] concatCommand false |> Async.RunSynchronously
             assertResultOk buildResult
 
@@ -188,15 +187,13 @@ type DepGraphLocalComputation(output) =
         finally
             Environment.CurrentDirectory <- savedWD
 
-
-
 type DepGraphSaveRestore(output) =
     inherit SampleExperiment.SampleExperiment(output)
 
     [<Fact>]
     member s.``API Save-Restore: file artefact saves & restores``() =
         async {
-            let artId = s.FullArtIds.[0]
+            let artId = s.ArtefactIds.[0]
             let path = artId |> PathUtils.idToFullPath s.FullPath
 
             // local storage is available by default
@@ -241,3 +238,285 @@ type DepGraphSaveRestore(output) =
             Assert.True(Seq.exists (fun s -> s = artIdStr) entries, ".gitignore must contain newly added artefact record")
 
         } |> toAsyncFact
+
+type ScalarScenarios(output) =
+    inherit SingleUseOneTimeDirectory(output)
+
+    let concatCommand = 
+        if isTestRuntimeWindows then
+            "cmd /C \"cat.cmd $out1 $in1 $in2\""
+        else
+            "/bin/sh -c \"cat $in1 > $out1; cat $in2 >> $out1\""
+
+    // first file is duplicated
+    let concatCommand2 = 
+        if isTestRuntimeWindows then
+            "cmd /C \"cat.cmd $out1 $in1 $in1\""
+        else
+            "/bin/sh -c \"cat $in1 > $out1; cat $in1 >> $out1\""
+
+
+    let buildExperiment(path) =
+        async {
+            let path = Path.GetFullPath path
+            let! _ = API.createExperimentDirectoryAsync path
+            File.Copy("../../../data/cat.cmd",Path.Combine(path,"cat.cmd"))
+
+            do! File.WriteAllTextAsync(Path.Combine(path,"1.txt"),"File 1\\r\\n") |> Async.AwaitTask
+            do! File.WriteAllTextAsync(Path.Combine(path,"2.txt"),"File 2\\r\\n") |> Async.AwaitTask
+            do! File.WriteAllTextAsync(Path.Combine(path,"3.txt"),"File 3\\r\\n") |> Async.AwaitTask
+
+            let! res1 =  API.buildAsync path ["1.txt";"2.txt"] ["1_2.txt"] concatCommand false
+            assertResultOk res1
+            let! res2 =  API.buildAsync path ["1_2.txt";"3.txt"] ["1_2_3.txt"] concatCommand false
+            assertResultOk res2
+            return ()
+        }
+
+    let assertNonEmptyFile path = 
+        async {
+            let! content = File.ReadAllTextAsync(path) |> Async.AwaitTask
+            Assert.True(content.Length > 0)
+        }
+
+    [<Fact>]
+    member s.``Uncomputed chain is computed``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try            
+                let path = Path.GetFullPath s.Path
+                Environment.CurrentDirectory <- s.Path
+                do! buildExperiment(path)
+
+                let res = API.compute(path, ArtefactId.Path "1_2_3.txt")
+                assertResultOk res
+
+                do! assertNonEmptyFile(Path.Combine(path,"1_2.txt"))
+                do! assertNonEmptyFile(Path.Combine(path,"1_2_3.txt"))
+            finally
+                Environment.CurrentDirectory <- savedWD            
+        } |> toAsyncFact
+
+    [<Fact>]
+    member s.``Changed input content invalidates vertex``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try            
+                let path = Path.GetFullPath s.Path
+                Environment.CurrentDirectory <- s.Path
+                
+                do! buildExperiment(path)
+                output.WriteLine("TEST: experiment graph is constructed")
+
+                assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt")
+                
+                output.WriteLine("TEST: first time computed 1_2_3.txt")
+
+                do! assertNonEmptyFile(Path.Combine(path,"1_2.txt"))
+                let! content1 = File.ReadAllTextAsync(Path.Combine(path,"1_2_3.txt")) |> Async.AwaitTask
+
+                // now changing 3.txt
+                do! File.WriteAllTextAsync(Path.Combine(path,"3.txt"),"File 3 changed\\r\\n") |> Async.AwaitTask
+
+                // this should change 1_2_3.txt
+                assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt")
+                output.WriteLine("TEST: second time computed 1_2_3.txt")
+                let! content2 = File.ReadAllTextAsync(Path.Combine(path,"1_2_3.txt")) |> Async.AwaitTask
+
+                Assert.True(content1.Length > 0)
+                Assert.True(content2.Length > 0)
+                Assert.NotEqual<string>(content1,content2)
+            finally
+                Environment.CurrentDirectory <- savedWD            
+        } |> toAsyncFact
+
+    [<Fact>]
+    member s.``Changed output content invalidates vertex``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try            
+                let path = Path.GetFullPath s.Path
+                Environment.CurrentDirectory <- s.Path
+                
+                do! buildExperiment(path)
+                output.WriteLine("TEST: experiment graph is constructed")
+
+                assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt")
+                
+                output.WriteLine("TEST: first time computed 1_2_3.txt")
+
+                do! assertNonEmptyFile(Path.Combine(path,"1_2.txt"))
+                let! content1 = File.ReadAllTextAsync(Path.Combine(path,"1_2_3.txt")) |> Async.AwaitTask
+
+                // now changing 3.txt
+                do! File.WriteAllTextAsync(Path.Combine(path,"1_2_3.txt"),"manually changed\\r\\n") |> Async.AwaitTask
+
+                // this should change 1_2_3.txt
+                assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt")
+                output.WriteLine("TEST: second time computed 1_2_3.txt")
+                let! content2 = File.ReadAllTextAsync(Path.Combine(path,"1_2_3.txt")) |> Async.AwaitTask
+
+                Assert.True(content1.Length > 0)
+                Assert.True(content2.Length > 0)
+                Assert.Equal<string>(content1,content2)
+            finally
+                Environment.CurrentDirectory <- savedWD            
+        } |> toAsyncFact
+
+    
+    [<Fact>]
+    member s.``Changed command invalidates vertex``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try            
+                let path = Path.GetFullPath s.Path
+                Environment.CurrentDirectory <- s.Path
+                
+                do! buildExperiment(path)
+                output.WriteLine("TEST: experiment graph is constructed")
+
+                assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt")
+                
+                output.WriteLine("TEST: first time computed 1_2_3.txt")
+
+                do! assertNonEmptyFile(Path.Combine(path,"1_2.txt"))
+                let! content1 = File.ReadAllTextAsync(Path.Combine(path,"1_2_3.txt")) |> Async.AwaitTask
+
+                // now changing 1_2_3.txt producing command
+                let! res2 =  API.buildAsync path ["1_2.txt";"3.txt"] ["1_2_3.txt"] concatCommand2 false // double 
+                assertResultOk res2
+
+                // this should change 1_2_3.txt
+                assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt")
+                output.WriteLine("TEST: second time computed 1_2_3.txt")
+                let! content2 = File.ReadAllTextAsync(Path.Combine(path,"1_2_3.txt")) |> Async.AwaitTask
+
+                Assert.True(content1.Length > 0)
+                Assert.True(content2.Length > 0)
+                Assert.NotEqual<string>(content1,content2)
+            finally
+                Environment.CurrentDirectory <- savedWD            
+        } |> toAsyncFact
+
+    [<Fact>]
+    member s.``Changed inputs order invalidates vertex``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try            
+                let path = Path.GetFullPath s.Path
+                Environment.CurrentDirectory <- s.Path
+                
+                do! buildExperiment(path)
+                output.WriteLine("TEST: experiment graph is constructed")
+
+                assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt")
+                
+                output.WriteLine("TEST: first time computed 1_2_3.txt")
+
+                do! assertNonEmptyFile(Path.Combine(path,"1_2.txt"))
+                let! content1 = File.ReadAllTextAsync(Path.Combine(path,"1_2_3.txt")) |> Async.AwaitTask
+
+                // now changing inputs order 
+                let! res2 =  API.buildAsync path ["3.txt";"1_2.txt"] ["1_2_3.txt"] concatCommand false // double 
+                assertResultOk res2
+
+                // this should change 1_2_3.txt
+                assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt")
+                output.WriteLine("TEST: second time computed 1_2_3.txt")
+                let! content2 = File.ReadAllTextAsync(Path.Combine(path,"1_2_3.txt")) |> Async.AwaitTask
+
+                Assert.True(content1.Length > 0)
+                Assert.True(content2.Length > 0)
+                Assert.NotEqual<string>(content1,content2)
+            finally
+                Environment.CurrentDirectory <- savedWD            
+        } |> toAsyncFact
+
+    [<Fact>]
+    member s.``recompute missing intermediate while computing final``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try            
+                let path = Path.GetFullPath s.Path
+                Environment.CurrentDirectory <- s.Path
+                do! buildExperiment(path)
+
+                let res = API.compute(path, ArtefactId.Path "1_2_3.txt") // first compute all
+                assertResultOk res
+
+                File.Delete(Path.Combine(path,"1_2.txt")) // then delete intermediate 
+
+                let res = API.compute(path, ArtefactId.Path "1_2_3.txt") // this computation should rebuild intermediate (as it is not in storage)
+                assertResultOk res
+
+                do! assertNonEmptyFile(Path.Combine(path,"1_2.txt"))
+                
+            finally
+                Environment.CurrentDirectory <- savedWD            
+        } |> toAsyncFact
+
+    [<Fact>]
+    member s.``skip missing (storage present) intermediate while computing final``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try            
+                let path = Path.GetFullPath s.Path
+                Environment.CurrentDirectory <- s.Path
+                do! buildExperiment(path)
+
+                assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt") // first compute all
+
+                let! res = API.saveAsync(path, ArtefactId.Path "1_2.txt") "local" false // saving intermediate
+                assertResultOk res
+
+                File.Delete(Path.Combine(path,"1_2.txt")) // then delete intermediate 
+
+                assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt") // this computation must not recompute intermediate, as it is stored in storage
+                // if needed by further methods, the methods execution can restore the intermediate during inpute restore computation phase
+                
+                Assert.False(File.Exists(Path.Combine(path,"1_2.txt")))
+
+                do! assertNonEmptyFile(Path.Combine(path,"1_2_3.txt"))
+                
+            finally
+                Environment.CurrentDirectory <- savedWD            
+        } |> toAsyncFact
+
+    [<Fact>]
+    member s.``restore only intermediate while computing final``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try            
+                let path = Path.GetFullPath s.Path
+                Environment.CurrentDirectory <- s.Path
+                do! buildExperiment(path)
+
+                assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt") // computing all
+
+                // saving all except final
+                let! res = API.saveAsync(path, ArtefactId.Path "1_2.txt") "local" false // saving intermediate
+                assertResultOk res
+                let! res = API.saveAsync(path, ArtefactId.Path "1.txt") "local" false // saving initial
+                assertResultOk res
+                let! res = API.saveAsync(path, ArtefactId.Path "2.txt") "local" false // saving initial
+                assertResultOk res
+
+
+                //Deleting all
+                [
+                    Path.Combine(path,"1_2_3.txt");
+                    Path.Combine(path,"1_2.txt");
+                    Path.Combine(path,"1.txt");
+                    Path.Combine(path,"2.txt");
+                ] |> List.iter File.Delete
+
+                assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt") // computing all
+
+                do! assertNonEmptyFile(Path.Combine(path,"1_2_3.txt")) // final is recomputed
+                do! assertNonEmptyFile(Path.Combine(path,"1_2.txt")) // intermediate is restored
+                Assert.False(File.Exists(Path.Combine(path,"1.txt"))) // but initials are not restored, a intermediate is sufficient
+                Assert.False(File.Exists(Path.Combine(path,"2.txt"))) // but initials are not restored, a intermediate is sufficient
+            finally
+                Environment.CurrentDirectory <- savedWD            
+        } |> toAsyncFact
+        

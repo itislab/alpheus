@@ -9,12 +9,12 @@ type ArtefactType =
 
 type IStorage =
     interface
-        abstract IsInStorageAsync: version:Hash.HashString -> Async<ArtefactType>        
-        abstract getFileSaveStreamAsync: version:Hash.HashString -> Async<Stream>
-        abstract getDirSaveStreamsAsync: version:Hash.HashString -> streamsCount:int -> Async<Stream array>
+        abstract IsInStorageAsync: version:HashString -> Async<ArtefactType>        
+        abstract getFileSaveStreamAsync: version:HashString -> Async<Stream>
+        abstract getDirSaveStreamsAsync: version:HashString -> streamsCount:int -> Async<Stream array>
         
-        abstract getFileRestoreStreamAsync: version:Hash.HashString -> Async<Stream>
-        abstract getDirRestoreStreamsAsync: version:Hash.HashString -> Async<Stream array>
+        abstract getFileRestoreStreamAsync: version:HashString -> Async<Stream>
+        abstract getDirRestoreStreamsAsync: version:HashString -> Async<Stream array>
     end
 
 

@@ -6,9 +6,10 @@ open System.IO
 open ItisLab.Alpheus
 open ItisLab.Alpheus.Tests.Utils
 open ItisLab.Alpheus.PathUtils
+open Angara.Data
 
-type PathUtilsTests(output)=
-    inherit SingleUseOneTimeDirectory(output)
+type PathUtilsTests(output) =
+    inherit ItisLab.Alpheus.Tests.Utils.SingleUseOneTimeDirectory(output)
 
     [<Theory>]
     [<InlineData(TargetPlatform.Windows, @"c:\temp\")>]
@@ -156,12 +157,12 @@ type PathUtilsTests(output)=
         Directory.CreateDirectory(Path.GetDirectoryName(alphFilePath)) |> ignore
         let artefactPath = Path.Combine(s.Path, "source", "test.dat")
         let relativeArtefactPath     = relativePath alphFilePath artefactPath
-        let snapshortSection : AlphFiles.VersionedArtefact = { RelativePath = relativeArtefactPath; Hash = "0000"}
+        let snapshortSection : AlphFiles.VersionedArtefact = { RelativePath = relativeArtefactPath; Hash = MdMap.scalar (Some "0000") }
         let alphFile : AlphFiles.AlphFile = {
             IsTracked = true
             Origin = AlphFiles.SourceOrigin snapshortSection
         }
-        AlphFiles.saveAsync alphFile alphFilePath |> Async.RunSynchronously
+        AlphFiles.save alphFile alphFilePath
 
         let artefactId = pathToId s.Path alphFilePath 
         Assert.Equal(relativePath s.Path artefactPath, idToExperimentPath artefactId)
@@ -226,7 +227,48 @@ type PathUtilsTests(output)=
     [<InlineData(TargetPlatform.Linux, @"/experiment/", @"source/*/*/data/*.csv", @"/experiment/source/vector-vector-data-vector.csv.alph")>]
     [<InlineData(TargetPlatform.Linux, @"/experiment/", @"*/", @"/experiment/vector.alph")>]
     member s.``idToAlphFileFullPath returns the full path to the corresponding alph file``(targetPlatform: TargetPlatform, experimentRoot: string, artefactPath: ExperimentRelativePath, expectedAlphFilePath: string) =
-           if targetPlatform = s.Platform then 
-               let id = ArtefactId.Path artefactPath
-               let alpFileFullPath = idToAlphFileFullPath experimentRoot id
-               Assert.Equal(expectedAlphFilePath, alpFileFullPath)
+        if targetPlatform = s.Platform then 
+            let id = ArtefactId.Path artefactPath
+            let alpFileFullPath = idToAlphFileFullPath experimentRoot id
+            Assert.Equal(expectedAlphFilePath, alpFileFullPath)
+
+
+    [<Theory>]
+    [<MemberData("Patterns")>]
+    member s.``enumerateItems enumerates files according to a pattern`` (artefactId:string, expected: (string list * string)[]) =
+        let dir path = Path.Combine(s.FullPath, path) |> Directory.CreateDirectory |> ignore
+        let file path = (Path.Combine(s.FullPath, path) |> File.CreateText).Close()
+
+        dir "dir1"
+        dir "dir1/test2"
+        file "dir1/test1.txt"
+        dir "dir2"
+        file "dir2/test1.txt"
+        file "dir2/test3.txt"
+        dir "dir3"
+        file "dir3/test1.txt"
+        dir "dir3/dir5"
+        file "dir3/dir5/test5.txt"
+
+        let artefactId = ArtefactId.Path artefactId
+        let items = enumerateItems s.FullPath artefactId
+        let simplify = relativePath s.FullPath >> unixPath
+        let actual = items |> MdMap.toSeq |> Seq.map(fun (keyPaths, valuePath) -> keyPaths, simplify valuePath) |> Seq.toArray
+        Assert.Equal<string list * string>(expected, actual)
+        //let files = enumerateItems s.FullPath artefactId |> Seq.map (fun () relativePath s.FullPath >> unixPath) |> Seq.toArray
+        //Assert.Equal<string>(expectedFiles, files)
+
+    static member Patterns : obj[][] = 
+        [| [| "dir1/test1.txt"; [| List.empty<string>, "dir1/test1.txt" |] |]
+           [| "dir1/*.txt"; [| [ "test1" ],"dir1/test1.txt" |] |]
+           [| "*/test1.txt"; [| ["dir1"], "dir1/test1.txt" ; ["dir2"], "dir2/test1.txt"; ["dir3"], "dir3/test1.txt"|] |]
+           [| "*/*.txt"; [| ["dir1"; "test1" ], "dir1/test1.txt"; ["dir2"; "test1" ], "dir2/test1.txt"; ["dir2"; "test3" ], "dir2/test3.txt"; ["dir3"; "test1" ], "dir3/test1.txt" |] |]
+           [| "dir3/*/*.txt"; [| ["dir5"; "test5"], "dir3/dir5/test5.txt" |] |]
+           [| "*/*/*.txt"; [| ["dir3"; "dir5"; "test5"], "dir3/dir5/test5.txt" |] |]
+           [| "*/"; [| ["dir1"], "dir1"; ["dir2"], "dir2"; ["dir3"], "dir3" |] |]
+           [| "*/*/"; [| ["dir1";"test2"], "dir1/test2"; ["dir3";"dir5"], "dir3/dir5" |] |]
+        |]
+
+    // todo:
+    // test that dir pattern must contain only * (e.g. /dir*/ is not allowed)
+    // test that file pattern must contain only *.ext (e.g. /dir/file*ABC.txt is not allowed)
