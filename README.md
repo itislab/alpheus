@@ -139,10 +139,11 @@ Just delete corresponding `*.alph` files. Note that you can break the dependenci
 There are two statuses of an artefact:
 
 - *Needs recomputation* indicates that the artefact is obsolete because of one of the following reasons:
-  -- Input artefact is outded.
-  -- Output artefact is modified not using alpheus.
-  -- The command producing the artefact is modified.
-  -- The order of the inputs is changed.
+
+    - Input artefact is outded.
+    - Output artefact is modified not using alpheus.
+    - The command producing the artefact is modified.
+    - The order of the inputs is changed.
   
 - *Up-to-date* indicates that the correct version of the artefact is available either locally or on the attached storage, such that this artefact is a result of the command applied to the current inputs.
   
