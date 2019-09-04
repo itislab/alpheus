@@ -9,147 +9,77 @@ open Angara.Execution
 open Angara.States
 open ItisLab.Alpheus.DependencyGraph
 open ItisLab.Alpheus.PathUtils
+open ItisLab.Alpheus.AngaraGraphCommon
 
-
-let private arrayType<'a> rank : Type =
-    if rank < 0 then invalidArg "rank" "Rank is negative"
-    else if rank = 0 then typeof<ArtefactId>
-    else typeof<ArtefactId>.MakeArrayType(rank)
-
-let private inputRank (v:MethodVertex) =
-    match v with
-    | Source src -> 0
-    | Command cmd -> cmd.Inputs |> Seq.map(fun a -> a.Artefact.Rank) |> Seq.max
-
-let private outputRank (v:MethodVertex) =
-    match v with
-    | Source src -> src.Output.Artefact.Rank
-    | Command cmd -> cmd.Outputs |> Seq.map(fun a -> a.Artefact.Rank) |> Seq.max
-
-let private methodRank (v:MethodVertex) = min (outputRank v) (inputRank v)
-
-let getOutputTypes (v:MethodVertex) =
-    let rank = methodRank v
-    match v with
-    | Source src -> [max 0 (src.Output.Artefact.Rank - rank) |> arrayType]
-    | Command cmd -> cmd.Outputs |> Seq.map(fun a -> max 0 (a.Artefact.Rank - rank) |> arrayType) |> List.ofSeq
-
-let getInputTypes (v:MethodVertex) =
-    let rank = methodRank v
-    match v with
-    | Source src -> List.empty
-    | Command cmd -> cmd.Inputs |> Seq.map(fun a -> max 0 (a.Artefact.Rank - rank) |> arrayType) |> List.ofSeq
 
 type ArtefactItem =
     { FullPath: string
-      Index: string list }
+      Index: string list
+      }
 
-let rec private toJaggedArrayOrValue (mapValue: (string list * 'a) -> 'c) (index: string list) (map: MdMapTree<string,'a>) : obj =
-    let isValue = function
-    | MdMapTree.Value _ -> true
-    | MdMapTree.Map _ -> false
-
-    let mapToArray (getElement: (string * MdMapTree<string,'a>) -> 'b) (map: Map<string,MdMapTree<string,'a>>) : 'b[] =
-        map |> Map.toSeq |> Seq.sortBy fst |> Seq.map getElement |> Seq.toArray
-
-    let append v list = list |> List.append [v]
-
-    match map with
-    | MdMapTree.Value v -> upcast(mapValue (index, v))
-    | MdMapTree.Map subMap ->
-        match subMap |> Map.forall(fun _ -> isValue) with
-        | true -> // final level
-            upcast(subMap |> mapToArray (fun (k,t) -> 
-                let newIndex = index |> append k
-                match t with 
-                | MdMapTree.Value v -> mapValue (newIndex, v)
-                | MdMapTree.Map _ -> failwith "Unreachable case"))
-        | false ->
-            upcast(subMap |> mapToArray (fun (k,t) -> 
-                let newIndex = index |> append k
-                match t with 
-                | MdMapTree.Map _ -> toJaggedArrayOrValue mapValue newIndex t 
-                | MdMapTree.Value _ -> failwith "Data is incomplete and has missing elements"))
-
-
-/// This type represents an Angara Flow method.
-/// Note that execution modifies the given vertex and it is Angara Flow execution runtime who controls
-/// the concurrency.
-[<AbstractClass>]
-type ComputationGraphNode(
-                            producerVertex:MethodVertex,
-                            experimentRoot:string,
-                            checkStoragePresence:HashString array -> Async<bool array>,
-                            restoreFromStorage: (HashString*string) array -> Async<unit>) = // version*filename
-    inherit ExecutableMethod(
-        System.Guid.NewGuid(),
-        getInputTypes producerVertex,
-        getOutputTypes producerVertex)
-
-    member s.VertexID =
-        match producerVertex with
-        |   Source(s) -> s.Output.Artefact.Id
-        |   Command(comp) -> (Seq.head comp.Outputs).Artefact.Id // first output is used as vertex ID
-
-    override s.ToString() = 
-        match producerVertex with
-        | Source src -> sprintf "Source %A" src.Output.Artefact.Id
-        | Command cmd -> sprintf "Command %s" cmd.Command
-
-
-type SourceMethod(source: SourceVertex, experimentRoot, checkStoragePresence, restoreFromStorage) =
-    inherit ComputationGraphNode(DependencyGraph.Source source, experimentRoot, checkStoragePresence, restoreFromStorage)
+type SourceMethod(source: SourceVertex, experimentRoot,
+                    checkStoragePresence : HashString array -> Async<bool array>) = 
+    inherit AngaraGraphNode(DependencyGraph.Source source)
 
     override s.Execute(_, _) = // ignoring checkpoints
-        let expectedArtefact = source.Output
-        let artefact = expectedArtefact.Artefact
+        async {
+            let expectedArtefact = source.Output
+            let artefact = expectedArtefact.Artefact
 
-        // Output of the method is an scalar or a vector of full paths to the data of the artefact.
-        let outputArtefact : Artefact =
-            artefact.Id 
-            |> PathUtils.enumerateItems experimentRoot
-            |> MdMap.toTree
-            |> toJaggedArrayOrValue (fun (index, fullPath) -> { FullPath = fullPath; Index = index }) []
+            let ensureScalar (artefactVersion:ArtefactVersion) =
+                if not artefactVersion.IsScalar then
+                    failwithf "Source artefacts can't be vectored: %A" artefact.Id
+                else
+                    artefactVersion.AsScalar()
+
+            let expectedVersionOpt = expectedArtefact.ExpectedVersion |> ensureScalar
+        
+            let! expectedV =
+                async {
+                    match expectedVersionOpt with
+                    | None ->
+                        // this could be file/dir without alph file.
+                        let! v = artefact.ActualVersionAsync
+                        return (v |> ensureScalar).Value
+                    | Some(v) -> return v
+                }
+
+            let! actualVersionRes = artefact.ActualVersionAsync
+            let actualVersionOpt = ensureScalar actualVersionRes
+
+            match actualVersionOpt with
+            |   None -> // The artefact does not exist on disk
+                // This may be OK in case the specified version is available in storages
+                // todo: note that in case of vectore, only some of the items can exists/restore/etc.
+                let! presenceCheck = checkStoragePresence [|expectedV|]
+                if presenceCheck.[0] then
+                    // If some methods needs this artefact as input, the artefact will be restored during the method execution
+                    ()
+                else
+                    failwithf "Source artefact %A is not on disk and can't be found in any of the storages. Consider adding additional storages to look in. Can't proceed with computation." artefact.Id
+            |   Some(_) ->
+                // we now consider actual version as expected
+                source.Output.ExpectActualVersionAsync() |> Async.RunSynchronously
+                // if alph file exists on disk (e.g. isTracked), we need to re-save it to update the expected version
+                if artefact.IsTracked then
+                    artefact.SaveAlphFile()
+            
+            // Output of the method is an scalar or a vector of full paths to the data of the artefact.
+            let outputArtefact : Artefact =
+                artefact.Id 
+                |> PathUtils.enumerateItems experimentRoot
+                |> MdMap.toTree
+                |> toJaggedArrayOrValue (fun (index, fullPath) -> { FullPath = fullPath; Index = index }) []
         
 
-        let ensureScalar (artefactVersion:ArtefactVersion) =
-            if not artefactVersion.IsScalar then
-                failwithf "Source artefacts can't be vectored: %A" artefact.Id
-            else
-                artefactVersion.AsScalar()    
+            return Seq.singleton ([outputArtefact], null)
+        } |> Async.RunSynchronously
 
-        let expectedVersionOpt = expectedArtefact.ExpectedVersion |> ensureScalar
-        
-        let expectedV =
-            match expectedVersionOpt with
-            | None ->
-                // this could be file/dir without alph file.
-                (artefact.ActualVersionAsync |> Async.RunSynchronously |> ensureScalar).Value
-            | Some(v) -> v
-
-        let actualVersionRes = artefact.ActualVersionAsync |> Async.RunSynchronously
-        let actualVersionOpt = ensureScalar actualVersionRes
-
-        match actualVersionOpt with
-        |   None -> // The artefact does not exist on disk
-            // This may be OK in case the specified version is available in storages
-            // todo: note that in case of vectore, only some of the items can exists/restore/etc.
-            if (checkStoragePresence [|expectedV|] |> Async.RunSynchronously).[0] then
-                // If some methods needs this artefact as input, the artefact will be restored during the method execution
-                ()
-            else
-                failwithf "Source artefact %A is not on disk and can't be found in any of the storages. Consider adding additional storages to look in. Can't proceed with computation." artefact.Id
-        |   Some(_) ->
-            // we now consider actual version as expected
-            source.Output.ExpectActualVersionAsync() |> Async.RunSynchronously
-            // if alph file exists on disk (e.g. isTracked), we need to re-save it to update the expected version
-            if artefact.IsTracked then
-                artefact.SaveAlphFile()
-                        
-        Seq.singleton ([outputArtefact], null)
-
-type CommandMethod(command: CommandLineVertex, experimentRoot, checkStoragePresence, restoreFromStorage) =
-    inherit ComputationGraphNode(DependencyGraph.Command command, experimentRoot, checkStoragePresence, restoreFromStorage)
+type CommandMethod(command: CommandLineVertex,
+                    experimentRoot,
+                    checkStoragePresence: HashString array -> Async<bool array>,
+                    restoreFromStorage: (HashString*string) array -> Async<unit>) = // version*filename
+    inherit AngaraGraphNode(DependencyGraph.Command command)  
 
     let resolveIndex (index:string list) (map: MdMap<string, 'a option>) =
         let rec resolveInTree (index:string list) (map: MdMapTree<string, 'a option>) =
@@ -166,38 +96,8 @@ type CommandMethod(command: CommandLineVertex, experimentRoot, checkStoragePrese
         | Some(MdMapTree.Map _) -> invalidOp "Only one-to-one vectors are supported at the moment"
         | None -> None
 
-    /// valid are items that either have actual disk data version match expected version, or actual disk data is missing and expected version is restorable from storage
-    let areValidItemsVersions expectedVersionHashes actualVersionsHashes =
-        if Array.exists Option.isNone expectedVersionHashes then
-            // some of the artefact element was not ever produced, this is invalid
-            false
-        else
-            /// Chooses the pairs that are not valid on disk (filtering out versions match)
-            let invalidOnDiskChooser hash1 hash2 =
-                match hash1,hash2 with
-                |   Some(h1),Some(h2) ->  if h1 = h2 then None else Some(hash1,hash2)
-                |   _ -> Some(hash1,hash2)
-            let localInvalid = Seq.map2 invalidOnDiskChooser expectedVersionHashes actualVersionsHashes |> Seq.choose id |> Array.ofSeq
-            if Array.length localInvalid = 0 then
-                // valid as actual disk version match expected version. No need to check the storage
-                true
-            else
-                // check if the locally "invalid" are "remote valid" (restorable from storage in case of disk data absence)
-                let eligibleForRemoteCheckChooser pair =
-                    let expected,actual = pair
-                    match expected,actual with
-                    |   Some(v),None -> Some(v)
-                    |   _,_ -> None
-
-                let eligibleForRemoteCheck = Array.choose eligibleForRemoteCheckChooser localInvalid
-                if Array.length eligibleForRemoteCheck = Array.length localInvalid then
-                    // we proceed with the remote checks only if all of the locally invalid items are eligible for remote check
-                    let remotePresence = checkStoragePresence eligibleForRemoteCheck |> Async.RunSynchronously            
-                    Array.forall id remotePresence
-                else
-                    // otherwise at least one unrestorable item exists. Thus invalid
-                    false
-
+    
+    (*
     let isValid (actualVersion:ArtefactVersion) (expectedVersion:ArtefactVersion) =
         let actVersions = MdMap.toSeq actualVersion |> Array.ofSeq
         let expVersions = MdMap.toSeq expectedVersion |> Array.ofSeq
@@ -208,7 +108,7 @@ type CommandMethod(command: CommandLineVertex, experimentRoot, checkStoragePrese
         else
             let actVersionsHashes = actVersions |> Seq.map snd |> Array.ofSeq
             let expVersionHashes = expVersions |> Seq.map snd |> Array.ofSeq
-            areValidItemsVersions expVersionHashes actVersionsHashes
+            areValidItemsVersions expVersionHashes actVersionsHashes *)
 
     override s.Execute(inputs, _) = // ignoring checkpoints
         async{
@@ -251,7 +151,7 @@ type CommandMethod(command: CommandLineVertex, experimentRoot, checkStoragePrese
             let expectedInputItemVersions = extractExpectedVersionsFromLinks command.Inputs |> Array.ofSeq
             let! actualInputItemVersions = extractActualVersionsFromLinks command.Inputs
 
-            let areInputsValid = areValidItemsVersions expectedInputItemVersions actualInputItemVersions
+            let! areInputsValid = areValidItemsVersions checkStoragePresence expectedInputItemVersions actualInputItemVersions
         
             let! doComputations = 
                 async {
@@ -264,7 +164,7 @@ type CommandMethod(command: CommandLineVertex, experimentRoot, checkStoragePrese
                         // checking outputs
                         let expectedOutputItemVersions = extractExpectedVersionsFromLinks command.Outputs |> Array.ofSeq
                         let! actualOutputItemVersions = extractActualVersionsFromLinks command.Outputs
-                        let areOutputsValid = areValidItemsVersions expectedOutputItemVersions actualOutputItemVersions
+                        let! areOutputsValid = areValidItemsVersions checkStoragePresence expectedOutputItemVersions actualOutputItemVersions
                         if not areOutputsValid then
                             logVerbose "Needs recomputation due to the outdated outputs"
                         return not areOutputsValid
@@ -333,14 +233,14 @@ type CommandMethod(command: CommandLineVertex, experimentRoot, checkStoragePrese
 
 
 let buildGraph experimentRoot (g:DependencyGraph.Graph) checkStoragePresence restoreFromStorage =    
-    let factory method : ComputationGraphNode = 
-        match method with 
-        | DependencyGraph.Source src -> upcast SourceMethod(src, experimentRoot, checkStoragePresence, restoreFromStorage) 
+    let factory method : AngaraGraphNode = 
+        match method with
+        | DependencyGraph.Source src -> upcast SourceMethod(src, experimentRoot, checkStoragePresence) 
         | DependencyGraph.Command cmd -> upcast CommandMethod(cmd, experimentRoot, checkStoragePresence, restoreFromStorage)
 
     g |> DependencyGraphToAngaraWrapper |> AngaraTranslator.translate factory
 
-let doComputations (g:FlowGraph<ComputationGraphNode>) = 
+let doComputations (g:FlowGraph<AngaraGraphNode>) = 
     let state  = 
         {
             TimeIndex = 0UL
@@ -348,7 +248,7 @@ let doComputations (g:FlowGraph<ComputationGraphNode>) =
             Vertices = Map.empty
         }
     try
-        use engine = new Engine<ComputationGraphNode>(state,Scheduler.ThreadPool())        
+        use engine = new Engine<AngaraGraphNode>(state,Scheduler.ThreadPool())        
         engine.Start()
         
         // engine.Changes.Subscribe(fun x -> x.State.Vertices)

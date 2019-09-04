@@ -8,22 +8,29 @@ open AlphFiles
 open System
 open ItisLab.Alpheus
 open ItisLab.Alpheus.PathUtils
+open ItisLab.Alpheus.AngaraGraphCommon
 
-type ArtefactStatus = {
-    Id: ArtefactId
-    IsOnDisk: bool
-    IsUpToDate: bool
-    IsTracked: bool
-    ProducedVersionStorages: string list
-    CurrentDiskVersionStorages: string list
-}
+type UpToDateStatus =
+    /// Expected produced version can be restored from storage
+    |   ExistsRemotely
+    /// Expected produced version is currently on disk
+    |   ExistsLocally
 
-[<AbstractClass>]
-type StatusGraphNode(depCount,outCount) = 
-    inherit ExecutableMethod(System.Guid.NewGuid(), [ for i in 0..(depCount-1) -> typeof<ArtefactStatus>] , [for i in 0..(outCount-1) -> typeof<ArtefactStatus>])
+type OutdatedStatus =
+    | InputsOutdated
+    | OutputsOutdated
 
-    member s.OutputCount =
-        outCount
+type Status =
+    |   UpToDate of UpToDateStatus
+    |   Outdated of OutdatedStatus
+
+
+type ArtefactItem =
+    { FullPath: string
+      Index: string list
+      Status: Status
+      }
+
 
 type SourceGraphNode(orphanArtefact:DependencyGraph.LinkToArtefact, experimentRoot: string) =
     inherit StatusGraphNode(0,1)
