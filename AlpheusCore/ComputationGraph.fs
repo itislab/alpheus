@@ -77,10 +77,10 @@ let rec private toJaggedArrayOrValue (mapValue: (string list * 'a) -> 'c) (index
 /// the concurrency.
 [<AbstractClass>]
 type ComputationGraphNode(
-    producerVertex:MethodVertex,
-    experimentRoot:string,
-    checkStoragePresence:HashString array -> Async<bool array>,
-    restoreFromStorage: (HashString*string) array -> Async<unit>) = // version*filename
+                            producerVertex:MethodVertex,
+                            experimentRoot:string,
+                            checkStoragePresence:HashString array -> Async<bool array>,
+                            restoreFromStorage: (HashString*string) array -> Async<unit>) = // version*filename
     inherit ExecutableMethod(
         System.Guid.NewGuid(),
         getInputTypes producerVertex,
@@ -211,114 +211,125 @@ type CommandMethod(command: CommandLineVertex, experimentRoot, checkStoragePrese
             areValidItemsVersions expVersionHashes actVersionsHashes
 
     override s.Execute(inputs, _) = // ignoring checkpoints
-        // Rules of execution
-        // The artefact is valid either if actual disk version matches expected version or if the disk version is absend and expected version is restorable from storage
-        // We can bypass the computation entirely if inputs and outputs are valid
+        async{
+            // Rules of execution
+            // The artefact is valid either if actual disk version matches expected version or if the disk version is absend and expected version is restorable from storage
+            // We can bypass the computation entirely if inputs and outputs are valid
         
            
-        // If any input, output is not valid we need to
-        //  1) restore inputs if they are absent on disk
-        //  2) execute the command
+            // If any input, output is not valid we need to
+            //  1) restore inputs if they are absent on disk
+            //  2) execute the command
             
-        let inputItems = inputs |> List.map (fun inp -> inp :?> ArtefactItem)
+            let inputItems = inputs |> List.map (fun inp -> inp :?> ArtefactItem)
                     
-        let index = 
-            inputItems 
-            |> Seq.map(fun item -> item.Index)
-            |> Seq.fold(fun (max: string list) index -> if index.Length > max.Length then index else max) []
-        let methodItemId = command.MethodId |> applyIndex index
-        let logVerbose str = Logger.logVerbose Logger.Execution (sprintf "%s: %s" methodItemId str)
-        // logVerbose "Started."
+            let index =
+                inputItems 
+                |> Seq.map(fun item -> item.Index)
+                |> Seq.fold(fun (max: string list) index -> if index.Length > max.Length then index else max) []
+            let methodItemId = command.MethodId |> applyIndex index
+            let logVerbose str = Logger.logVerbose Logger.Execution (sprintf "%s: %s" methodItemId str)
+            // logVerbose "Started"
 
-        // Build the output paths by applying the index of this method.
-        let outputPaths = 
-            command.Outputs // the order is important here
-            |> List.map(fun out -> out.Artefact.Id |> PathUtils.idToFullPath experimentRoot |> applyIndex index)
+            // Build the output paths by applying the index of this method.
+            let outputPaths = 
+                command.Outputs // the order is important here
+                |> List.map(fun out -> out.Artefact.Id |> PathUtils.idToFullPath experimentRoot |> applyIndex index)
 
-        let extractExpectedVersionsFromLinks links =
-            links |> Seq.map (fun (a:LinkToArtefact) -> MdMap.find index a.ExpectedVersion)
+            let extractExpectedVersionsFromLinks links =
+                links |> Seq.map (fun (a:LinkToArtefact) -> MdMap.find index a.ExpectedVersion)
 
-        let extractActualVersionsFromLinks links =
-            links
-            |> Seq.map (fun (a:LinkToArtefact) -> a.Artefact.ActualVersionAsync)
-            |> Async.Parallel |> Async.RunSynchronously
-            |> Array.map (fun v -> MdMap.find index v)
+            let extractActualVersionsFromLinks links =
+                async {
+                    let! actualVersion =
+                        links
+                        |> Seq.map (fun (a:LinkToArtefact) -> a.Artefact.ActualVersionAsync)
+                        |> Async.Parallel
+                    return actualVersion |> Array.map (fun v -> MdMap.find index v)
+                }
 
-        let expectedInputItemVersions = extractExpectedVersionsFromLinks command.Inputs |> Array.ofSeq
-        let actualInputItemVersions = extractActualVersionsFromLinks command.Inputs
+            let expectedInputItemVersions = extractExpectedVersionsFromLinks command.Inputs |> Array.ofSeq
+            let! actualInputItemVersions = extractActualVersionsFromLinks command.Inputs
 
-        let areInputsValid = areValidItemsVersions expectedInputItemVersions actualInputItemVersions
+            let areInputsValid = areValidItemsVersions expectedInputItemVersions actualInputItemVersions
         
-        let doComputations = 
-            if not areInputsValid then
-                // we can avoid checking outputs to speed up the work
-                // is the inputs are invalid
-                logVerbose "Needs recomputation due to the outdated inputs"
-                true 
-            else
-                // checking outputs
-                let expectedOutputItemVersions = extractExpectedVersionsFromLinks command.Outputs |> Array.ofSeq
-                let actualOutputItemVersions = extractActualVersionsFromLinks command.Outputs
-                let areOutputsValid = areValidItemsVersions expectedOutputItemVersions actualOutputItemVersions
-                if not areOutputsValid then
-                    logVerbose "Needs recomputation due to the outdated outputs"
-                not areOutputsValid
+            let! doComputations = 
+                async {
+                    if not areInputsValid then
+                        // we can avoid checking outputs to speed up the work
+                        // is the inputs are invalid
+                        logVerbose "Needs recomputation due to the outdated inputs"
+                        return true 
+                    else
+                        // checking outputs
+                        let expectedOutputItemVersions = extractExpectedVersionsFromLinks command.Outputs |> Array.ofSeq
+                        let! actualOutputItemVersions = extractActualVersionsFromLinks command.Outputs
+                        let areOutputsValid = areValidItemsVersions expectedOutputItemVersions actualOutputItemVersions
+                        if not areOutputsValid then
+                            logVerbose "Needs recomputation due to the outdated outputs"
+                        return not areOutputsValid
+                }
 
        
-        if doComputations then
-            // We need to do computation            
-            // 1) deleting outputs if they exist   
-            // 2) restoring inputs from storage if it is needed
-            // 3) execute external command
-            // 4) upon 0 exit code hash the outputs
-            // 5) fill in corresponding method vertex (to fix proper versions)
-            // 6) write alph files for outputs
+            if doComputations then
+                // We need to do computation            
+                // 1) deleting outputs if they exist   
+                // 2) restoring inputs from storage if it is needed
+                // 3) execute external command
+                // 4) upon 0 exit code hash the outputs
+                // 5) fill in corresponding method vertex (to fix proper versions)
+                // 6) write alph files for outputs
 
-            // 1) Deleting outputs
-            if not command.DoNotCleanOutputs then
-                outputPaths |> List.iter deletePath
+                // 1) Deleting outputs
+                if not command.DoNotCleanOutputs then
+                    outputPaths |> List.iter deletePath
 
-            // 2) restoring inputs from storage if it is needed
-            let inputChooser (input:LinkToArtefact) =
-                let actualHashOpt = (extractActualVersionsFromLinks [input]).[0]
-                if Option.isSome actualHashOpt then
-                    None
+                // 2) restoring inputs from storage if it is needed
+                let inputChooser (input:LinkToArtefact) =
+                    async {
+                        let! actualHashOpt = extractActualVersionsFromLinks [input]
+                        if Option.isSome actualHashOpt.[0] then
+                            return None
+                        else
+                            return Some(input)
+                    }
+                let! toRestoreOts = Seq.map inputChooser command.Inputs |> Array.ofSeq |> Async.Parallel
+                let toRestore = Array.choose id toRestoreOts
+                let hashesToRestore = toRestore |> extractExpectedVersionsFromLinks |> Seq.map (fun x -> x.Value)
+                let pathsToRestore = toRestore |> Seq.map (fun x -> idToFullPath experimentRoot x.Artefact.Id |> applyIndex index )
+                let zipped = Seq.zip hashesToRestore pathsToRestore |> Array.ofSeq
+                if Array.length zipped > 0 then
+                    logVerbose (sprintf "Restoring missing inputs from storage...")
+                    do! restoreFromStorage zipped
+                    logVerbose (sprintf "Inputs are restored")
+
+
+                // 3) executing a command
+                let print (s:string) = Console.WriteLine s
+                let input idx = command.Inputs.[idx-1].Artefact.Id |> idToFullPath experimentRoot |> applyIndex index
+                let output idx = command.Outputs.[idx-1].Artefact.Id |> idToFullPath experimentRoot |> applyIndex index
+                let context : ComputationContext = { ExperimentRoot = experimentRoot; Print = print  }
+                let exitCode = command |> ExecuteCommand.runCommandLineMethodAndWait context (input, output) 
+
+                // 4) upon 0 exit code hash the outputs
+                if exitCode <> 0 then
+                    raise(InvalidOperationException(sprintf "Process exited with exit code %d" exitCode))
                 else
-                    Some(input)
-            let toRestore = Seq.choose inputChooser command.Inputs |> Array.ofSeq
-            let hashesToRestore = toRestore |> extractExpectedVersionsFromLinks |> Seq.map (fun x -> x.Value)
-            let pathsToRestore = toRestore |> Seq.map (fun x -> idToFullPath experimentRoot x.Artefact.Id |> applyIndex index )
-            let zipped = Seq.zip hashesToRestore pathsToRestore |> Array.ofSeq
-            if Array.length zipped > 0 then
-                logVerbose (sprintf "Restoring missing inputs from storage...")
-                restoreFromStorage zipped |> Async.RunSynchronously
-                logVerbose (sprintf "Inputs are restored")
-
-
-            // 3) executing a command
-            let print (s:string) = Console.WriteLine s
-            let input idx = command.Inputs.[idx-1].Artefact.Id |> idToFullPath experimentRoot |> applyIndex index
-            let output idx = command.Outputs.[idx-1].Artefact.Id |> idToFullPath experimentRoot |> applyIndex index
-            let context : ComputationContext = { ExperimentRoot = experimentRoot; Print = print  }
-            let exitCode = command |> ExecuteCommand.runCommandLineMethodAndWait context (input, output) 
-
-            // 4) upon 0 exit code hash the outputs
-            if exitCode <> 0 then
-                raise(InvalidOperationException(sprintf "Process exited with exit code %d" exitCode))
-            else
-                logVerbose (sprintf "Program succeeded. Calculating hashes of the outputs...")
-                async {
+                    logVerbose (sprintf "Program succeeded. Calculating hashes of the outputs...")
                     // 5a) hashing outputs disk content                
                     // 5b) updating dependency versions in dependency graph
                     // 6) dumping updated alph files to disk
                     do! command.OnSucceeded(index)
-                } |> Async.RunSynchronously
-                logVerbose "alph file saved"
-        else
-            logVerbose "skipping as up to date"
-        //comp.Outputs |> Seq.map (fun (output:DependencyGraph.VersionedArtefact) -> output.ExpectedVersion) |> List.ofSeq
+                    logVerbose "alph file saved"
+            else
+                logVerbose "skipping as up to date"
+            //comp.Outputs |> Seq.map (fun (output:DependencyGraph.VersionedArtefact) -> output.ExpectedVersion) |> List.ofSeq
 
-        Seq.singleton(outputPaths |> List.map(fun outputPath -> upcast { FullPath = outputPath; Index = index }), null)
+            let outPathToArtefactItem outputPath : Artefact =
+                upcast { FullPath = outputPath; Index = index }
+            let result =  Seq.singleton(outputPaths |> List.map outPathToArtefactItem, null)
+            return result
+        } |> Async.RunSynchronously
 
 
 let buildGraph experimentRoot (g:DependencyGraph.Graph) checkStoragePresence restoreFromStorage =    
@@ -339,6 +350,7 @@ let doComputations (g:FlowGraph<ComputationGraphNode>) =
     try
         use engine = new Engine<ComputationGraphNode>(state,Scheduler.ThreadPool())        
         engine.Start()
+        
         // engine.Changes.Subscribe(fun x -> x.State.Vertices)
         let final = Control.pickFinal engine.Changes
         let finalState = final.GetResult()
