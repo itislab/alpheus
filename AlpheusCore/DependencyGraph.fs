@@ -144,8 +144,10 @@ type ArtefactVertex(id:ArtefactId, experimentRoot:string) =
        
     override s.ToString() =
         let version =
-            let hash = s.ActualVersionAsync |> Async.RunSynchronously
-            sprintf "%A" (hash |> MdMap.map(Option.map(fun s -> s.Substring(0,6))))
+            match actualVersion with
+            |   Some (v) ->
+                sprintf "%A" (v |> MdMap.map(Option.map(fun s -> s.Substring(0,6))))        
+            |   None -> "disk version not checked"
         sprintf "Artefact(%s|%s)" (s.Id.ToString()) version
 
 /// Represents a link to a specific version of an artefact.
@@ -154,7 +156,7 @@ and LinkToArtefact(artefact: ArtefactVertex, expectedVersion: ArtefactVersion) =
     let lockObj = obj()
 
     /// Creates a link to the artefact which expects the given actual version.
-    new(artefact) = LinkToArtefact(artefact, artefact.ActualVersionAsync |> Async.RunSynchronously)
+    new(artefact) = LinkToArtefact(artefact, MdMap.scalar None)
 
     member s.Artefact : ArtefactVertex = artefact
 
