@@ -49,6 +49,7 @@
     <None Include="DependencyGraphDiskTests.fs" />
     <Compile Include="ExecuteCommandTests.fs" />
     <Compile Include="ApiTests.fs" />
+    <Compile Include="ApiTests.Vectors.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 

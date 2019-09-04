@@ -127,7 +127,9 @@ type ArtefactVertex(id:ArtefactId, experimentRoot:string) =
                     Origin = DataOrigin.CommandOrigin { computeSection with Signature = Hash.getSignature computeSection}
                     IsTracked = s.IsTracked
                 }
-        lock lockObj (fun() -> AlphFiles.save content alphFileFullPath)
+        lock lockObj (fun() -> 
+            PathUtils.ensureDirectories alphFileFullPath
+            AlphFiles.save content alphFileFullPath)
         
     interface System.IComparable with
         member s.CompareTo(other) =
