@@ -22,10 +22,24 @@ type ArtefactVertex(id:ArtefactId, experimentRoot:string) =
     let mutable producer : MethodVertex option = None
     let mutable usedIn : Set<CommandLineVertex> = Set.empty
     let mutable isTracked = false
+
+   
+    let createActualVersionLazy() = Lazy<System.Threading.Tasks.Task<ArtefactVersion>>(fun () -> 
+        async {
+            Logger.logVerbose Logger.LogCategory.DependencyGraph (sprintf "Calculating actual hash of %A" id)
+            let fullPath = id |> idToFullPath experimentRoot 
+            let! hash = Hash.hashVectorPathAndSave fullPath
+            return hash 
+        } |> Async.StartAsTask )
+
     /// None means that disk version is not computed yet.
-    let mutable actualVersion : ArtefactVersion option = None 
-    let lockObj = obj()
-    
+    let mutable actualVersionLazy = createActualVersionLazy()
+    let lockActualVersionLazy = obj()
+
+    /// Invalidates the current actual version to re-read the new actual version from disk.
+    let invalidateActualVersion() = 
+        lock lockActualVersionLazy (fun () -> actualVersionLazy <- createActualVersionLazy())
+
     member s.Id = id
 
     /// Gets a method which produces the artefact.
@@ -44,17 +58,9 @@ type ArtefactVertex(id:ArtefactId, experimentRoot:string) =
         and set v = isTracked <- v
     
     /// Gets the version calculated from the data on the disk.
-    /// Lazy execution. Calulated based on disk data only on the first call. Later returns the hashed results
-    member s.ActualVersionAsync
-        with get() =
-            async {
-                match actualVersion with
-                |   None ->
-                    Logger.logVerbose Logger.LogCategory.DependencyGraph (sprintf "Recalculating actual hash of %A" s.Id)
-                    do! s.ForceActualVersionCalc()
-                    return actualVersion.Value
-                |   Some(v) -> return v
-            }
+    /// Lazy execution. Calulated based on disk data only on the first call. 
+    /// Later returns the hashed results, unless ForceActualVersionCalc() is called.
+    member s.ActualVersionAsync = actualVersionLazy.Value |> Async.AwaitTask
 
     member s.Rank = Artefacts.rank id
 
@@ -63,12 +69,7 @@ type ArtefactVertex(id:ArtefactId, experimentRoot:string) =
     /// Computes actual version for the graph artefact item from the disk.
     /// Updates value of ArtefactVertex.ActualVersion.
     /// Updates .hash file on a disk.
-    member s.ForceActualVersionCalc() : Async<unit> =
-        async {
-            let fullPath = s.Id |> idToFullPath experimentRoot 
-            let! hash = Hash.hashVectorPathAndSave fullPath
-            lock lockObj (fun () -> actualVersion <- Some hash)
-        }
+    member s.ForceActualVersionCalc() = invalidateActualVersion()
 
     /// Computes actual version for the graph artefact item from the disk.
     /// Updates value of ArtefactVertex.ActualVersion.
@@ -78,9 +79,9 @@ type ArtefactVertex(id:ArtefactId, experimentRoot:string) =
             let fullPath = s.Id |> idToFullPath experimentRoot |> applyIndex index
             let! hash = Hash.hashPathAndSave fullPath
 
-            lock lockObj (fun () ->
-                let v = actualVersion |> Option.defaultValue MdMap.empty
-                actualVersion <- v |> MdMap.add index hash |> Some
+            lock lockActualVersionLazy (fun () ->
+                let v = actualVersionLazy |> Option.defaultValue MdMap.empty
+                actualVersionLazy <- v |> MdMap.add index hash |> Some
             )
         }
     
@@ -127,7 +128,7 @@ type ArtefactVertex(id:ArtefactId, experimentRoot:string) =
                     Origin = DataOrigin.CommandOrigin { computeSection with Signature = Hash.getSignature computeSection}
                     IsTracked = s.IsTracked
                 }
-        lock lockObj (fun() -> 
+        lock lockActualVersionLazy (fun() -> 
             PathUtils.ensureDirectories alphFileFullPath
             AlphFiles.save content alphFileFullPath)
         
@@ -143,11 +144,14 @@ type ArtefactVertex(id:ArtefactId, experimentRoot:string) =
         Object.ReferenceEquals(s,obj1)
        
     override s.ToString() =
+        let v = actualVersionLazy
         let version =
-            match actualVersion with
-            |   Some (v) ->
-                sprintf "%A" (v |> MdMap.map(Option.map(fun s -> s.Substring(0,6))))        
-            |   None -> "disk version not checked"
+            if v.IsValueCreated then    
+                match v.Value.Status with
+                | System.Threading.Tasks.TaskStatus.RanToCompletion -> sprintf "%A" (v.Value.Result |> MdMap.map(Option.map(fun s -> s.Substring(0,6))))        
+                | System.Threading.Tasks.TaskStatus.Faulted -> sprintf "error: %A" v.Value.Exception
+                | _ -> "disk version not checked"
+            else "disk version not checked"
         sprintf "Artefact(%s|%s)" (s.Id.ToString()) version
 
 /// Represents a link to a specific version of an artefact.
@@ -165,7 +169,7 @@ and LinkToArtefact(artefact: ArtefactVertex, expectedVersion: ArtefactVersion) =
     member s.ExpectedVersion : ArtefactVersion = expected
 
     /// Makes the link to expect the actual version.
-    /// The actual version MUST be available.
+    /// This method forces the actual version to be loaded from the disk.
     member s.ExpectActualVersionAsync() = 
         async {
             let! actual = artefact.ActualVersionAsync
@@ -270,7 +274,7 @@ and CommandLineVertex(methodId : MethodId, experimentRoot: string, inputs: LinkT
             s.Outputs 
             |> Seq.map(fun out -> async { 
                     if List.isEmpty index then
-                        do! out.Artefact.ForceActualVersionCalc()
+                        out.Artefact.ForceActualVersionCalc()
                         do! out.ExpectActualVersionAsync()
                     else
                         do! out.Artefact.ForceActualVersionCalc index

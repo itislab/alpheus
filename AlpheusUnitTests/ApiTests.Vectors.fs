@@ -54,11 +54,12 @@ type ``Vector scenarios through API``(output) =
                 let! res = API.buildAsync root ["base.txt"; "data/*.txt"] ["output/*.txt"] concatCommand false
                 assertResultOk res
 
-                let res = API.compute (root, ArtefactId.Path "data/*.txt")
+                let res = API.compute (root, ArtefactId.Path "output/*.txt")
                 assertResultOk res
 
-                do! assertNonEmptyFile(Path.Combine(root,"1_2.txt"))
-                do! assertNonEmptyFile(Path.Combine(root,"1_2_3.txt"))
+                do! assertNonEmptyFile(Path.Combine(root, "output", "base_1.txt"))
+                do! assertNonEmptyFile(Path.Combine(root, "output", "base_2.txt"))
+                do! assertNonEmptyFile(Path.Combine(root, "output", "base_3.txt"))
             finally
                 Environment.CurrentDirectory <- savedWD            
         } |> toAsyncFact
