@@ -62,16 +62,36 @@ let run (programName:string) (parseResults:ParseResults<AlpheusArgs>) : Result<u
             let statusArgs = parseResults.GetResult <@ Status @>
             let artefactPath = statusArgs.GetResult <@ StatusArgs.File  @>
             let! artefact = API.artefactFor artefactPath
-            return! Error (SystemError "NOT IMPLEMENTED")
-            //return! API.status artefact
+            let statusesRes = API.status artefact
+            match statusesRes with
+            |   Ok(statuses)->
+                let printStatus artId (status:Angara.Data.MdMap<string,DependencyGraph.CommandVertexStatus>) =
+                    let statusToString status =
+                        match status with
+                        |   DependencyGraph.UpToDate utd ->
+                            match utd with
+                            |   DependencyGraph.ExistsLocally -> "Up to date"
+                            |   DependencyGraph.ExistsRemotely -> "Up to date (in storage)"
+                        |   DependencyGraph.Outdated _ ->
+                            "Need recomputation"
+                    if status.IsScalar then
+                        printfn "%-50s: %s" (artId.ToString()) (status.AsScalar() |> statusToString)
+                    else
+                        printfn "%-50s:" (artId.ToString())
+                        let printItem pair =
+                            let (index:string list),v = pair
+                            printfn "\t%-50s: %s" (String.concat " " index) (statusToString v)
+                        status |> Angara.Data.MdMap.toSeq |> Seq.iter printItem
+                statuses |> Map.iter printStatus 
+                return ()
+            |   Error e -> return! Error e
         }
     elif parseResults.Contains Restore then
         result {
             let restoreArgs = parseResults.GetResult <@ Restore @>
             let artefactPath = restoreArgs.GetResult <@ RestoreArgs.Path @>
             let! artefact = API.artefactFor artefactPath
-            return! Error (SystemError "NOT IMPLEMENTED")
-            //return! API.restoreAsync artefact |> Async.RunSynchronously
+            return! API.restoreAsync artefact |> Async.RunSynchronously
         }
     elif parseResults.Contains Save then
         result {

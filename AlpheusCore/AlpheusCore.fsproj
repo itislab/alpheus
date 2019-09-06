@@ -39,7 +39,7 @@
     <Compile Include="DependencyGraphUtils.fs" />
     <Compile Include="DependencyGraphToAngaraWrapper.fs" />
     <Compile Include="AngaraGraphCommon.fs" />
-    <None Include="StatusGraph.fs" />
+    <Compile Include="StatusGraph.fs" />
     <Compile Include="ComputationContext.fs" />
     <Compile Include="ExecuteCommand.fs" />
     <Compile Include="ComputationGraph.fs" />

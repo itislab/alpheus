@@ -81,21 +81,7 @@ type CommandMethod(command: CommandLineVertex,
                     restoreFromStorage: (HashString*string) array -> Async<unit>) = // version*filename
     inherit AngaraGraphNode(DependencyGraph.Command command)  
 
-    let resolveIndex (index:string list) (map: MdMap<string, 'a option>) =
-        let rec resolveInTree (index:string list) (map: MdMapTree<string, 'a option>) =
-            match map, index with
-            | _,[] -> Some map
-            | MdMapTree.Value value,_ -> Some map // index length > rank of the map
-            | MdMapTree.Map values, k :: tail ->
-                match values |> Map.tryFind k with
-                | Some value -> resolveInTree tail value
-                | None -> None
-        match resolveInTree index (map |> MdMap.toTree) with
-        | Some(MdMapTree.Value v) -> v
-        | Some(MdMapTree.Map map) when map.IsEmpty -> None
-        | Some(MdMapTree.Map _) -> invalidOp "Only one-to-one vectors are supported at the moment"
-        | None -> None
-
+    
     
     (*
     let isValid (actualVersion:ArtefactVersion) (expectedVersion:ArtefactVersion) =
@@ -113,7 +99,7 @@ type CommandMethod(command: CommandLineVertex,
     override s.Execute(inputs, _) = // ignoring checkpoints
         async{
             // Rules of execution
-            // The artefact is valid either if actual disk version matches expected version or if the disk version is absend and expected version is restorable from storage
+            // The artefact is valid either if actual disk version matches expected version or if the disk version is absent and expected version is restorable from storage
             // We can bypass the computation entirely if inputs and outputs are valid
         
            
@@ -136,42 +122,10 @@ type CommandMethod(command: CommandLineVertex,
                 command.Outputs // the order is important here
                 |> List.map(fun out -> out.Artefact.Id |> PathUtils.idToFullPath experimentRoot |> applyIndex index)
 
-            let extractExpectedVersionsFromLinks links =
-                links |> Seq.map (fun (a:LinkToArtefact) -> MdMap.find index a.ExpectedVersion)
-
-            let extractActualVersionsFromLinks links =
-                async {
-                    let! actualVersion =
-                        links
-                        |> Seq.map (fun (a:LinkToArtefact) -> a.Artefact.ActualVersionAsync)
-                        |> Async.Parallel
-                    return actualVersion |> Array.map (fun v -> MdMap.find index v)
-                }
-
-            let expectedInputItemVersions = extractExpectedVersionsFromLinks command.Inputs |> Array.ofSeq
-            let! actualInputItemVersions = extractActualVersionsFromLinks command.Inputs
-
-            let! areInputsValid = areValidItemsVersions checkStoragePresence expectedInputItemVersions actualInputItemVersions
-        
-            let! doComputations = 
-                async {
-                    if not areInputsValid then
-                        // we can avoid checking outputs to speed up the work
-                        // is the inputs are invalid
-                        logVerbose "Needs recomputation due to the outdated inputs"
-                        return true 
-                    else
-                        // checking outputs
-                        let expectedOutputItemVersions = extractExpectedVersionsFromLinks command.Outputs |> Array.ofSeq
-                        let! actualOutputItemVersions = extractActualVersionsFromLinks command.Outputs
-                        let! areOutputsValid = areValidItemsVersions checkStoragePresence expectedOutputItemVersions actualOutputItemVersions
-                        if not areOutputsValid then
-                            logVerbose "Needs recomputation due to the outdated outputs"
-                        return not areOutputsValid
-                }
-
+            let! currentVertexStatus = getCommandVertexStatus checkStoragePresence command index
        
-            if doComputations then
+            match currentVertexStatus with
+            |   Outdated _ ->
                 // We need to do computation            
                 // 1) deleting outputs if they exist   
                 // 2) restoring inputs from storage if it is needed
@@ -187,7 +141,7 @@ type CommandMethod(command: CommandLineVertex,
                 // 2) restoring inputs from storage if it is needed
                 let inputChooser (input:LinkToArtefact) =
                     async {
-                        let! actualHashOpt = extractActualVersionsFromLinks [input]
+                        let! actualHashOpt = extractActualVersionsFromLinks index [input]
                         if Option.isSome actualHashOpt.[0] then
                             return None
                         else
@@ -195,7 +149,7 @@ type CommandMethod(command: CommandLineVertex,
                     }
                 let! toRestoreOts = Seq.map inputChooser command.Inputs |> Array.ofSeq |> Async.Parallel
                 let toRestore = Array.choose id toRestoreOts
-                let hashesToRestore = toRestore |> extractExpectedVersionsFromLinks |> Seq.map (fun x -> x.Value)
+                let hashesToRestore = toRestore |> extractExpectedVersionsFromLinks index |> Seq.map (fun x -> x.Value)
                 let pathsToRestore = toRestore |> Seq.map (fun x -> idToFullPath experimentRoot x.Artefact.Id |> applyIndex index )
                 let zipped = Seq.zip hashesToRestore pathsToRestore |> Array.ofSeq
                 if Array.length zipped > 0 then
@@ -221,7 +175,7 @@ type CommandMethod(command: CommandLineVertex,
                     // 6) dumping updated alph files to disk
                     do! command.OnSucceeded(index)
                     logVerbose "alph file saved"
-            else
+            |   UpToDate _ ->
                 logVerbose "skipping as up to date"
             //comp.Outputs |> Seq.map (fun (output:DependencyGraph.VersionedArtefact) -> output.ExpectedVersion) |> List.ofSeq
 

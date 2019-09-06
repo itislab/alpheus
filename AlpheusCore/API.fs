@@ -112,24 +112,26 @@ let private restoreSingleItemAsync experimentRoot (path,versionToRestore) =
             return! restore path versionToRestore
     }
 
+/// Checks whether the specified versions can be extraced from any available storages
+let internal checkStoragePresence experimentRoot (versions:HashString array) : Async<bool array> =
+    async {
+        let! config = Config.openExperimentDirectoryAsync experimentRoot
+        let checker = config.ConfigFile.Storage |> Map.toSeq |> StorageFactory.getPresenseChecker experimentRoot
+        let nonEmptylist listAsync =
+            async {
+                let! l = listAsync
+                return l |> Array.map (fun x -> not (List.isEmpty x))
+            }
+        let res = versions |> (checker >> nonEmptylist)
+        return! res
+    }
+
 /// (Re)Computes the artefact specified
 let compute (experimentRoot, artefactId) =
     async {
         let! g = buildDependencyGraphAsync experimentRoot [artefactId]
 
-        let checkStoragePresence (versions:HashString array) : Async<bool array> =
-            async {
-                let! config = Config.openExperimentDirectoryAsync experimentRoot
-                let checker = config.ConfigFile.Storage |> Map.toSeq |> StorageFactory.getPresenseChecker experimentRoot
-                let nonEmptylist listAsync =
-                    async {
-                        let! l = listAsync
-                        return l |> Array.map (fun x -> not (List.isEmpty x))
-                    }
-                let res = versions |> (checker >> nonEmptylist)
-                return! res
-            }
-
+        
         let restoreFromStorage (pairs:(HashString*string) array) =
             async {
                 let swapedPairs = pairs |> Array.map (fun p -> let x,y = p in y,x ) 
@@ -143,20 +145,19 @@ let compute (experimentRoot, artefactId) =
                 return ()
             }
 
-        //flow graph to calculate statuses
-        let flowGraph = ComputationGraph.buildGraph experimentRoot g checkStoragePresence restoreFromStorage
+        // flow graph to calculate statuses
+        let flowGraph = ComputationGraph.buildGraph experimentRoot g (checkStoragePresence experimentRoot) restoreFromStorage
         logVerbose LogCategory.API "Running computations"
         return ComputationGraph.doComputations flowGraph
     } |> Async.RunSynchronously
 
 /// Prints to the stdout the textural statuses of the artefact and its provenance
 let status (experimentRoot, artefactId) =
-    failwith "Not implemented" |> ignore
-    //async {
-    //    let! g = buildDependencyGraphAsync experimentRoot [artefactId]
-    //    let flowGraph = StatusGraph.buildStatusGraph g
-    //    return StatusGraph.printStatuses flowGraph
-    //} |> Async.RunSynchronously
+    async {
+        let! g = buildDependencyGraphAsync experimentRoot [artefactId]
+        let flowGraph = StatusGraph.buildStatusGraph g experimentRoot (checkStoragePresence experimentRoot)
+        return StatusGraph.getStatuses flowGraph
+    } |> Async.RunSynchronously
 
 let private artefactVersionToPaths fullArtPath (artefactVersion:ArtefactVersion) =
     if artefactVersion.IsScalar then

@@ -10,12 +10,72 @@ open ItisLab.Alpheus.PathUtils
 open Angara.Data
 open FSharp.Control
 
-let ts = TraceSource("Dependency Graph")
-
 // Disable warning on requiring to override GetHashCode in case of Equals overriding
 // As I want vertices to be alphnumerically sorted, but compared by reference
 #nowarn "0346"
 
+
+type UpToDateExplanation =
+    /// Expected produced version can be restored from storage
+    |   ExistsRemotely
+    /// Expected produced version is currently on disk
+    |   ExistsLocally
+
+type OutdatedReason =
+    | InputsOutdated
+    | OutputsOutdated
+
+type CommandVertexStatus =
+    |   UpToDate of UpToDateExplanation
+    |   Outdated of OutdatedReason
+
+type InvalidReason =
+    |   DoesNotExist
+    |   WrongDiskVersion
+
+type LinkToArtefactStatus = 
+    |   Valid of UpToDateExplanation
+    |   Invalid of InvalidReason
+
+
+/// valid are items that either have actual disk data version match expected version, or actual disk data is missing and expected version is restorable from storage
+let areValidItemsVersions checkStoragePresence expectedVersionHashes actualVersionsHashes =
+    async {
+        if Array.exists Option.isNone expectedVersionHashes then
+            // some of the artefact element was not ever produced, this is invalid
+            // TODO:    is it correct to report wrong disk version?
+            //          reporting DoesNotExist is also not correct as we did not check the disk presense
+            return Invalid WrongDiskVersion
+        else
+            /// Chooses the pairs that are not valid on disk (filtering out versions match)
+            let invalidOnDiskChooser hash1 hash2 =
+                match hash1,hash2 with
+                |   Some(h1),Some(h2) ->  if h1 = h2 then None else Some(hash1,hash2)
+                |   _ -> Some(hash1,hash2)
+            let localInvalid = Seq.map2 invalidOnDiskChooser expectedVersionHashes actualVersionsHashes |> Seq.choose id |> Array.ofSeq
+            if Array.length localInvalid = 0 then
+                // valid as actual disk version match expected version. No need to check the storage
+                return Valid ExistsLocally
+            else
+                // check if the locally "invalid" are "remote valid" (restorable from storage in case of disk data absence)
+                let eligibleForRemoteCheckChooser pair =
+                    let expected,actual = pair
+                    match expected,actual with
+                    |   Some(v),None -> Some(v)
+                    |   _,_ -> None
+
+                let eligibleForRemoteCheck = Array.choose eligibleForRemoteCheckChooser localInvalid
+                if Array.length eligibleForRemoteCheck = Array.length localInvalid then
+                    // we proceed with the remote checks only if all of the locally invalid items are eligible for remote check
+                    let! remotePresence = checkStoragePresence eligibleForRemoteCheck
+                    if Array.forall id remotePresence then
+                        return Valid ExistsRemotely
+                    else
+                        return Invalid DoesNotExist
+                else
+                    // otherwise at least one unrestorable item exists on disk. Thus invalid
+                    return Invalid WrongDiskVersion
+    }
 
 type ArtefactVertex(id:ArtefactId, experimentRoot:string) =    
     // expereiment root is needed to calc actual data versions (via path to the actual data)
@@ -152,7 +212,7 @@ type ArtefactVertex(id:ArtefactId, experimentRoot:string) =
 and LinkToArtefact(artefact: ArtefactVertex, expectedVersion: ArtefactVersion) = 
     let mutable expected = expectedVersion
     let lockObj = obj()
-
+    
     /// Creates a link to the artefact which expects the given actual version.
     new(artefact) = LinkToArtefact(artefact, MdMap.scalar None)
 
@@ -162,13 +222,21 @@ and LinkToArtefact(artefact: ArtefactVertex, expectedVersion: ArtefactVersion) =
       /// If the actual version differs from the expected, it should be handled specifically.
     member s.ExpectedVersion : ArtefactVersion = expected
 
+    member s.AnalyzeStatus checkStoragePresence index =
+        async {
+            let expectedVersion = MdMap.find index expected
+            let! actualVersion = artefact.ActualVersionAsync
+            let artefactItemActualVersion = MdMap.find index actualVersion
+            let! status = areValidItemsVersions checkStoragePresence [|expectedVersion|] [|artefactItemActualVersion|] 
+            return status
+        }
+
     /// Makes the link to expect the actual version.
     /// The actual version MUST be available.
     member s.ExpectActualVersionAsync() = 
         async {
             let! actual = artefact.ActualVersionAsync
-            lock lockObj (fun() -> 
-                expected <- actual)
+            lock lockObj (fun() -> expected <- actual)
             }        
 
     /// Makes the link to expect the actual version.
@@ -225,9 +293,11 @@ and SourceVertex(methodId: MethodId, output: LinkToArtefact, experimentRoot: str
 
 /// Represents a method defined as a command line.
 and CommandLineVertex(methodId : MethodId, experimentRoot: string, inputs: LinkToArtefact list, outputs: LinkToArtefact list, command: string) =
+    let exitCodeLockObj = obj()
+    let outputStatusesLockObj = obj()
     let mutable workingDirectory: ExperimentRelativePath = String.Empty
     let mutable doNotClean = false
-    let mutable commandExitCode: int option = None
+    let mutable commandExitCode: MdMap<string,int option> = MdMap.empty
 
     member s.MethodId = methodId    
     member s.ExperimentRoot = experimentRoot
@@ -244,9 +314,12 @@ and CommandLineVertex(methodId : MethodId, experimentRoot: string, inputs: LinkT
     member s.Command = command
     
     /// None if the command execution was not launched or not finished yet, other wise holds the execution exit code
-    member s.ExitCode
-        with get() = commandExitCode
-        and set v = commandExitCode <- v
+    member s.GetExitCode index =
+        MdMap.find index commandExitCode
+
+    member s.SetExitCode index exitCode=
+        lock exitCodeLockObj (fun () -> 
+                                commandExitCode <- MdMap.add index (Some exitCode) commandExitCode)
 
     /// From where the Command must be executed.
     /// Experiment root related
@@ -283,7 +356,7 @@ and CommandLineVertex(methodId : MethodId, experimentRoot: string, inputs: LinkT
                     else
                         do! input.ExpectActualVersionAsync index
                     input.Artefact.SaveAlphFile()
-                }) 
+                })
         Seq.append outLinksUpdates inputLinksUpdates
         |> Async.Parallel
         |> Async.Ignore
@@ -411,6 +484,13 @@ and Graph (experimentRoot:string) =
             Ok vertex
         | None ->
             Error (sprintf "ArtefactID %A is not found in the dependency graph" artefactId |> SystemError)
+
+    member s.GetMethod methodId = 
+        match methodVertices |> Map.tryFind methodId  with
+        | Some(vertex) -> 
+            Ok vertex
+        | None ->
+            Error (sprintf "MethodID %A is not found in the dependency graph" methodId |> SystemError)
 
     /// Adds a method vertex for the given artefact.
     member private s.AddOrGetSource (output: LinkToArtefact) : SourceVertex =
