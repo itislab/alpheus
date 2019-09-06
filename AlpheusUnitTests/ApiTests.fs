@@ -198,7 +198,7 @@ type DepGraphSaveRestore(output) =
             let path = artId |> PathUtils.idToFullPath s.FullPath
 
             // local storage is available by default
-            let! saveResult =  API.saveAsync (s.FullPath, artId) "local" false
+            let! saveResult =  API.saveAsync (s.FullPath, artId) (Some "local") false
             assertResultOk saveResult
              
             // saving the content for later verification
@@ -228,7 +228,7 @@ type DepGraphSaveRestore(output) =
         async {
             let artefactId = ArtefactId.Path artIdStr
             // local storage is available by default
-            let! saveResult =  API.saveAsync (s.FullPath, artefactId) "local" false
+            let! saveResult =  API.saveAsync (s.FullPath, artefactId) (Some "local") false
             assertResultOk saveResult
 
             let gitIgnorePath = Path.Combine(s.Path,".gitignore")
@@ -715,7 +715,7 @@ type ScalarScenarios(output) =
 
                 assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt") // first compute all
 
-                let! res = API.saveAsync(path, ArtefactId.Path "1_2.txt") "local" false // saving intermediate
+                let! res = API.saveAsync(path, ArtefactId.Path "1_2.txt") (Some "local") false // saving intermediate
                 assertResultOk res
 
                 File.Delete(Path.Combine(path,"1_2.txt")) // then delete intermediate 
@@ -742,7 +742,7 @@ type ScalarScenarios(output) =
 
                 assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt") // first compute all
 
-                let! res = API.saveAsync(path, ArtefactId.Path "1_2.txt") "local" false // saving intermediate
+                let! res = API.saveAsync(path, ArtefactId.Path "1_2.txt") (Some "local") false // saving intermediate
                 assertResultOk res
 
                 File.Delete(Path.Combine(path,"1_2.txt")) // then delete intermediate 
@@ -779,13 +779,13 @@ type ScalarScenarios(output) =
                 assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt") // computing all
 
                 // saving all except final
-                let! res = API.saveAsync(path, ArtefactId.Path "1_2.txt") "local" false // saving intermediate
+                let! res = API.saveAsync(path, ArtefactId.Path "1_2.txt") (Some "local") false // saving intermediate
                 assertResultOk res
-                let! res = API.saveAsync(path, ArtefactId.Path "1.txt") "local" false // saving initial
+                let! res = API.saveAsync(path, ArtefactId.Path "1.txt") (Some "local") false // saving initial
                 assertResultOk res
-                let! res = API.saveAsync(path, ArtefactId.Path "2.txt") "local" false // saving initial
+                let! res = API.saveAsync(path, ArtefactId.Path "2.txt") (Some "local") false // saving initial
                 assertResultOk res
-                let! res = API.saveAsync(path, ArtefactId.Path "3.txt") "local" false // saving initial
+                let! res = API.saveAsync(path, ArtefactId.Path "3.txt") (Some "local") false // saving initial
                 assertResultOk res
 
 
@@ -821,11 +821,11 @@ type ScalarScenarios(output) =
                 assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt") // computing all
 
                 // saving all except final
-                let! res = API.saveAsync(path, ArtefactId.Path "1_2.txt") "local" false // saving intermediate
+                let! res = API.saveAsync(path, ArtefactId.Path "1_2.txt") (Some "local") false // saving intermediate
                 assertResultOk res
-                let! res = API.saveAsync(path, ArtefactId.Path "1.txt") "local" false // saving initial
+                let! res = API.saveAsync(path, ArtefactId.Path "1.txt") (Some "local") false // saving initial
                 assertResultOk res
-                let! res = API.saveAsync(path, ArtefactId.Path "2.txt") "local" false // saving initial
+                let! res = API.saveAsync(path, ArtefactId.Path "2.txt") (Some "local") false // saving initial
                 assertResultOk res
 
 
@@ -867,15 +867,15 @@ type ScalarScenarios(output) =
                 assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt") // computing all
 
                 // saving all except final
-                let! res = API.saveAsync(path, ArtefactId.Path "1_2.txt") "local" false // saving intermediate
+                let! res = API.saveAsync(path, ArtefactId.Path "1_2.txt") (Some "local") false // saving intermediate
                 assertResultOk res
-                let! res = API.saveAsync(path, ArtefactId.Path "1.txt") "local" false // saving initial
+                let! res = API.saveAsync(path, ArtefactId.Path "1.txt") (Some "local") false // saving initial
                 assertResultOk res
-                let! res = API.saveAsync(path, ArtefactId.Path "2.txt") "local" false // saving initial
+                let! res = API.saveAsync(path, ArtefactId.Path "2.txt") (Some "local") false // saving initial
                 assertResultOk res
-                let! res = API.saveAsync(path, ArtefactId.Path "3.txt") "local" false // saving initial
+                let! res = API.saveAsync(path, ArtefactId.Path "3.txt") (Some "local") false // saving initial
                 assertResultOk res
-                let! res = API.saveAsync(path, ArtefactId.Path "1_2_3.txt") "local" false 
+                let! res = API.saveAsync(path, ArtefactId.Path "1_2_3.txt") (Some "local") false 
                 assertResultOk res
 
 

@@ -30,6 +30,7 @@ type ConfigSerialization(output)=
                             "absLocal",absLocalStorage
                             "azure1",azureStorage
                             ] |> Map.ofList
+                    DefaultStorage = "relLocal"
                 }
 
             let path = Path.Combine(s.Path,"config.json")
