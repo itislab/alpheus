@@ -159,6 +159,7 @@ type PathUtilsTests(output) =
         let relativeArtefactPath     = relativePath alphFilePath artefactPath
         let snapshortSection : AlphFiles.VersionedArtefact = { RelativePath = relativeArtefactPath; Hash = MdMap.scalar (Some "0000") }
         let alphFile : AlphFiles.AlphFile = {
+            FileFormatVersion = Versioning.AlphFileCurrentVersion
             IsTracked = true
             Origin = AlphFiles.SourceOrigin snapshortSection
         }

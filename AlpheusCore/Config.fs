@@ -17,6 +17,7 @@ type Storage =
 
 /// This object persists to disk
 type ConfigFile = {
+    FileFormatVersion: int
     Storage : Map<string,Storage>
 }
 
@@ -28,6 +29,7 @@ type Config = {
 
 
 let defaultConfigFile = {
+    FileFormatVersion = Versioning.ExperimentConfigFileCurrentVersion
     Storage = 
         [
             ("local",Directory(".alpheus/storage"))
@@ -43,8 +45,14 @@ let tryLoadConfigFileAsync filepath =
         if File.Exists(filepath) then
             use sr = new StreamReader(filepath)
             let! read = Async.AwaitTask(sr.ReadToEndAsync())
-            let configFile = JsonConvert.DeserializeObject<ConfigFile>(read)
-            return Some(configFile)
+            let version = Versioning.getVersion read
+            match version with
+            |   1 ->
+                let configFile = JsonConvert.DeserializeObject<ConfigFile>(read)
+                return Some(configFile)
+            |   v ->
+                // TODO: this is the place to engage version upgrade conversions
+                return failwithf "Unsupported .config file version %d: %s" v filepath
         else
             return None
     }

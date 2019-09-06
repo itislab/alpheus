@@ -42,6 +42,7 @@ type DataOrigin =
     
 
 type AlphFile = {
+    FileFormatVersion: int
     Origin: DataOrigin
     /// Has ever been saved to some storage
     IsTracked: bool
@@ -63,26 +64,27 @@ let saveAsync (alphfile:AlphFile) (filepath:string) =
         do! Async.AwaitTask(sw.WriteAsync(serialized))
     }
 
-let tryLoad (filepath:string) =
-    if File.Exists(filepath) then
-        use sr = new StreamReader(filepath)
-        let read = sr.ReadToEnd()
-        let converter = ArtefactVersionConverter()
-        let alphFile = JsonConvert.DeserializeObject<AlphFile>(read, converter)
-        Some(alphFile)
-    else
-        None
-
 let tryLoadAsync (filepath:string) =
     async {
         if File.Exists(filepath) then
             use sr = new StreamReader(filepath)
             let! read = Async.AwaitTask(sr.ReadToEndAsync())
-            let converter = ArtefactVersionConverter()
-            let alphFile = JsonConvert.DeserializeObject<AlphFile>(read, converter)
-            return Some(alphFile)
+            let readVersion = Versioning.getVersion read
+
+            match readVersion with
+            |   1 ->            
+                let converter = ArtefactVersionConverter()
+                let alphFile = JsonConvert.DeserializeObject<AlphFile>(read, converter)
+                return Some(alphFile)
+            |   v ->
+                // TODO: this is the place to engage version upgrade conversions
+                return failwithf "Unsupported alph file version %d: %s" v filepath
         else
             return None
     }
 
+let tryLoad (filepath:string) =
+    tryLoadAsync filepath |> Async.RunSynchronously
+    
+    
 

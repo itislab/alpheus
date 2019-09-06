@@ -100,6 +100,7 @@ type ArtefactVertex(id:ArtefactId, experimentRoot:string) =
                     { Hash = expectedVersion
                       RelativePath = relativePath alphFileFullPath artefactPath }
                 {
+                    FileFormatVersion = Versioning.AlphFileCurrentVersion
                     Origin = SourceOrigin snapshotSection
                     IsTracked = sourceVertex.Output.Artefact.IsTracked
                 }            
@@ -124,6 +125,7 @@ type ArtefactVertex(id:ArtefactId, experimentRoot:string) =
                       Signature = String.Empty
                       OutputsCleanDisabled = commandVertex.DoNotCleanOutputs }
                 {
+                    FileFormatVersion = Versioning.AlphFileCurrentVersion
                     Origin = DataOrigin.CommandOrigin { computeSection with Signature = Hash.getSignature computeSection}
                     IsTracked = s.IsTracked
                 }
