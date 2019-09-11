@@ -104,7 +104,7 @@ let getCommandVertexStatus checkStoragePresence (command:CommandLineVertex) inde
         let expectedInputItemVersions = extractExpectedVersionsFromLinks index command.Inputs |> Array.ofSeq
         let! actualInputItemVersions = extractActualVersionsFromLinks index command.Inputs
 
-        let! inputsStatus = getGroupOfLinksStatus checkStoragePresence expectedInputItemVersions actualInputItemVersions
+        let! inputsStatus = findExpectedArtefacts checkStoragePresence expectedInputItemVersions actualInputItemVersions
         
         match inputsStatus with
         // we can avoid checking outputs to speed up the work            
@@ -118,7 +118,7 @@ let getCommandVertexStatus checkStoragePresence (command:CommandLineVertex) inde
             // checking outputs
             let expectedOutputItemVersions = extractExpectedVersionsFromLinks index command.Outputs |> Array.ofSeq
             let! actualOutputItemVersions = extractActualVersionsFromLinks index command.Outputs
-            let! outputsStatus = getGroupOfLinksStatus checkStoragePresence expectedOutputItemVersions actualOutputItemVersions
+            let! outputsStatus = findExpectedArtefacts checkStoragePresence expectedOutputItemVersions actualOutputItemVersions
             match outputsStatus with
             |   SomeAreNotFound ->
                 logVerbose "Needs recomputation as some of the outputs not found" 

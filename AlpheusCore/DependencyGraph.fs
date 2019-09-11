@@ -41,20 +41,19 @@ type LinkToArtefactStatus =
     /// there is no any version of artefact on the local disk, but there is a remote artefact of the expected version
     | Remote
 
-type GroupOfLinksStatus =
+type ExpectedArtefactSearchResult =
     |   SomeAreLocalUnexpected
     |   SomeAreNotFound
     /// All group has expected versions
     |   AllExist of location:ArtefactLocation list
 
-let getGroupOfLinksStatus checkStoragePresence expectedVersionHashes actualVersionsHashes =
+/// Checks location of the expected version of the given collection of artefacts and either returns locations of all given artefacts, if they are found; or, otherwise, returns issues.
+let findExpectedArtefacts checkStoragePresence expectedVersionHashes actualVersionsHashes =
     async {
         let expectedVersionHashesArr = Array.ofSeq expectedVersionHashes
         let N = Array.length expectedVersionHashesArr
         if Seq.exists Option.isNone expectedVersionHashesArr then
-            // some of the artefact element was not ever produced, this is invalid
-            // TODO:    is it correct to report wrong disk version?
-            //          reporting DoesNotExist is also not correct as we did not check the disk presense
+            // some of the artefact element was not ever produced, this is invalid            
             return SomeAreLocalUnexpected
         else
             /// Chooses the pairs that are not valid on disk (filtering out versions match)
@@ -243,7 +242,7 @@ and LinkToArtefact(artefact: ArtefactVertex, expectedVersion: ArtefactVersion) =
             let expectedVersion = MdMap.find index expected
             let! actualVersion = artefact.ActualVersionAsync
             let artefactItemActualVersion = MdMap.find index actualVersion
-            let! status = getGroupOfLinksStatus checkStoragePresence (Seq.singleton expectedVersion) [|artefactItemActualVersion|] 
+            let! status = findExpectedArtefacts checkStoragePresence (Seq.singleton expectedVersion) [|artefactItemActualVersion|] 
             match status with
             |   SomeAreLocalUnexpected -> return LocalUnexpected
             |   SomeAreNotFound -> return NotFound
