@@ -72,7 +72,7 @@ let tryLoadAsync (filepath:string) =
             let readVersion = Versioning.getVersion read
 
             match readVersion with
-            |   1 ->            
+            |   Versioning.AlphFileCurrentVersion ->            
                 let converter = ArtefactVersionConverter()
                 let alphFile = JsonConvert.DeserializeObject<AlphFile>(read, converter)
                 return Some(alphFile)

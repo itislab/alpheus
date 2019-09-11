@@ -47,7 +47,7 @@ let tryLoadConfigFileAsync filepath =
             let! read = Async.AwaitTask(sr.ReadToEndAsync())
             let version = Versioning.getVersion read
             match version with
-            |   1 ->
+            |   Versioning.ExperimentConfigFileCurrentVersion ->
                 let configFile = JsonConvert.DeserializeObject<ConfigFile>(read)
                 return Some(configFile)
             |   v ->

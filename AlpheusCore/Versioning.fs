@@ -2,7 +2,11 @@
 
 open Newtonsoft.Json.Linq
 
-let AlphFileCurrentVersion = 1
+[<Literal>]
+/// The format version of the alph files that the most resent
+let  AlphFileCurrentVersion = 1
+/// The format version of the config files that the most resent
+[<Literal>]
 let ExperimentConfigFileCurrentVersion = 1
 
 /// extracts the version from JSON text
