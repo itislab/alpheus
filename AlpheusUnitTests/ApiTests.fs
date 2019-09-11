@@ -11,6 +11,7 @@ open System.IO
 open ItisLab.Alpheus.DependencyGraph
 open System
 open ItisLab.Alpheus
+open Angara.Data
 
 /// can be used as calssData for XUnit theory. returns all of the artefactIDs for the sample experiment
 type ArtefactIdSource() =
@@ -239,6 +240,11 @@ type DepGraphSaveRestore(output) =
 
         } |> toAsyncFact
 
+let equalStatuses expected actual =
+    let s1 = Map.toSeq expected
+    let s2 = Map.toSeq actual
+    Seq.forall2 (fun x y -> let idx1,v1 = x in let idx2,v2 = y in (idx1=idx2) && MdMap.equal (fun _ elem1 elem2 -> elem1=elem2) v1 v2) s1 s2
+
 type ScalarScenarios(output) =
     inherit SingleUseOneTimeDirectory(output)
 
@@ -293,6 +299,101 @@ type ScalarScenarios(output) =
 
                 do! assertNonEmptyFile(Path.Combine(path,"1_2.txt"))
                 do! assertNonEmptyFile(Path.Combine(path,"1_2_3.txt"))
+            finally
+                Environment.CurrentDirectory <- savedWD            
+        } |> toAsyncFact
+
+    [<Fact>]
+    member s.``Status: Uncomputed chain``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try            
+                let path = Path.GetFullPath s.Path
+                Environment.CurrentDirectory <- s.Path
+                do! buildExperiment(path)
+
+                let res = API.status(path, ArtefactId.Path "1_2_3.txt")
+                match res with
+                |   Ok r ->
+                    let expectedStatuses:Map<ArtefactId,MdMap<string,StatusGraph.ArtefactStatus>> = 
+                        [ 
+                            ArtefactId.Path "1.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "1_2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.NeedsRecomputation OutdatedReason.InputsOutdated);
+                            ArtefactId.Path "1_2_3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.NeedsRecomputation OutdatedReason.InputsOutdated);
+                        ] |> Map.ofList
+                    Assert.True(equalStatuses expectedStatuses r)
+                |   Error e->
+                        Assert.True(false, sprintf "Error: %A" e)
+
+            finally
+                Environment.CurrentDirectory <- savedWD            
+        }
+
+    [<Fact>]
+    member s.``Status: Computed chain``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try            
+                let path = Path.GetFullPath s.Path
+                Environment.CurrentDirectory <- s.Path
+                do! buildExperiment(path)
+                output.WriteLine("TEST: experiment graph is constructed")
+                
+                assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt")
+                                
+                let res = API.status(path, ArtefactId.Path "1_2_3.txt")
+                match res with
+                |   Ok r ->
+                    let expectedStatuses:Map<ArtefactId,MdMap<string,StatusGraph.ArtefactStatus>> = 
+                        [ 
+                            ArtefactId.Path "1.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "1_2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "1_2_3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                        ] |> Map.ofList
+                    Assert.True(equalStatuses expectedStatuses r)
+                |   Error e->
+                        Assert.True(false, sprintf "Error: %A" e)
+
+            finally
+                Environment.CurrentDirectory <- savedWD            
+        }
+
+    [<Fact>]
+    member s.``Status: changed input content of computed graph``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try            
+                let path = Path.GetFullPath s.Path
+                Environment.CurrentDirectory <- s.Path
+                
+                do! buildExperiment(path)
+                output.WriteLine("TEST: experiment graph is constructed")
+
+                assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt")
+                
+                output.WriteLine("TEST: Artefacts are computed")
+
+                // now changing 3.txt
+                do! File.WriteAllTextAsync(Path.Combine(path,"3.txt"),"File 3 changed\\r\\n") |> Async.AwaitTask
+
+                let res = API.status(path, ArtefactId.Path "1_2_3.txt")
+                match res with
+                |   Ok r ->
+                    let expectedStatuses:Map<ArtefactId,MdMap<string,StatusGraph.ArtefactStatus>> = 
+                        [ 
+                            ArtefactId.Path "1.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local); // anyway up to date
+                            ArtefactId.Path "1_2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local); 
+                            ArtefactId.Path "1_2_3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.NeedsRecomputation OutdatedReason.InputsOutdated); // but this is invalid now
+                        ] |> Map.ofList
+                    Assert.True(equalStatuses expectedStatuses r)
+                |   Error e->
+                        Assert.True(false, sprintf "Error: %A" e)
             finally
                 Environment.CurrentDirectory <- savedWD            
         } |> toAsyncFact
@@ -361,7 +462,43 @@ type ScalarScenarios(output) =
                 Assert.Equal<string>(content1,content2)
             finally
                 Environment.CurrentDirectory <- savedWD            
-        } |> toAsyncFact
+        }
+
+    [<Fact>]
+    member s.``Status: Changed output content invalidates vertex``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try            
+                let path = Path.GetFullPath s.Path
+                Environment.CurrentDirectory <- s.Path
+                    
+                do! buildExperiment(path)
+                output.WriteLine("TEST: experiment graph is constructed")
+
+                assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt")
+                    
+                output.WriteLine("TEST: first time computed 1_2_3.txt")
+
+                // now changing 1_2_3.txt
+                do! File.WriteAllTextAsync(Path.Combine(path,"1_2_3.txt"),"manually changed\\r\\n") |> Async.AwaitTask
+
+                let res = API.status(path, ArtefactId.Path "1_2_3.txt")
+                match res with
+                |   Ok r ->
+                    let expectedStatuses:Map<ArtefactId,MdMap<string,StatusGraph.ArtefactStatus>> = 
+                        [ 
+                            ArtefactId.Path "1.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "1_2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local); 
+                            ArtefactId.Path "1_2_3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.NeedsRecomputation OutdatedReason.OutputsOutdated); // but this is invalid now
+                        ] |> Map.ofList
+                    Assert.True(equalStatuses expectedStatuses r)
+                |   Error e->
+                        Assert.True(false, sprintf "Error: %A" e)
+            finally
+                Environment.CurrentDirectory <- savedWD            
+        }
 
     
     [<Fact>]
@@ -399,6 +536,44 @@ type ScalarScenarios(output) =
         } |> toAsyncFact
 
     [<Fact>]
+    member s.``Status: changed command invalidates vertex``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try            
+                let path = Path.GetFullPath s.Path
+                Environment.CurrentDirectory <- s.Path
+                
+                do! buildExperiment(path)
+                output.WriteLine("TEST: experiment graph is constructed")
+
+                assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt")
+                
+                output.WriteLine("TEST: first time computed 1_2_3.txt")
+
+                
+                // now changing 1_2_3.txt producing command
+                let! res2 =  API.buildAsync path ["1_2.txt";"3.txt"] ["1_2_3.txt"] concatCommand2 false // double 
+                assertResultOk res2
+
+                let res = API.status(path, ArtefactId.Path "1_2_3.txt")
+                match res with
+                |   Ok r ->
+                    let expectedStatuses:Map<ArtefactId,MdMap<string,StatusGraph.ArtefactStatus>> = 
+                        [ 
+                            ArtefactId.Path "1.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "1_2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local); 
+                            ArtefactId.Path "1_2_3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.NeedsRecomputation OutdatedReason.InputsOutdated); // Inputs, not outputs, because rebuilding command resets expected input versions
+                        ] |> Map.ofList
+                    Assert.True(equalStatuses expectedStatuses r)
+                |   Error e->
+                        Assert.True(false, sprintf "Error: %A" e)
+            finally
+                Environment.CurrentDirectory <- savedWD            
+        }
+
+    [<Fact>]
     member s.``Changed inputs order invalidates vertex``() =
         async {
             let savedWD = Environment.CurrentDirectory
@@ -430,7 +605,48 @@ type ScalarScenarios(output) =
                 Assert.NotEqual<string>(content1,content2)
             finally
                 Environment.CurrentDirectory <- savedWD            
-        } |> toAsyncFact
+        }
+
+    [<Fact>]
+    member s.``Status: changed inputs order invalidates vertex``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try            
+                let path = Path.GetFullPath s.Path
+                Environment.CurrentDirectory <- s.Path
+                
+                do! buildExperiment(path)
+                output.WriteLine("TEST: experiment graph is constructed")
+
+                assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt")
+                
+                output.WriteLine("TEST: first time computed 1_2_3.txt")
+
+                do! assertNonEmptyFile(Path.Combine(path,"1_2.txt"))
+                let! content1 = File.ReadAllTextAsync(Path.Combine(path,"1_2_3.txt")) |> Async.AwaitTask
+
+                // now changing inputs order 
+                let! res2 =  API.buildAsync path ["3.txt";"1_2.txt"] ["1_2_3.txt"] concatCommand false // double 
+                assertResultOk res2
+
+                let res = API.status(path, ArtefactId.Path "1_2_3.txt")
+                match res with
+                |   Ok r ->
+                    let expectedStatuses:Map<ArtefactId,MdMap<string,StatusGraph.ArtefactStatus>> = 
+                        [ 
+                            ArtefactId.Path "1.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "1_2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local); 
+                            ArtefactId.Path "1_2_3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.NeedsRecomputation OutdatedReason.InputsOutdated); // Inputs, not outputs, because rebuilding command resets expected input versions
+                        ] |> Map.ofList
+                    Assert.True(equalStatuses expectedStatuses r)
+                |   Error e->
+                        Assert.True(false, sprintf "Error: %A" e)
+
+            finally
+                Environment.CurrentDirectory <- savedWD            
+        }
 
     [<Fact>]
     member s.``recompute missing intermediate while computing final``() =
@@ -453,7 +669,40 @@ type ScalarScenarios(output) =
                 
             finally
                 Environment.CurrentDirectory <- savedWD            
-        } |> toAsyncFact
+        }
+
+    [<Fact>]
+    member s.``Status: missing intermediate``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try            
+                let path = Path.GetFullPath s.Path
+                Environment.CurrentDirectory <- s.Path
+                do! buildExperiment(path)
+
+                let res = API.compute(path, ArtefactId.Path "1_2_3.txt") // first compute all
+                assertResultOk res
+
+                File.Delete(Path.Combine(path,"1_2.txt")) // then delete intermediate 
+
+                let res = API.status(path, ArtefactId.Path "1_2_3.txt")
+                match res with
+                |   Ok r ->
+                    let expectedStatuses:Map<ArtefactId,MdMap<string,StatusGraph.ArtefactStatus>> = 
+                        [ 
+                            ArtefactId.Path "1.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "1_2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.NeedsRecomputation OutdatedReason.OutputsOutdated); 
+                            ArtefactId.Path "1_2_3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.NeedsRecomputation OutdatedReason.InputsOutdated);
+                        ] |> Map.ofList
+                    Assert.True(equalStatuses expectedStatuses r)
+                |   Error e->
+                        Assert.True(false, sprintf "Error: %A" e)
+                
+            finally
+                Environment.CurrentDirectory <- savedWD            
+        }
 
     [<Fact>]
     member s.``skip missing (storage present) intermediate while computing final``() =
@@ -480,10 +729,88 @@ type ScalarScenarios(output) =
                 
             finally
                 Environment.CurrentDirectory <- savedWD            
-        } |> toAsyncFact
+        }
+
+    [<Fact>]
+    member s.``Status: intermediate is remotely available``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try            
+                let path = Path.GetFullPath s.Path
+                Environment.CurrentDirectory <- s.Path
+                do! buildExperiment(path)
+
+                assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt") // first compute all
+
+                let! res = API.saveAsync(path, ArtefactId.Path "1_2.txt") "local" false // saving intermediate
+                assertResultOk res
+
+                File.Delete(Path.Combine(path,"1_2.txt")) // then delete intermediate 
+
+                let res = API.status(path, ArtefactId.Path "1_2_3.txt")
+                match res with
+                |   Ok r ->
+                    let expectedStatuses:Map<ArtefactId,MdMap<string,StatusGraph.ArtefactStatus>> = 
+                        [ 
+                            ArtefactId.Path "1.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "1_2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate ArtefactLocation.Remote); 
+                            ArtefactId.Path "1_2_3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                        ] |> Map.ofList
+                    Assert.True(equalStatuses expectedStatuses r)
+                |   Error e->
+                        Assert.True(false, sprintf "Error: %A" e)
+                
+            finally
+                Environment.CurrentDirectory <- savedWD            
+        }
+
 
     [<Fact>]
     member s.``restore only intermediate while computing final``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try            
+                let path = Path.GetFullPath s.Path
+                Environment.CurrentDirectory <- s.Path
+                do! buildExperiment(path)
+
+                assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt") // computing all
+
+                // saving all except final
+                let! res = API.saveAsync(path, ArtefactId.Path "1_2.txt") "local" false // saving intermediate
+                assertResultOk res
+                let! res = API.saveAsync(path, ArtefactId.Path "1.txt") "local" false // saving initial
+                assertResultOk res
+                let! res = API.saveAsync(path, ArtefactId.Path "2.txt") "local" false // saving initial
+                assertResultOk res
+                let! res = API.saveAsync(path, ArtefactId.Path "3.txt") "local" false // saving initial
+                assertResultOk res
+
+
+                //Deleting all
+                [
+                    Path.Combine(path,"1_2_3.txt");
+                    Path.Combine(path,"1_2.txt");
+                    Path.Combine(path,"1.txt");
+                    Path.Combine(path,"2.txt");
+                    Path.Combine(path,"3.txt");
+                ] |> List.iter File.Delete
+
+                assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt") // computing all
+
+                do! assertNonEmptyFile(Path.Combine(path,"1_2_3.txt")) // final is recomputed
+                do! assertNonEmptyFile(Path.Combine(path,"1_2.txt")) // intermediate is restored
+                do! assertNonEmptyFile(Path.Combine(path,"3.txt")) // intermediate is restored
+                Assert.False(File.Exists(Path.Combine(path,"1.txt"))) // but initials are not restored, a intermediate is sufficient
+                Assert.False(File.Exists(Path.Combine(path,"2.txt"))) // but initials are not restored, a intermediate is sufficient
+            finally
+                Environment.CurrentDirectory <- savedWD            
+        }
+
+    [<Fact>]
+    member s.``Status: all but final exist remotely``() =
         async {
             let savedWD = Environment.CurrentDirectory
             try            
@@ -510,13 +837,72 @@ type ScalarScenarios(output) =
                     Path.Combine(path,"2.txt");
                 ] |> List.iter File.Delete
 
-                assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt") // computing all
-
-                do! assertNonEmptyFile(Path.Combine(path,"1_2_3.txt")) // final is recomputed
-                do! assertNonEmptyFile(Path.Combine(path,"1_2.txt")) // intermediate is restored
-                Assert.False(File.Exists(Path.Combine(path,"1.txt"))) // but initials are not restored, a intermediate is sufficient
-                Assert.False(File.Exists(Path.Combine(path,"2.txt"))) // but initials are not restored, a intermediate is sufficient
+                let res = API.status(path, ArtefactId.Path "1_2_3.txt")
+                match res with
+                |   Ok r ->
+                    let expectedStatuses:Map<ArtefactId,MdMap<string,StatusGraph.ArtefactStatus>> = 
+                        [ 
+                            ArtefactId.Path "1.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate ArtefactLocation.Remote);
+                            ArtefactId.Path "2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate ArtefactLocation.Remote);
+                            ArtefactId.Path "3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "1_2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate ArtefactLocation.Remote); 
+                            ArtefactId.Path "1_2_3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.NeedsRecomputation OutdatedReason.OutputsOutdated);
+                        ] |> Map.ofList
+                    Assert.True(equalStatuses expectedStatuses r)
+                |   Error e->
+                        Assert.True(false, sprintf "Error: %A" e)
             finally
                 Environment.CurrentDirectory <- savedWD            
-        } |> toAsyncFact
+        }
+
+    [<Fact>]
+    member s.``Status: all exist remotely``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try            
+                let path = Path.GetFullPath s.Path
+                Environment.CurrentDirectory <- s.Path
+                do! buildExperiment(path)
+
+                assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt") // computing all
+
+                // saving all except final
+                let! res = API.saveAsync(path, ArtefactId.Path "1_2.txt") "local" false // saving intermediate
+                assertResultOk res
+                let! res = API.saveAsync(path, ArtefactId.Path "1.txt") "local" false // saving initial
+                assertResultOk res
+                let! res = API.saveAsync(path, ArtefactId.Path "2.txt") "local" false // saving initial
+                assertResultOk res
+                let! res = API.saveAsync(path, ArtefactId.Path "3.txt") "local" false // saving initial
+                assertResultOk res
+                let! res = API.saveAsync(path, ArtefactId.Path "1_2_3.txt") "local" false 
+                assertResultOk res
+
+
+                //Deleting all
+                [
+                    Path.Combine(path,"1_2_3.txt");
+                    Path.Combine(path,"1_2.txt");
+                    Path.Combine(path,"1.txt");
+                    Path.Combine(path,"2.txt");
+                    Path.Combine(path,"3.txt");
+                ] |> List.iter File.Delete
+
+                let res = API.status(path, ArtefactId.Path "1_2_3.txt")
+                match res with
+                |   Ok r ->
+                    let expectedStatuses:Map<ArtefactId,MdMap<string,StatusGraph.ArtefactStatus>> = 
+                        [ 
+                            ArtefactId.Path "1.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate ArtefactLocation.Remote);
+                            ArtefactId.Path "2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate ArtefactLocation.Remote);
+                            ArtefactId.Path "3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate ArtefactLocation.Remote);
+                            ArtefactId.Path "1_2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate ArtefactLocation.Remote); 
+                            ArtefactId.Path "1_2_3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate ArtefactLocation.Remote);
+                        ] |> Map.ofList
+                    Assert.True(equalStatuses expectedStatuses r)
+                |   Error e->
+                        Assert.True(false, sprintf "Error: %A" e)
+            finally
+                Environment.CurrentDirectory <- savedWD            
+        }
         
