@@ -17,6 +17,7 @@
     <AssemblyName>Alpheus</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Versioning.fs" />
     <Compile Include="AsyncUtils.fs" />
     <Compile Include="CustomSerializers.fs" />
     <Compile Include="ResultBuilder.fs" />

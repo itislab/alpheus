@@ -227,7 +227,9 @@ let saveAsync (experimentRoot, artefactId) storageName saveAll =
                         { Hash = hashResult
                           RelativePath = relativePath alphFilePath artefactPath }
                     return 
-                        { IsTracked = true
+                        {
+                          FileFormatVersion = Versioning.AlphFileCurrentVersion
+                          IsTracked = true
                           Origin = SourceOrigin snapshotSection }
                 | Some(alphFile) ->
                     return { alphFile with IsTracked = true }                             

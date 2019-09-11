@@ -39,6 +39,7 @@ type AlphFileSerializationTests(output)=
         let artefactPath = Path.Combine(s.Path, "test.dat")
         let snapshotSection : VersionedArtefact = { RelativePath = artefactPath; Hash = MdMap.scalar (Some "0000") }
         let alphFile : AlphFile = {
+            FileFormatVersion = Versioning.AlphFileCurrentVersion
             IsTracked = true
             Origin = DataOrigin.SourceOrigin snapshotSection
         }

@@ -23,6 +23,7 @@ type ConfigSerialization(output)=
             let azureStorage = Azure {AccountName="abc"; AccountKey="cba"; ContainerName="container1"}
             let configFile: ConfigFile = 
                 {
+                    FileFormatVersion = ItisLab.Alpheus.Versioning.ExperimentConfigFileCurrentVersion
                     Storage =
                         [
                             "relLocal",relativeLocalStorage
