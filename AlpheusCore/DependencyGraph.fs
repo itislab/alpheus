@@ -15,66 +15,82 @@ open FSharp.Control
 #nowarn "0346"
 
 
-type UpToDateExplanation =
-    /// Expected produced version can be restored from storage
-    |   ExistsRemotely
-    /// Expected produced version is currently on disk
-    |   ExistsLocally
+type ArtefactLocation  =
+    /// Artefact can be restored from storage
+    |   Remote
+    /// Artefact is currently on disk
+    |   Local
 
 type OutdatedReason =
     | InputsOutdated
     | OutputsOutdated
 
-type CommandVertexStatus =
-    |   UpToDate of UpToDateExplanation
-    |   Outdated of OutdatedReason
-
-type InvalidReason =
-    |   DoesNotExist
-    |   WrongDiskVersion
+/// computation status of method instance (e.g. scalar or vector element)
+type MethodInstanceStatus =
+    /// Expected outputs version exist
+    | UpToDate of outputs: ArtefactLocation list
+    | Outdated of OutdatedReason
 
 type LinkToArtefactStatus = 
-    |   Valid of UpToDateExplanation
-    |   Invalid of InvalidReason
+    /// there is no artefact locally and no expected version on remotes
+    | NotFound
+    /// there is an expected version of artefact on the local disk, and no information about remotes
+    | Local
+    /// there is a version of artefact on the local disk, but it has unexpected version, and no information about remotes
+    | LocalUnexpected 
+    /// there is no any version of artefact on the local disk, but there is a remote artefact of the expected version
+    | Remote
 
+type GroupOfLinksStatus =
+    |   SomeAreLocalUnexpected
+    |   SomeAreNotFound
+    /// All group has expected versions
+    |   AllExist of location:ArtefactLocation list
 
-/// valid are items that either have actual disk data version match expected version, or actual disk data is missing and expected version is restorable from storage
-let areValidItemsVersions checkStoragePresence expectedVersionHashes actualVersionsHashes =
+let getGroupOfLinksStatus checkStoragePresence expectedVersionHashes actualVersionsHashes =
     async {
-        if Array.exists Option.isNone expectedVersionHashes then
+        let expectedVersionHashesArr = Array.ofSeq expectedVersionHashes
+        let N = Array.length expectedVersionHashesArr
+        if Seq.exists Option.isNone expectedVersionHashesArr then
             // some of the artefact element was not ever produced, this is invalid
             // TODO:    is it correct to report wrong disk version?
             //          reporting DoesNotExist is also not correct as we did not check the disk presense
-            return Invalid WrongDiskVersion
+            return SomeAreLocalUnexpected
         else
             /// Chooses the pairs that are not valid on disk (filtering out versions match)
             let invalidOnDiskChooser hash1 hash2 =
                 match hash1,hash2 with
                 |   Some(h1),Some(h2) ->  if h1 = h2 then None else Some(hash1,hash2)
                 |   _ -> Some(hash1,hash2)
-            let localInvalid = Seq.map2 invalidOnDiskChooser expectedVersionHashes actualVersionsHashes |> Seq.choose id |> Array.ofSeq
+            let localInvalid = Seq.map2 invalidOnDiskChooser expectedVersionHashesArr actualVersionsHashes |> Seq.choose id |> Array.ofSeq
             if Array.length localInvalid = 0 then
                 // valid as actual disk version match expected version. No need to check the storage
-                return Valid ExistsLocally
+                return AllExist (List.init N (fun _ -> ArtefactLocation.Local))
             else
                 // check if the locally "invalid" are "remote valid" (restorable from storage in case of disk data absence)
-                let eligibleForRemoteCheckChooser pair =
+                let eligibleForRemoteCheckChooser idx pair =
                     let expected,actual = pair
                     match expected,actual with
-                    |   Some(v),None -> Some(v)
+                    |   Some(v),None -> Some(idx,v)
                     |   _,_ -> None
 
-                let eligibleForRemoteCheck = Array.choose eligibleForRemoteCheckChooser localInvalid
+                let eligibleForRemoteCheck = Seq.mapi eligibleForRemoteCheckChooser localInvalid |> Seq.choose id |> Array.ofSeq
                 if Array.length eligibleForRemoteCheck = Array.length localInvalid then
                     // we proceed with the remote checks only if all of the locally invalid items are eligible for remote check
-                    let! remotePresence = checkStoragePresence eligibleForRemoteCheck
+                    let eligibleForRemoteCheckVersions = Array.map snd eligibleForRemoteCheck
+                    let! remotePresence = checkStoragePresence (Seq.ofArray eligibleForRemoteCheckVersions)
                     if Array.forall id remotePresence then
-                        return Valid ExistsRemotely
+                        let resultArray = Array.create N ArtefactLocation.Local
+                        // as all of the remote check eligible elements are present remotely
+                        eligibleForRemoteCheck
+                        |> Seq.map fst
+                        |> Seq.iter (fun idx -> (resultArray.[idx] <- ArtefactLocation.Remote))
+                        return AllExist (List.ofArray resultArray)
                     else
-                        return Invalid DoesNotExist
+                        return SomeAreNotFound
                 else
                     // otherwise at least one unrestorable item exists on disk. Thus invalid
-                    return Invalid WrongDiskVersion
+                    return SomeAreLocalUnexpected
     }
 
 type ArtefactVertex(id:ArtefactId, experimentRoot:string) =    
@@ -227,8 +243,14 @@ and LinkToArtefact(artefact: ArtefactVertex, expectedVersion: ArtefactVersion) =
             let expectedVersion = MdMap.find index expected
             let! actualVersion = artefact.ActualVersionAsync
             let artefactItemActualVersion = MdMap.find index actualVersion
-            let! status = areValidItemsVersions checkStoragePresence [|expectedVersion|] [|artefactItemActualVersion|] 
-            return status
+            let! status = getGroupOfLinksStatus checkStoragePresence (Seq.singleton expectedVersion) [|artefactItemActualVersion|] 
+            match status with
+            |   SomeAreLocalUnexpected -> return LocalUnexpected
+            |   SomeAreNotFound -> return NotFound
+            |   AllExist items ->
+                match List.head items with
+                |   ArtefactLocation.Local -> return LinkToArtefactStatus.Local
+                |   ArtefactLocation.Remote -> return LinkToArtefactStatus.Remote
         }
 
     /// Makes the link to expect the actual version.

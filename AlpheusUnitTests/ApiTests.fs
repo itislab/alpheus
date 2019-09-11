@@ -315,13 +315,13 @@ type ScalarScenarios(output) =
                 let res = API.status(path, ArtefactId.Path "1_2_3.txt")
                 match res with
                 |   Ok r ->
-                    let expectedStatuses:Map<ArtefactId,MdMap<string,CommandVertexStatus>> = 
+                    let expectedStatuses:Map<ArtefactId,MdMap<string,StatusGraph.ArtefactStatus>> = 
                         [ 
-                            ArtefactId.Path "1.txt",MdMap.scalar (UpToDate ExistsLocally);
-                            ArtefactId.Path "2.txt",MdMap.scalar (UpToDate ExistsLocally);
-                            ArtefactId.Path "3.txt",MdMap.scalar (UpToDate ExistsLocally);
-                            ArtefactId.Path "1_2.txt",MdMap.scalar (Outdated InputsOutdated);
-                            ArtefactId.Path "1_2_3.txt",MdMap.scalar (Outdated InputsOutdated);
+                            ArtefactId.Path "1.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "1_2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.NeedsRecomputation OutdatedReason.InputsOutdated);
+                            ArtefactId.Path "1_2_3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.NeedsRecomputation OutdatedReason.InputsOutdated);
                         ] |> Map.ofList
                     Assert.True(equalStatuses expectedStatuses r)
                 |   Error e->
@@ -346,13 +346,13 @@ type ScalarScenarios(output) =
                 let res = API.status(path, ArtefactId.Path "1_2_3.txt")
                 match res with
                 |   Ok r ->
-                    let expectedStatuses:Map<ArtefactId,MdMap<string,CommandVertexStatus>> = 
+                    let expectedStatuses:Map<ArtefactId,MdMap<string,StatusGraph.ArtefactStatus>> = 
                         [ 
-                            ArtefactId.Path "1.txt",MdMap.scalar (UpToDate ExistsLocally);
-                            ArtefactId.Path "2.txt",MdMap.scalar (UpToDate ExistsLocally);
-                            ArtefactId.Path "3.txt",MdMap.scalar (UpToDate ExistsLocally);
-                            ArtefactId.Path "1_2.txt",MdMap.scalar (UpToDate ExistsLocally);
-                            ArtefactId.Path "1_2_3.txt",MdMap.scalar (UpToDate ExistsLocally);
+                            ArtefactId.Path "1.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "1_2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "1_2_3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
                         ] |> Map.ofList
                     Assert.True(equalStatuses expectedStatuses r)
                 |   Error e->
@@ -383,13 +383,13 @@ type ScalarScenarios(output) =
                 let res = API.status(path, ArtefactId.Path "1_2_3.txt")
                 match res with
                 |   Ok r ->
-                    let expectedStatuses:Map<ArtefactId,MdMap<string,CommandVertexStatus>> = 
+                    let expectedStatuses:Map<ArtefactId,MdMap<string,StatusGraph.ArtefactStatus>> = 
                         [ 
-                            ArtefactId.Path "1.txt",MdMap.scalar (UpToDate ExistsLocally);
-                            ArtefactId.Path "2.txt",MdMap.scalar (UpToDate ExistsLocally);
-                            ArtefactId.Path "3.txt",MdMap.scalar (UpToDate ExistsLocally); // anyway up to date
-                            ArtefactId.Path "1_2.txt",MdMap.scalar (UpToDate ExistsLocally); 
-                            ArtefactId.Path "1_2_3.txt",MdMap.scalar (Outdated InputsOutdated); // but this is invalid now
+                            ArtefactId.Path "1.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local); // anyway up to date
+                            ArtefactId.Path "1_2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local); 
+                            ArtefactId.Path "1_2_3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.NeedsRecomputation OutdatedReason.InputsOutdated); // but this is invalid now
                         ] |> Map.ofList
                     Assert.True(equalStatuses expectedStatuses r)
                 |   Error e->
@@ -485,13 +485,13 @@ type ScalarScenarios(output) =
                 let res = API.status(path, ArtefactId.Path "1_2_3.txt")
                 match res with
                 |   Ok r ->
-                    let expectedStatuses:Map<ArtefactId,MdMap<string,CommandVertexStatus>> = 
+                    let expectedStatuses:Map<ArtefactId,MdMap<string,StatusGraph.ArtefactStatus>> = 
                         [ 
-                            ArtefactId.Path "1.txt",MdMap.scalar (UpToDate ExistsLocally);
-                            ArtefactId.Path "2.txt",MdMap.scalar (UpToDate ExistsLocally);
-                            ArtefactId.Path "3.txt",MdMap.scalar (UpToDate ExistsLocally);
-                            ArtefactId.Path "1_2.txt",MdMap.scalar (UpToDate ExistsLocally); 
-                            ArtefactId.Path "1_2_3.txt",MdMap.scalar (Outdated OutputsOutdated); // but this is invalid now
+                            ArtefactId.Path "1.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "1_2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local); 
+                            ArtefactId.Path "1_2_3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.NeedsRecomputation OutdatedReason.OutputsOutdated); // but this is invalid now
                         ] |> Map.ofList
                     Assert.True(equalStatuses expectedStatuses r)
                 |   Error e->
@@ -558,13 +558,13 @@ type ScalarScenarios(output) =
                 let res = API.status(path, ArtefactId.Path "1_2_3.txt")
                 match res with
                 |   Ok r ->
-                    let expectedStatuses:Map<ArtefactId,MdMap<string,CommandVertexStatus>> = 
+                    let expectedStatuses:Map<ArtefactId,MdMap<string,StatusGraph.ArtefactStatus>> = 
                         [ 
-                            ArtefactId.Path "1.txt",MdMap.scalar (UpToDate ExistsLocally);
-                            ArtefactId.Path "2.txt",MdMap.scalar (UpToDate ExistsLocally);
-                            ArtefactId.Path "3.txt",MdMap.scalar (UpToDate ExistsLocally);
-                            ArtefactId.Path "1_2.txt",MdMap.scalar (UpToDate ExistsLocally); 
-                            ArtefactId.Path "1_2_3.txt",MdMap.scalar (Outdated InputsOutdated); // Inputs, not outputs, because rebuilding command resets expected input versions
+                            ArtefactId.Path "1.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "1_2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local); 
+                            ArtefactId.Path "1_2_3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.NeedsRecomputation OutdatedReason.InputsOutdated); // Inputs, not outputs, because rebuilding command resets expected input versions
                         ] |> Map.ofList
                     Assert.True(equalStatuses expectedStatuses r)
                 |   Error e->
@@ -632,13 +632,13 @@ type ScalarScenarios(output) =
                 let res = API.status(path, ArtefactId.Path "1_2_3.txt")
                 match res with
                 |   Ok r ->
-                    let expectedStatuses:Map<ArtefactId,MdMap<string,CommandVertexStatus>> = 
+                    let expectedStatuses:Map<ArtefactId,MdMap<string,StatusGraph.ArtefactStatus>> = 
                         [ 
-                            ArtefactId.Path "1.txt",MdMap.scalar (UpToDate ExistsLocally);
-                            ArtefactId.Path "2.txt",MdMap.scalar (UpToDate ExistsLocally);
-                            ArtefactId.Path "3.txt",MdMap.scalar (UpToDate ExistsLocally);
-                            ArtefactId.Path "1_2.txt",MdMap.scalar (UpToDate ExistsLocally); 
-                            ArtefactId.Path "1_2_3.txt",MdMap.scalar (Outdated InputsOutdated); // Inputs, not outputs, because rebuilding command resets expected input versions
+                            ArtefactId.Path "1.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "1_2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local); 
+                            ArtefactId.Path "1_2_3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.NeedsRecomputation OutdatedReason.InputsOutdated); // Inputs, not outputs, because rebuilding command resets expected input versions
                         ] |> Map.ofList
                     Assert.True(equalStatuses expectedStatuses r)
                 |   Error e->
@@ -688,13 +688,13 @@ type ScalarScenarios(output) =
                 let res = API.status(path, ArtefactId.Path "1_2_3.txt")
                 match res with
                 |   Ok r ->
-                    let expectedStatuses:Map<ArtefactId,MdMap<string,CommandVertexStatus>> = 
+                    let expectedStatuses:Map<ArtefactId,MdMap<string,StatusGraph.ArtefactStatus>> = 
                         [ 
-                            ArtefactId.Path "1.txt",MdMap.scalar (UpToDate ExistsLocally);
-                            ArtefactId.Path "2.txt",MdMap.scalar (UpToDate ExistsLocally);
-                            ArtefactId.Path "3.txt",MdMap.scalar (UpToDate ExistsLocally);
-                            ArtefactId.Path "1_2.txt",MdMap.scalar (Outdated OutputsOutdated); 
-                            ArtefactId.Path "1_2_3.txt",MdMap.scalar (Outdated InputsOutdated);
+                            ArtefactId.Path "1.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "1_2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.NeedsRecomputation OutdatedReason.OutputsOutdated); 
+                            ArtefactId.Path "1_2_3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.NeedsRecomputation OutdatedReason.InputsOutdated);
                         ] |> Map.ofList
                     Assert.True(equalStatuses expectedStatuses r)
                 |   Error e->
@@ -750,13 +750,13 @@ type ScalarScenarios(output) =
                 let res = API.status(path, ArtefactId.Path "1_2_3.txt")
                 match res with
                 |   Ok r ->
-                    let expectedStatuses:Map<ArtefactId,MdMap<string,CommandVertexStatus>> = 
+                    let expectedStatuses:Map<ArtefactId,MdMap<string,StatusGraph.ArtefactStatus>> = 
                         [ 
-                            ArtefactId.Path "1.txt",MdMap.scalar (UpToDate ExistsLocally);
-                            ArtefactId.Path "2.txt",MdMap.scalar (UpToDate ExistsLocally);
-                            ArtefactId.Path "3.txt",MdMap.scalar (UpToDate ExistsLocally);
-                            ArtefactId.Path "1_2.txt",MdMap.scalar (UpToDate ExistsRemotely); 
-                            ArtefactId.Path "1_2_3.txt",MdMap.scalar (UpToDate ExistsLocally);
+                            ArtefactId.Path "1.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "1_2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate ArtefactLocation.Remote); 
+                            ArtefactId.Path "1_2_3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
                         ] |> Map.ofList
                     Assert.True(equalStatuses expectedStatuses r)
                 |   Error e->
@@ -840,13 +840,13 @@ type ScalarScenarios(output) =
                 let res = API.status(path, ArtefactId.Path "1_2_3.txt")
                 match res with
                 |   Ok r ->
-                    let expectedStatuses:Map<ArtefactId,MdMap<string,CommandVertexStatus>> = 
+                    let expectedStatuses:Map<ArtefactId,MdMap<string,StatusGraph.ArtefactStatus>> = 
                         [ 
-                            ArtefactId.Path "1.txt",MdMap.scalar (UpToDate ExistsRemotely);
-                            ArtefactId.Path "2.txt",MdMap.scalar (UpToDate ExistsRemotely);
-                            ArtefactId.Path "3.txt",MdMap.scalar (UpToDate ExistsLocally);
-                            ArtefactId.Path "1_2.txt",MdMap.scalar (UpToDate ExistsRemotely); 
-                            ArtefactId.Path "1_2_3.txt",MdMap.scalar (Outdated OutputsOutdated);
+                            ArtefactId.Path "1.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate ArtefactLocation.Remote);
+                            ArtefactId.Path "2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate ArtefactLocation.Remote);
+                            ArtefactId.Path "3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                            ArtefactId.Path "1_2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate ArtefactLocation.Remote); 
+                            ArtefactId.Path "1_2_3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.NeedsRecomputation OutdatedReason.OutputsOutdated);
                         ] |> Map.ofList
                     Assert.True(equalStatuses expectedStatuses r)
                 |   Error e->
@@ -891,13 +891,13 @@ type ScalarScenarios(output) =
                 let res = API.status(path, ArtefactId.Path "1_2_3.txt")
                 match res with
                 |   Ok r ->
-                    let expectedStatuses:Map<ArtefactId,MdMap<string,CommandVertexStatus>> = 
+                    let expectedStatuses:Map<ArtefactId,MdMap<string,StatusGraph.ArtefactStatus>> = 
                         [ 
-                            ArtefactId.Path "1.txt",MdMap.scalar (UpToDate ExistsRemotely);
-                            ArtefactId.Path "2.txt",MdMap.scalar (UpToDate ExistsRemotely);
-                            ArtefactId.Path "3.txt",MdMap.scalar (UpToDate ExistsRemotely);
-                            ArtefactId.Path "1_2.txt",MdMap.scalar (UpToDate ExistsRemotely); 
-                            ArtefactId.Path "1_2_3.txt",MdMap.scalar (UpToDate ExistsRemotely);
+                            ArtefactId.Path "1.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate ArtefactLocation.Remote);
+                            ArtefactId.Path "2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate ArtefactLocation.Remote);
+                            ArtefactId.Path "3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate ArtefactLocation.Remote);
+                            ArtefactId.Path "1_2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate ArtefactLocation.Remote); 
+                            ArtefactId.Path "1_2_3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate ArtefactLocation.Remote);
                         ] |> Map.ofList
                     Assert.True(equalStatuses expectedStatuses r)
                 |   Error e->

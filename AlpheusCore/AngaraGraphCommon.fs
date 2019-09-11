@@ -104,25 +104,30 @@ let getCommandVertexStatus checkStoragePresence (command:CommandLineVertex) inde
         let expectedInputItemVersions = extractExpectedVersionsFromLinks index command.Inputs |> Array.ofSeq
         let! actualInputItemVersions = extractActualVersionsFromLinks index command.Inputs
 
-        let! areInputsValid = areValidItemsVersions checkStoragePresence expectedInputItemVersions actualInputItemVersions
+        let! inputsStatus = getGroupOfLinksStatus checkStoragePresence expectedInputItemVersions actualInputItemVersions
         
-        match areInputsValid with
-        |   Invalid reason ->
-            // we can avoid checking outputs to speed up the work
-            // is the inputs are invalid
-            logVerbose (sprintf "Needs recomputation due to the outdated inputs: %A" reason)
+        match inputsStatus with
+        // we can avoid checking outputs to speed up the work            
+        |   SomeAreNotFound ->
+            logVerbose "Needs recomputation as some of the inputs not found" 
             return Outdated InputsOutdated
-        |   Valid _ ->
+        |   SomeAreLocalUnexpected ->
+            logVerbose "Needs recomputation as disk version of the input does not match expected version"
+            return Outdated InputsOutdated                 
+        |   AllExist _ ->
             // checking outputs
             let expectedOutputItemVersions = extractExpectedVersionsFromLinks index command.Outputs |> Array.ofSeq
             let! actualOutputItemVersions = extractActualVersionsFromLinks index command.Outputs
-            let! areOutputsValid = areValidItemsVersions checkStoragePresence expectedOutputItemVersions actualOutputItemVersions
-            match areOutputsValid with
-            |   Invalid reason ->
-                logVerbose (sprintf "Needs recomputation due to the outdated outputs: %A" reason)
+            let! outputsStatus = getGroupOfLinksStatus checkStoragePresence expectedOutputItemVersions actualOutputItemVersions
+            match outputsStatus with
+            |   SomeAreNotFound ->
+                logVerbose "Needs recomputation as some of the outputs not found" 
                 return Outdated OutputsOutdated
-            |   Valid s ->
-                return UpToDate s
+            |   SomeAreLocalUnexpected ->
+                logVerbose "Needs recomputation as disk version of the output does not match expected version"
+                return Outdated OutputsOutdated
+            |   AllExist outputs ->
+                return UpToDate outputs
     }
 
 

@@ -11,7 +11,7 @@ let run (programName:string) (parseResults:ParseResults<AlpheusArgs>) : Result<u
         printfn "%s" usage
         Ok()
     else if parseResults.Contains Init then
-        result {
+        result {            
             let! cwd = (Directory.GetCurrentDirectory(), (fun p -> not (Config.isExperimentDirectory p)), (UserError "The current directory is already an Alpheus experiment directory"))
             return API.createExperimentDirectoryAsync cwd |> Async.RunSynchronously |> ignore
         }
@@ -65,14 +65,14 @@ let run (programName:string) (parseResults:ParseResults<AlpheusArgs>) : Result<u
             let statusesRes = API.status artefact
             match statusesRes with
             |   Ok(statuses)->
-                let printStatus artId (status:Angara.Data.MdMap<string,DependencyGraph.CommandVertexStatus>) =
+                let printStatus artId (status:Angara.Data.MdMap<string,StatusGraph.ArtefactStatus>) =
                     let statusToString status =
                         match status with
-                        |   DependencyGraph.UpToDate utd ->
-                            match utd with
-                            |   DependencyGraph.ExistsLocally -> "Up to date"
-                            |   DependencyGraph.ExistsRemotely -> "Up to date (in storage)"
-                        |   DependencyGraph.Outdated _ ->
+                        |   StatusGraph.UpToDate location ->
+                            match location with
+                            |   DependencyGraph.Local -> "Up to date"
+                            |   DependencyGraph.Remote -> "Up to date (in storage)"
+                        |   StatusGraph.NeedsRecomputation _ ->
                             "Need recomputation"
                     if status.IsScalar then
                         printfn "%-50s: %s" (artId.ToString()) (status.AsScalar() |> statusToString)

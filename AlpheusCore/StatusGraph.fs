@@ -16,7 +16,7 @@ open Angara.Data
 type ArtefactItem =
     { ArtefactId: ArtefactId
       Index: string list
-      Status: CommandVertexStatus
+      Status: MethodInstanceStatus
       }
 
 
@@ -41,20 +41,18 @@ type SourceMethod(source: SourceVertex, experimentRoot, checkStoragePresense) =
                 indices |> Array.map (getItemStatus expectedArtefact) |> Async.Parallel
 
             let linkStatusToCommandVertextStatus status =
-                match status with 
-                |   Valid v -> UpToDate v
-                |   Invalid iv ->
-                    match iv with
-                    |   WrongDiskVersion ->
-                        // Source methods always updates their output.
-                        // Always valid if there is any disk version of the artefact
-                        UpToDate ExistsLocally 
-                    |   DoesNotExist ->
-                        // that's bad! as there is not local nor remote version
-                        // we can't get the artefact data by any means
-                        // this is exception
-                        failwith "The artefact data is not found neither on disk nor in any of the available storages"
-         
+                match status with                
+                |   LocalUnexpected ->
+                    // Source methods always updates their output.
+                    // Always valid if there is any disk version of the artefact
+                    UpToDate [ArtefactLocation.Local] 
+                |   NotFound ->
+                    // that's bad! as there is not local nor remote version
+                    // we can't get the artefact data by any means
+                    // this is exception
+                    failwith "The artefact data is not found neither on disk nor in any of the available storages"
+                |   Local -> UpToDate [ArtefactLocation.Local] 
+                |   Remote -> UpToDate [ArtefactLocation.Remote]
             let result =
                 Array.map2 (fun index status -> {ArtefactId = artefact.Id; Index = index; Status = linkStatusToCommandVertextStatus status}) indices itemStatuses
                 |> Seq.map (fun x -> x :> Artefact)
@@ -66,7 +64,7 @@ type SourceMethod(source: SourceVertex, experimentRoot, checkStoragePresense) =
 
 type CommandMethod(command: CommandLineVertex,
                     experimentRoot,
-                    checkStoragePresence: HashString array -> Async<bool array>) =
+                    checkStoragePresence: HashString seq -> Async<bool array>) =
     inherit AngaraGraphNode(DependencyGraph.Command command)  
 
     override s.Execute(inputs, _) = //ignoring checkpoint.
@@ -114,6 +112,10 @@ let buildStatusGraph (g:DependencyGraph.Graph) experimetRoot checkStoragePresenc
         |   DependencyGraph.Source(source) -> upcast SourceMethod(source, experimetRoot, checkStoragePresence)
         |   DependencyGraph.Command(computed) -> upcast CommandMethod(computed, experimetRoot, checkStoragePresence)
     g |> DependencyGraphToAngaraWrapper |> AngaraTranslator.translate factory
+
+type ArtefactStatus =
+|   UpToDate of ArtefactLocation
+|   NeedsRecomputation of OutdatedReason
         
 let getStatuses (g:FlowGraph<AngaraGraphNode>) =
     let state = 
@@ -134,17 +136,23 @@ let getStatuses (g:FlowGraph<AngaraGraphNode>) =
         let vertexStateToStatus state =
             let toArtefactItemStatus (x:MethodOutput) =
                 let outputsCount = (x :> IVertexData).Shape.Length
-                let outputNumToRes idx : (ArtefactId * string list* CommandVertexStatus) =
+                let methodInstanceStatusToOutputStatus (status:MethodInstanceStatus) outputIdx =
+                    match status with
+                    |   MethodInstanceStatus.UpToDate outputs ->
+                        ArtefactStatus.UpToDate(List.item outputIdx outputs)
+                    |   Outdated reason ->
+                        NeedsRecomputation reason
+                let outputNumToRes idx : (ArtefactId * string list* ArtefactStatus) =
                     let artItem: ArtefactItem = downcast x.TryGet(idx).Value
-                    artItem.ArtefactId, artItem.Index, artItem.Status
+                    artItem.ArtefactId, artItem.Index, (methodInstanceStatusToOutputStatus artItem.Status idx)
                 Seq.init outputsCount outputNumToRes
             let itemsStatus = state |> MdMap.toSeq |> Seq.collect (fun x -> let _,v = x in v.Data.Value |> toArtefactItemStatus)
             itemsStatus
 
         let verticesPairs = vertices  |> Map.toSeq |> Seq.collect (fun x -> let _,output = x in (vertexStateToStatus output))
 
-        // assembling MdMap back
-        let folder (state:Map<ArtefactId,MdMap<string,CommandVertexStatus>>) (elem: ArtefactId * string list* CommandVertexStatus) =
+        // assembling MdMap back        
+        let folder (state:Map<ArtefactId,MdMap<string,ArtefactStatus>>) (elem: ArtefactId * string list* ArtefactStatus) =
             let artId, index, status = elem
             let artMap =
                 match Map.tryFind artId state with

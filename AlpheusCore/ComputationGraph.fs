@@ -18,7 +18,7 @@ type ArtefactItem =
       }
 
 type SourceMethod(source: SourceVertex, experimentRoot,
-                    checkStoragePresence : HashString array -> Async<bool array>) = 
+                    checkStoragePresence : HashString seq -> Async<bool array>) = 
     inherit AngaraGraphNode(DependencyGraph.Source source)
 
     override s.Execute(_, _) = // ignoring checkpoints
@@ -77,25 +77,10 @@ type SourceMethod(source: SourceVertex, experimentRoot,
 
 type CommandMethod(command: CommandLineVertex,
                     experimentRoot,
-                    checkStoragePresence: HashString array -> Async<bool array>,
+                    checkStoragePresence: HashString seq -> Async<bool array>,
                     restoreFromStorage: (HashString*string) array -> Async<unit>) = // version*filename
     inherit AngaraGraphNode(DependencyGraph.Command command)  
-
     
-    
-    (*
-    let isValid (actualVersion:ArtefactVersion) (expectedVersion:ArtefactVersion) =
-        let actVersions = MdMap.toSeq actualVersion |> Array.ofSeq
-        let expVersions = MdMap.toSeq expectedVersion |> Array.ofSeq
-        let vectorKeysMatch = (actVersions |> Seq.map fst |> Set.ofSeq) = (expVersions |> Seq.map fst |> Set.ofSeq)
-        if not vectorKeysMatch then
-            // vector element keys are different. Thus we cant compare versions and the artefact is invalid
-            false
-        else
-            let actVersionsHashes = actVersions |> Seq.map snd |> Array.ofSeq
-            let expVersionHashes = expVersions |> Seq.map snd |> Array.ofSeq
-            areValidItemsVersions expVersionHashes actVersionsHashes *)
-
     override s.Execute(inputs, _) = // ignoring checkpoints
         async{
             // Rules of execution

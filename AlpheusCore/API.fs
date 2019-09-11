@@ -113,7 +113,7 @@ let private restoreSingleItemAsync experimentRoot (path,versionToRestore) =
     }
 
 /// Checks whether the specified versions can be extraced from any available storages
-let internal checkStoragePresence experimentRoot (versions:HashString array) : Async<bool array> =
+let internal checkStoragePresence experimentRoot (versions:HashString seq) : Async<bool array> =
     async {
         let! config = Config.openExperimentDirectoryAsync experimentRoot
         let checker = config.ConfigFile.Storage |> Map.toSeq |> StorageFactory.getPresenseChecker experimentRoot
@@ -122,7 +122,7 @@ let internal checkStoragePresence experimentRoot (versions:HashString array) : A
                 let! l = listAsync
                 return l |> Array.map (fun x -> not (List.isEmpty x))
             }
-        let res = versions |> (checker >> nonEmptylist)
+        let res = versions |> Array.ofSeq |> (checker >> nonEmptylist)
         return! res
     }
 
