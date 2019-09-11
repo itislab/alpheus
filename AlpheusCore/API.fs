@@ -23,7 +23,16 @@ let buildDependencyGraphAsync experimentRoot artefactIds =
     }
 
 /// Initializes provided directory with default empty Alpheus configuration
-let createExperimentDirectoryAsync dirPath = Config.createExperimentDirectoryAsync dirPath
+let createExperimentDirectory dirPath =
+    async {
+        let! _ = Config.createExperimentDirectoryAsync dirPath
+        let defaultEntries = 
+            [
+                "**/*.hash" // all of the .hash files are ignored
+                ".alpheus/storage" // default local storage
+            ]
+        do! GitIgnoreManager.addEntriesAsync (Path.Combine(dirPath,".gitignore")) defaultEntries
+    }
 
 /// Adds one more directory based artefact storage to the specified experiment folder
 let configAddDirectoryStorageAsync experimentRoot storageName dirPath =

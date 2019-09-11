@@ -259,7 +259,7 @@ type ScalarScenarios(output) =
     let buildExperiment(path) =
         async {
             let path = Path.GetFullPath path
-            let! _ = API.createExperimentDirectoryAsync path
+            let! _ = API.createExperimentDirectory path
             File.Copy("../../../data/cat.cmd",Path.Combine(path,"cat.cmd"))
 
             do! File.WriteAllTextAsync(Path.Combine(path,"1.txt"),"File 1\\r\\n") |> Async.AwaitTask
