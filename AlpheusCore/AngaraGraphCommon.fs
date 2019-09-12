@@ -68,39 +68,68 @@ let rec internal toJaggedArrayOrValue (mapValue: (string list * 'a) -> 'c) (inde
                 | MdMapTree.Value _ -> failwith "Data is incomplete and has missing elements"))
 
 
-/// valid are items that either have actual disk data version match expected version, or actual disk data is missing and expected version is restorable from storage
-let areValidItemsVersions checkStoragePresence expectedVersionHashes actualVersionsHashes =
-    async {
-        if Array.exists Option.isNone expectedVersionHashes then
-            // some of the artefact element was not ever produced, this is invalid
-            return false
-        else
-            /// Chooses the pairs that are not valid on disk (filtering out versions match)
-            let invalidOnDiskChooser hash1 hash2 =
-                match hash1,hash2 with
-                |   Some(h1),Some(h2) ->  if h1 = h2 then None else Some(hash1,hash2)
-                |   _ -> Some(hash1,hash2)
-            let localInvalid = Seq.map2 invalidOnDiskChooser expectedVersionHashes actualVersionsHashes |> Seq.choose id |> Array.ofSeq
-            if Array.length localInvalid = 0 then
-                // valid as actual disk version match expected version. No need to check the storage
-                return true
-            else
-                // check if the locally "invalid" are "remote valid" (restorable from storage in case of disk data absence)
-                let eligibleForRemoteCheckChooser pair =
-                    let expected,actual = pair
-                    match expected,actual with
-                    |   Some(v),None -> Some(v)
-                    |   _,_ -> None
+let resolveIndex (index:string list) (map: MdMap<string, 'a option>) =
+    let rec resolveInTree (index:string list) (map: MdMapTree<string, 'a option>) =
+        match map, index with
+        | _,[] -> Some map
+        | MdMapTree.Value value,_ -> Some map // index length > rank of the map
+        | MdMapTree.Map values, k :: tail ->
+            match values |> Map.tryFind k with
+            | Some value -> resolveInTree tail value
+            | None -> None
+    match resolveInTree index (map |> MdMap.toTree) with
+    | Some(MdMapTree.Value v) -> v
+    | Some(MdMapTree.Map map) when map.IsEmpty -> None
+    | Some(MdMapTree.Map _) -> invalidOp "Only one-to-one vectors are supported at the moment"
+    | None -> None
 
-                let eligibleForRemoteCheck = Array.choose eligibleForRemoteCheckChooser localInvalid
-                if Array.length eligibleForRemoteCheck = Array.length localInvalid then
-                    // we proceed with the remote checks only if all of the locally invalid items are eligible for remote check
-                    let! remotePresence = checkStoragePresence eligibleForRemoteCheck
-                    return Array.forall id remotePresence
-                else
-                    // otherwise at least one unrestorable item exists. Thus invalid
-                    return false
+let extractActualVersionsFromLinks index links =
+    async {
+        let! actualVersion =
+            links
+            |> Seq.map (fun (a:LinkToArtefact) -> a.Artefact.ActualVersionAsync)
+            |> Async.Parallel
+        return actualVersion |> Array.map (fun v -> resolveIndex index v)
     }
+
+let extractExpectedVersionsFromLinks index links =
+    links |> Seq.map (fun (a:LinkToArtefact) -> resolveIndex index a.ExpectedVersion)
+
+/// whether the command method needs actual CLI tool execution
+/// common code that is used both during the artefact status calculation and artefact production
+let getCommandVertexStatus checkStoragePresence (command:CommandLineVertex) index =
+    let methodItemId = command.MethodId |> applyIndex index
+    let logVerbose str = Logger.logVerbose Logger.Execution (sprintf "%s: %s" methodItemId str)
+    async {
+        let expectedInputItemVersions = extractExpectedVersionsFromLinks index command.Inputs |> Array.ofSeq
+        let! actualInputItemVersions = extractActualVersionsFromLinks index command.Inputs
+
+        let! inputsStatus = findExpectedArtefacts checkStoragePresence expectedInputItemVersions actualInputItemVersions
+        
+        match inputsStatus with
+        // we can avoid checking outputs to speed up the work            
+        |   SomeAreNotFound ->
+            logVerbose "Needs recomputation as some of the inputs not found" 
+            return Outdated InputsOutdated
+        |   SomeAreLocalUnexpected ->
+            logVerbose "Needs recomputation as disk version of the input does not match expected version"
+            return Outdated InputsOutdated                 
+        |   AllExist _ ->
+            // checking outputs
+            let expectedOutputItemVersions = extractExpectedVersionsFromLinks index command.Outputs |> Array.ofSeq
+            let! actualOutputItemVersions = extractActualVersionsFromLinks index command.Outputs
+            let! outputsStatus = findExpectedArtefacts checkStoragePresence expectedOutputItemVersions actualOutputItemVersions
+            match outputsStatus with
+            |   SomeAreNotFound ->
+                logVerbose "Needs recomputation as some of the outputs not found" 
+                return Outdated OutputsOutdated
+            |   SomeAreLocalUnexpected ->
+                logVerbose "Needs recomputation as disk version of the output does not match expected version"
+                return Outdated OutputsOutdated
+            |   AllExist outputs ->
+                return UpToDate outputs
+    }
+
 
 /// This type represents an Angara Flow method.
 /// Note that execution modifies the given vertex and it is Angara Flow execution runtime who controls
@@ -114,11 +143,10 @@ type AngaraGraphNode(producerVertex:MethodVertex) =
 
     member s.VertexID =
         match producerVertex with
-        |   Source(s) -> s.Output.Artefact.Id
-        |   Command(comp) -> (Seq.head comp.Outputs).Artefact.Id // first output is used as vertex ID
+        |   Source(s) -> s.MethodId
+        |   Command(comp) -> comp.MethodId
 
     override s.ToString() = 
         match producerVertex with
         | Source src -> sprintf "Source %A" src.Output.Artefact.Id
         | Command cmd -> sprintf "Command %s" cmd.Command
-

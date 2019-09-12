@@ -7,111 +7,117 @@ open Angara.States
 open AlphFiles
 open System
 open ItisLab.Alpheus
+open System.IO
 open ItisLab.Alpheus.PathUtils
 open ItisLab.Alpheus.AngaraGraphCommon
-
-type UpToDateStatus =
-    /// Expected produced version can be restored from storage
-    |   ExistsRemotely
-    /// Expected produced version is currently on disk
-    |   ExistsLocally
-
-type OutdatedStatus =
-    | InputsOutdated
-    | OutputsOutdated
-
-type Status =
-    |   UpToDate of UpToDateStatus
-    |   Outdated of OutdatedStatus
-
+open DependencyGraph
+open Angara.Data
 
 type ArtefactItem =
-    { FullPath: string
+    { ArtefactId: ArtefactId
       Index: string list
-      Status: Status
+      Status: MethodInstanceStatus
       }
 
 
-type SourceGraphNode(orphanArtefact:DependencyGraph.LinkToArtefact, experimentRoot: string) =
-    inherit StatusGraphNode(0,1)
+type SourceMethod(source: SourceVertex, experimentRoot, checkStoragePresense) = 
+    inherit AngaraGraphNode(DependencyGraph.Source source)
 
-    override s.Execute(_, _) = //ignoring inputs and checkpoint.
-        // Just utilizing parallel method computation feature of AngaraFlow to check the statuses of all method vertex
+    override s.Execute(_, _) = // ignoring checkpoints
+        async{
+            let expectedArtefact = source.Output
+            let artefact = expectedArtefact.Artefact
 
-        let isOnDisk = orphanArtefact.Artefact.ActualVersion.IsSome
+            let getItemStatus (link:LinkToArtefact) index =            
+                link.AnalyzeStatus checkStoragePresense index
 
-        // source method is always up to date, thus succeeds                        
-        let result = {
-            Id = orphanArtefact.Artefact.Id;
-            IsUpToDate = (not isOnDisk) || (orphanArtefact.Artefact.ActualHash.Value = orphanArtefact.ExpectedVersion.Value);
-            IsOnDisk = isOnDisk;
-            IsTracked = orphanArtefact.Artefact.IsTracked
-            ProducedVersionStorages = orphanArtefact.StoragesContainingVersion
-            CurrentDiskVersionStorages = orphanArtefact.Artefact.StoragesContainingActualHash
-        }
+            // Output of the method is an scalar or a vector of full paths to the data of the artefact.
+            let indices =
+                artefact.Id 
+                |> PathUtils.enumerateItems experimentRoot
+                |> MdMap.toSeq |> Seq.map fst |> Array.ofSeq
 
-        seq{ yield [result :> Artefact], null }
+            let! itemStatuses =
+                indices |> Array.map (getItemStatus expectedArtefact) |> Async.Parallel
 
-type NotSourceGraphNode(methodVertex:DependencyGraph.CommandLineVertex) =
-    inherit StatusGraphNode(methodVertex.Inputs.Length, methodVertex.Outputs.Length)
+            let linkStatusToCommandVertextStatus status =
+                match status with                
+                |   LocalUnexpected ->
+                    // Source methods always updates their output.
+                    // Always valid if there is any disk version of the artefact
+                    UpToDate [ArtefactLocation.Local] 
+                |   NotFound ->
+                    // that's bad! as there is not local nor remote version
+                    // we can't get the artefact data by any means
+                    // this is exception
+                    failwith "The artefact data is not found neither on disk nor in any of the available storages"
+                |   Local -> UpToDate [ArtefactLocation.Local] 
+                |   Remote -> UpToDate [ArtefactLocation.Remote]
+            let result =
+                Array.map2 (fun index status -> {ArtefactId = artefact.Id; Index = index; Status = linkStatusToCommandVertextStatus status}) indices itemStatuses
+                |> Seq.map (fun x -> x :> Artefact)
+                |> List.ofSeq
+            
+            return seq{ yield (result, null) }
+        } |> Async.RunSynchronously
+        
 
-    member s.FirstOutputID =
-        methodVertex.MethodId
+type CommandMethod(command: CommandLineVertex,
+                    experimentRoot,
+                    checkStoragePresence: HashString seq -> Async<bool array>) =
+    inherit AngaraGraphNode(DependencyGraph.Command command)  
 
     override s.Execute(inputs, _) = //ignoring checkpoint.
-        let inputs = inputs |> List.map (fun x -> x:?> ArtefactStatus)
-        // Just utilizing parallel method computation feature of AngaraFlow to check the statuses of all method vertex
+        async{
+            // Rules of execution
+            // The artefact is valid either if actual disk version matches expected version or if the disk version is absend and expected version is restorable from storage
+            // We can bypass the computation entirely if inputs and outputs are valid
+            
+            let inputItems = inputs |> List.map (fun inp -> inp :?> ArtefactItem)
+            let index =
+                inputItems 
+                |> Seq.map(fun item -> item.Index)
+                |> Seq.fold(fun (max: string list) index -> if index.Length > max.Length then index else max) []
+            
+            let isUpToDate status =
+                match status with
+                |   UpToDate _ -> true
+                |   Outdated _ -> false
 
-        // There can be 3 reasons why the node can be outdated (execution halts)
-        // a) inputs are outdated
-        // b) one of the inputs hash does not match
-        // c) one of the output hashes does nor match        
+            let areInputsValid = inputItems |> Seq.map (fun x -> x.Status) |> Seq.forall isUpToDate
 
-        let outputs = methodVertex.Outputs
-        let outputToStatus idx isUpToDate = 
-            let output = outputs.[idx]
-            {
-                Id = output.Artefact.Id
-                IsUpToDate = isUpToDate
-                IsOnDisk =
-                    match output.Artefact.ActualHash with
-                    |   None -> false
-                    |   Some(_) -> true
-                IsTracked = output.Artefact.IsTracked
-                ProducedVersionStorages = output.StoragesContainingVersion
-                CurrentDiskVersionStorages = output.Artefact.StoragesContainingActualHash
-            }
+            let! currentVertexStatus =
+                async {
+                    if not areInputsValid then
+                        // shortcut: just propagating outdated status down the graph
+                        return Outdated InputsOutdated
+                    else
+                        // actually checking current vertex
+                        return! getCommandVertexStatus checkStoragePresence command index
+                }
+       
+            let outputIds =
+                command.Outputs // the order is important here
+                |> List.map(fun out -> out.Artefact.Id)
 
-        let outdatedResult = seq { yield (List.init methodVertex.Outputs.Count (fun i -> outputToStatus i false:> Artefact) , null) }
+            let prepareAngaraArtefact artId : Artefact =
+                upcast {Index = index; Status = currentVertexStatus; ArtefactId= artId }
+            let result =  Seq.singleton(List.map prepareAngaraArtefact outputIds, null)
+            return result
+        } |> Async.RunSynchronously
 
-        let isVersionMismatch expected actual =
-            match expected,actual with
-            |   _,None -> false // if actual file is missing. That's OK. There is no version mismatch
-            |   Some(expected),Some(actual) -> expected <> actual
-            |   _ -> raise(NotImplementedException("need to define behavior"))
-
-        // checking a)
-        if List.exists (fun i -> not i.IsUpToDate) inputs then
-            outdatedResult
-        else                    
-            if
-                // Checking b)
-                (Seq.exists (fun (input:DependencyGraph.VersionedArtefact) -> isVersionMismatch input.ExpectedVersion input.Artefact.ActualHash) methodVertex.Inputs) ||
-                // Checking c)
-                (Seq.exists (fun (output:DependencyGraph.VersionedArtefact) -> isVersionMismatch output.ExpectedVersion output.Artefact.ActualHash) methodVertex.Outputs) then
-                outdatedResult            
-            else
-                let results = List.init methodVertex.Outputs.Count (fun i -> outputToStatus i true:> Artefact)
-                seq { yield (results, null) }                
-
-let buildStatusGraph (g:DependencyGraph.Graph) =    
-    let factory method : StatusGraphNode =
+let buildStatusGraph (g:DependencyGraph.Graph) experimetRoot checkStoragePresence =    
+    let factory method : AngaraGraphNode =
         match method with
-        |   DependencyGraph.Source(source) -> upcast SourceGraphNode(source.Output)
-        |   DependencyGraph.Command(computed) -> upcast NotSourceGraphNode(computed)
+        |   DependencyGraph.Source(source) -> upcast SourceMethod(source, experimetRoot, checkStoragePresence)
+        |   DependencyGraph.Command(computed) -> upcast CommandMethod(computed, experimetRoot, checkStoragePresence)
     g |> DependencyGraphToAngaraWrapper |> AngaraTranslator.translate factory
+
+type ArtefactStatus =
+|   UpToDate of ArtefactLocation
+|   NeedsRecomputation of OutdatedReason
         
-let printStatuses (g:FlowGraph<StatusGraphNode>) =
+let getStatuses (g:FlowGraph<AngaraGraphNode>) =
     let state = 
         {
             TimeIndex = 0UL
@@ -119,47 +125,45 @@ let printStatuses (g:FlowGraph<StatusGraphNode>) =
             Vertices = Map.empty
         }
     try
-        use engine = new Engine<StatusGraphNode>(state,Scheduler.ThreadPool())        
+        use engine = new Engine<AngaraGraphNode>(state,Scheduler.ThreadPool())        
         engine.Start()
         // engine.Changes.Subscribe(fun x -> x.State.Vertices)
         let final = Control.pickFinal engine.Changes
         let finalState = final.GetResult()
-        
-        let getVertexOutdatedOutputs (vertex:StatusGraphNode) =
-            let N = vertex.OutputCount
-            Seq.init N (fun idx -> Control.outputScalar(vertex,idx) finalState ) |> Seq.choose (fun (s:ArtefactStatus) -> if s.IsUpToDate then None else Some(s.Id))
-        
-        let getVertexOutputStatusStrings (vertex:StatusGraphNode) =
-            let N = vertex.OutputCount
-            let statusToStr s =
-                let diskStatus = if s.IsOnDisk then "on disk" else "absent"
-                let uptToDateStatus = if s.IsUpToDate then "up to date" else "needs (re)computation"
-                let expectedVerStorages = 
-                    if List.length s.ProducedVersionStorages > 0 then
-                        sprintf "restorable from %s" (String.Join(",",s.ProducedVersionStorages))
-                    else
-                        String.Empty
-                let actualVerStorages = 
-                    if List.length s.CurrentDiskVersionStorages > 0 then
-                        sprintf "Saved in %s" (String.Join(",",s.ProducedVersionStorages))
-                    else
-                        "Unsaved"
-                let storagesStatus = 
-                    if s.IsTracked then
-                        if s.IsOnDisk then
-                            actualVerStorages
-                        else
-                            expectedVerStorages
-                    else String.Empty                    
-                s.Id, (sprintf "%s\t%s\t%s" diskStatus uptToDateStatus storagesStatus)
-            Seq.init N (fun idx -> Control.outputScalar(vertex,idx) finalState ) |> Seq.map statusToStr
+               
+        let vertices = finalState.Vertices
 
-        let outdatedArtefacts = finalState.Graph.Structure.Vertices |> Set.toSeq |> Seq.collect getVertexOutdatedOutputs
-        let allArtefactStatuses = finalState.Graph.Structure.Vertices |> Set.toSeq |> Seq.collect getVertexOutputStatusStrings |> Seq.sortBy fst |> Seq.map (fun x -> let id,status = x in sprintf "%10A:\t%s" id status)
-        let statuses = String.Join("\n\t", allArtefactStatuses)
-        printfn "Statuses:\n\t%s" statuses
-        Ok()
+        let vertexStateToStatus state =
+            let toArtefactItemStatus (x:MethodOutput) =
+                let outputsCount = (x :> IVertexData).Shape.Length
+                let methodInstanceStatusToOutputStatus (status:MethodInstanceStatus) outputIdx =
+                    match status with
+                    |   MethodInstanceStatus.UpToDate outputs ->
+                        ArtefactStatus.UpToDate(List.item outputIdx outputs)
+                    |   Outdated reason ->
+                        NeedsRecomputation reason
+                let outputNumToRes idx : (ArtefactId * string list* ArtefactStatus) =
+                    let artItem: ArtefactItem = downcast x.TryGet(idx).Value
+                    artItem.ArtefactId, artItem.Index, (methodInstanceStatusToOutputStatus artItem.Status idx)
+                Seq.init outputsCount outputNumToRes
+            let itemsStatus = state |> MdMap.toSeq |> Seq.collect (fun x -> let _,v = x in v.Data.Value |> toArtefactItemStatus)
+            itemsStatus
+
+        let verticesPairs = vertices  |> Map.toSeq |> Seq.collect (fun x -> let _,output = x in (vertexStateToStatus output))
+
+        // assembling MdMap back        
+        let folder (state:Map<ArtefactId,MdMap<string,ArtefactStatus>>) (elem: ArtefactId * string list* ArtefactStatus) =
+            let artId, index, status = elem
+            let artMap =
+                match Map.tryFind artId state with
+                |   Some m -> m
+                |   None -> MdMap.empty
+            let updatedArtMap = MdMap.add index status artMap
+            Map.add artId updatedArtMap state
+        let result = Seq.fold folder Map.empty verticesPairs
+        
+        Ok(result)
     with 
     | :? Control.FlowFailedException as flowExc -> 
         let failed = String.Join("\n\t", flowExc.InnerExceptions |> Seq.map(fun e -> e.ToString()))
-        Error(sprintf "Failed to compute the artefacts: \n\t%s" failed)
+        Error(SystemError(sprintf "Failed to compute the artefacts: \n\t%s" failed))
