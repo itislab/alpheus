@@ -114,7 +114,8 @@ let rec hashDirectoryAsync (fullPath:string) =
         return hashAlg.Hash
     }
 
-
+/// Builds hash for the given path which can be either a file or a directory 
+/// (depends on what exists). If neither exists, returns None.
 let hashPathAsync fullPath =
     async {
             // Logger.logVerbose Logger.Hash (sprintf "Hashing %s ..." fullPath)
@@ -208,7 +209,7 @@ let hashVectorPathAndSave (fullPath:string) =
     async {
         try
             let resolvedFullPaths = PathUtils.enumeratePath fullPath
-            return! resolvedFullPaths |> AsyncUtils.mapAsync (fun (_, path) -> hashPathAndSave path)
+            return! resolvedFullPaths |> Utils.mapAsync (fun (_, path) -> hashPathAndSave path)
         with
             | :? System.IO.DirectoryNotFoundException -> return MdMap.Empty
     }

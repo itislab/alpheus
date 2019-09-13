@@ -68,32 +68,15 @@ let rec internal toJaggedArrayOrValue (mapValue: (string list * 'a) -> 'c) (inde
                 | MdMapTree.Value _ -> failwith "Data is incomplete and has missing elements"))
 
 
-let resolveIndex (index:string list) (map: MdMap<string, 'a option>) =
-    let rec resolveInTree (index:string list) (map: MdMapTree<string, 'a option>) =
-        match map, index with
-        | _,[] -> Some map
-        | MdMapTree.Value value,_ -> Some map // index length > rank of the map
-        | MdMapTree.Map values, k :: tail ->
-            match values |> Map.tryFind k with
-            | Some value -> resolveInTree tail value
-            | None -> None
-    match resolveInTree index (map |> MdMap.toTree) with
-    | Some(MdMapTree.Value v) -> v
-    | Some(MdMapTree.Map map) when map.IsEmpty -> None
-    | Some(MdMapTree.Map _) -> invalidOp "Only one-to-one vectors are supported at the moment"
-    | None -> None
 
 let extractActualVersionsFromLinks index links =
-    async {
-        let! actualVersion =
-            links
-            |> Seq.map (fun (a:LinkToArtefact) -> a.Artefact.ActualVersionAsync)
-            |> Async.Parallel
-        return actualVersion |> Array.map (fun v -> resolveIndex index v)
-    }
+    links
+    |> Seq.map (fun (a:LinkToArtefact) -> a.Artefact.ActualVersion.Resolve index)
+    |> Async.Parallel
 
 let extractExpectedVersionsFromLinks index links =
-    links |> Seq.map (fun (a:LinkToArtefact) -> resolveIndex index a.ExpectedVersion)
+    links 
+    |> Seq.map (fun (a:LinkToArtefact) -> Utils.resolveIndex index a.ExpectedVersion |> Option.flatten)
 
 /// whether the command method needs actual CLI tool execution
 /// common code that is used both during the artefact status calculation and artefact production

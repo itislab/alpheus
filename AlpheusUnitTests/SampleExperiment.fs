@@ -17,17 +17,16 @@ let artIdsStr =
         @"dir3/dir5/test5.txt" // depends on test3.txt and test4/
     |]
 
-type SampleExperiment(output) =
+type SampleExperiment(output) as this =
     inherit SingleUseOneTimeDirectory(output)
 
     // creating sample experiment folder for tests
 
     let artefactIds = Array.map ItisLab.Alpheus.ArtefactId.Path artIdsStr
 
-    let rootPath = Path.GetFullPath(``base``.Path)
-
     do
         async{
+            let rootPath = this.ExperimentRoot
             do! ItisLab.Alpheus.Config.createExperimentDirectoryAsync rootPath |> Async.Ignore
 
             let fullPaths = Array.map (fun x -> idToFullPath rootPath x) artefactIds
@@ -66,7 +65,3 @@ type SampleExperiment(output) =
     member s.ArtefactIds
         with get() =
             artefactIds
-
-    member s.RootPath
-        with get() =
-            rootPath

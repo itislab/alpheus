@@ -41,6 +41,7 @@ type LinkToArtefactStatus =
     /// there is no any version of artefact on the local disk, but there is a remote artefact of the expected version
     | Remote
 
+/// This type is used by `findExpectedArtefacts`
 type ExpectedArtefactSearchResult =
     |   SomeAreLocalUnexpected
     |   SomeAreNotFound
@@ -97,23 +98,9 @@ type ArtefactVertex(id:ArtefactId, experimentRoot:string) =
     let mutable producer : MethodVertex option = None
     let mutable usedIn : Set<CommandLineVertex> = Set.empty
     let mutable isTracked = false
-
-   
-    let createActualVersionLazy() = Lazy<System.Threading.Tasks.Task<ArtefactVersion>>(fun () -> 
-        async {
-            Logger.logVerbose Logger.LogCategory.DependencyGraph (sprintf "Calculating actual hash of %A" id)
-            let fullPath = id |> idToFullPath experimentRoot 
-            let! hash = Hash.hashVectorPathAndSave fullPath
-            return hash 
-        } |> Async.StartAsTask )
-
-    /// None means that disk version is not computed yet.
-    let mutable actualVersionLazy = createActualVersionLazy()
-    let lockActualVersionLazy = obj()
-
-    /// Invalidates the current actual version to re-read the new actual version from disk.
-    let invalidateActualVersion() = 
-        lock lockActualVersionLazy (fun () -> actualVersionLazy <- createActualVersionLazy())
+    let actualVersion = ActualArtefactVersion(id, experimentRoot)
+    let saveLock = obj()
+    let rank = Lazy<int>(fun() -> Artefacts.rank id)
 
     member s.Id = id
 
@@ -135,30 +122,12 @@ type ArtefactVertex(id:ArtefactId, experimentRoot:string) =
     /// Gets the version calculated from the data on the disk.
     /// Lazy execution. Calulated based on disk data only on the first call. 
     /// Later returns the hashed results, unless ForceActualVersionCalc() is called.
-    member s.ActualVersionAsync = actualVersionLazy.Value |> Async.AwaitTask
+    member s.ActualVersion = actualVersion
 
-    member s.Rank = Artefacts.rank id
+    member s.Rank = rank.Value
 
     member s.AddUsedIn method = usedIn <- usedIn |> Set.add method 
 
-    /// Computes actual version for the graph artefact item from the disk.
-    /// Updates value of ArtefactVertex.ActualVersion.
-    /// Updates .hash file on a disk.
-    member s.ForceActualVersionCalc() = invalidateActualVersion()
-
-    /// Computes actual version for the graph artefact item from the disk.
-    /// Updates value of ArtefactVertex.ActualVersion.
-    /// Updates .hash file on a disk.
-    member s.ForceActualVersionCalc(index: string list) : Async<unit> =
-        async {
-            let fullPath = s.Id |> idToFullPath experimentRoot |> applyIndex index
-            let! hash = Hash.hashPathAndSave fullPath
-
-            lock lockActualVersionLazy (fun () ->
-                let v = actualVersionLazy |> Option.defaultValue MdMap.empty
-                actualVersionLazy <- v |> MdMap.add index hash |> Some
-            )
-        }
     
     /// Builds an AlphFile instance describing the artefact.
     member s.SaveAlphFile() =
@@ -183,7 +152,7 @@ type ArtefactVertex(id:ArtefactId, experimentRoot:string) =
             | MethodVertex.Command(commandVertex) ->
                 // dependency graph contains all paths relative to project root
                 // alpheus files contains all paths relative to alph file   
-                let experimentRoot = experimentRoot
+                let experimentRoot = experimentRoot                
                 let computeSection =
                     let alphFileRelativeWorkingDir = 
                         let workingDirFull = Path.GetFullPath(Path.Combine(experimentRoot,commandVertex.WorkingDirectory))
@@ -205,7 +174,7 @@ type ArtefactVertex(id:ArtefactId, experimentRoot:string) =
                     Origin = DataOrigin.CommandOrigin { computeSection with Signature = Hash.getSignature computeSection}
                     IsTracked = s.IsTracked
                 }
-        lock lockActualVersionLazy (fun() -> 
+        lock saveLock (fun() -> 
             PathUtils.ensureDirectories alphFileFullPath
             AlphFiles.save content alphFileFullPath)
         
@@ -220,16 +189,11 @@ type ArtefactVertex(id:ArtefactId, experimentRoot:string) =
         // this override prevennts usage of System.IComparable for equality checks
         Object.ReferenceEquals(s,obj1)
        
-    override s.ToString() =
-        let v = actualVersionLazy
-        let version =
-            if v.IsValueCreated then    
-                match v.Value.Status with
-                | System.Threading.Tasks.TaskStatus.RanToCompletion -> sprintf "%A" (v.Value.Result |> MdMap.map(Option.map(fun s -> s.Substring(0,6))))        
-                | System.Threading.Tasks.TaskStatus.Faulted -> sprintf "error: %A" v.Value.Exception
-                | _ -> "disk version not checked"
-            else "disk version not checked"
-        sprintf "Artefact(%s|%s)" (s.Id.ToString()) version
+    override s.ToString() =        
+        sprintf "Artefact(%O|%O)" s.Id actualVersion
+
+
+
 
 /// Represents a link to a specific version of an artefact.
 and LinkToArtefact(artefact: ArtefactVertex, expectedVersion: ArtefactVersion) = 
@@ -245,11 +209,11 @@ and LinkToArtefact(artefact: ArtefactVertex, expectedVersion: ArtefactVersion) =
       /// If the actual version differs from the expected, it should be handled specifically.
     member s.ExpectedVersion : ArtefactVersion = expected
 
-    member s.AnalyzeStatus checkStoragePresence index =
+    member s.AnalyzeStatus checkStoragePresence (index: string list) =    
+        if index.Length <> artefact.Rank then invalidArg "index" "Index doesn't correspond to the rank of the artefact"
         async {
             let expectedVersion = MdMap.find index expected
-            let! actualVersion = artefact.ActualVersionAsync
-            let artefactItemActualVersion = MdMap.find index actualVersion
+            let! artefactItemActualVersion = artefact.ActualVersion.Get index
             let! status = findExpectedArtefacts checkStoragePresence (Seq.singleton expectedVersion) [|artefactItemActualVersion|] 
             match status with
             |   SomeAreLocalUnexpected -> return LocalUnexpected
@@ -261,22 +225,14 @@ and LinkToArtefact(artefact: ArtefactVertex, expectedVersion: ArtefactVersion) =
         }
 
     /// Makes the link to expect the actual version.
-    /// This method forces the actual version to be loaded from the disk.
-    member s.ExpectActualVersionAsync() = 
-        async {
-            let! actual = artefact.ActualVersionAsync
-            lock lockObj (fun() -> expected <- actual)
-            }        
-
-    /// Makes the link to expect the actual version.
     /// The actual version MUST be available.
     member s.ExpectActualVersionAsync(index: string list) = 
+        if index.Length <> artefact.Rank then invalidArg "index" "Index doesn't correspond to the rank of the artefact"
         async {
-            let! actual = artefact.ActualVersionAsync
-            let actual2 = actual |> MdMap.get index
-            lock lockObj (fun() -> 
-                expected <- expected |> MdMap.set index actual2)
-            }
+            let! actual = artefact.ActualVersion.Get index
+            lock lockObj (fun() -> expected <- expected |> MdMap.add index actual)
+            return ()
+        }
 
     override s.ToString() = sprintf "LinkToArtefact %A [expected version %A]" artefact expected
 
@@ -366,29 +322,23 @@ and CommandLineVertex(methodId : MethodId, experimentRoot: string, inputs: LinkT
     /// updates the expected versions for the input and output artefacts,
     /// and updates the *.alph file.
     member s.OnSucceeded(index: string list) : Async<unit> =
-        let outLinksUpdates =
-            s.Outputs 
-            |> Seq.map(fun out -> async { 
-                    if List.isEmpty index then
-                        out.Artefact.ForceActualVersionCalc()
-                        do! out.ExpectActualVersionAsync()
-                    else
-                        do! out.Artefact.ForceActualVersionCalc index
-                        do! out.ExpectActualVersionAsync index
-                    out.Artefact.SaveAlphFile()
-                }) 
-        let inputLinksUpdates =
-            s.Inputs 
-            |> Seq.map(fun input -> async { 
-                    if List.isEmpty index then
-                        do! input.ExpectActualVersionAsync()
-                    else
-                        do! input.ExpectActualVersionAsync index
-                    input.Artefact.SaveAlphFile()
-                })
-        Seq.append outLinksUpdates inputLinksUpdates
-        |> Async.Parallel
-        |> Async.Ignore
+        async {
+            let outLinksUpdates =
+                s.Outputs 
+                |> Seq.map(fun out -> async { 
+                        out.Artefact.ActualVersion.Invalidate index
+                        do! out.ExpectActualVersionAsync index                        
+                    }) 
+            let inputLinksUpdates =
+                s.Inputs 
+                |> Seq.map(fun input -> async { 
+                        let inputIndex = index |> List.truncate input.Artefact.Rank
+                        do! input.ExpectActualVersionAsync inputIndex
+                    })
+            do! Seq.append outLinksUpdates inputLinksUpdates |> Async.Parallel |> Async.Ignore
+
+            s.Outputs |> Seq.iter(fun out -> out.Artefact.SaveAlphFile())
+        }
 
     interface System.IComparable with
         member s.CompareTo(other) =

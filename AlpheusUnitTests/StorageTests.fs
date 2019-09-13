@@ -103,41 +103,41 @@ type CommonTests() =
         } |> toAsyncFact
 
     [<Fact>]
-       member s.``Different file artefact versions store different data``() =
-           async {
-               let versionToCheck:HashString array = [| "wqscuh71d3"; "version2" |]
-               let testData = [|"data1";"data2"|] |> Array.map System.Text.Encoding.UTF8.GetBytes
+    member s.``Different file artefact versions store different data``() =
+        async {
+            let versionToCheck:HashString array = [| "wqscuh71d3"; "version2" |]
+            let testData = [|"data1";"data2"|] |> Array.map System.Text.Encoding.UTF8.GetBytes
 
-               let writeDataAsync content version =
-                   async {
-                       // writing to storage
-                       let! saveStream = s.Storage.getFileSaveStreamAsync version
-                       do! Async.AwaitTask (saveStream.WriteAsync(content,0,content.Length))
-                       do! Async.AwaitTask (saveStream.FlushAsync())
-                       saveStream.Close()
-                   }
+            let writeDataAsync content version =
+                async {
+                    // writing to storage
+                    let! saveStream = s.Storage.getFileSaveStreamAsync version
+                    do! Async.AwaitTask (saveStream.WriteAsync(content,0,content.Length))
+                    do! Async.AwaitTask (saveStream.FlushAsync())
+                    saveStream.Close()
+                }
                
-               let readDataAsync version =
-                   async {
-                       // restoring from storage
-                       let! restoreStream = s.Storage.getFileRestoreStreamAsync version
+            let readDataAsync version =
+                async {
+                    // restoring from storage
+                    let! restoreStream = s.Storage.getFileRestoreStreamAsync version
                
-                       let buffer = Array.zeroCreate<byte> 32768
-                       let! readBytes = Async.AwaitTask(restoreStream.ReadAsync(buffer,0,buffer.Length))
+                    let buffer = Array.zeroCreate<byte> 32768
+                    let! readBytes = Async.AwaitTask(restoreStream.ReadAsync(buffer,0,buffer.Length))
 
-                       restoreStream.Close()
-                       return Array.take readBytes buffer
-                   }
+                    restoreStream.Close()
+                    return Array.take readBytes buffer
+                }
                
-               // writes
-               let! dummy = Array.map2 (fun c v -> writeDataAsync c v) testData versionToCheck |> Async.Parallel
+            // writes
+            let! dummy = Array.map2 (fun c v -> writeDataAsync c v) testData versionToCheck |> Async.Parallel
 
-               // reads
-               let! restoredFiles = Array.map readDataAsync versionToCheck |> Async.Parallel
+            // reads
+            let! restoredFiles = Array.map readDataAsync versionToCheck |> Async.Parallel
 
-               Array.iter2 (fun (restored:byte array) orig -> Assert.Equal<byte>(restored,orig)) restoredFiles testData
+            Array.iter2 (fun (restored:byte array) orig -> Assert.Equal<byte>(restored,orig)) restoredFiles testData
 
-           } |> toAsyncFact
+        } |> toAsyncFact
 
     /// Helper that writes the hardcoded data into the directory artefact streams and checks that it can be restored
     member private s.DirectoryArtefactContentCheck numberOfStreams =
@@ -192,7 +192,7 @@ type Local(output) =
     inherit CommonTests()
 
     let singleUseDir = new SingleUseOneTimeDirectory(output)
-    let localStorage = StorageLocal.Storage(singleUseDir.Path)
+    let localStorage = StorageLocal.Storage(singleUseDir.ExperimentRoot)
 
     override s.Storage
         with get() = upcast localStorage

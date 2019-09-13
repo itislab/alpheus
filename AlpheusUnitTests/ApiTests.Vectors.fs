@@ -11,6 +11,7 @@ open System.IO
 open ItisLab.Alpheus.DependencyGraph
 open System
 open ItisLab.Alpheus
+open Angara.Data
 
 type ``Vector scenarios through API``(output) =
     inherit SingleUseOneTimeDirectory(output)
@@ -26,7 +27,7 @@ type ``Vector scenarios through API``(output) =
     let prepareSources(path) =
         async {
             let path = Path.GetFullPath path
-            let! _ = API.createExperimentDirectoryAsync path
+            let! _ = API.createExperimentDirectory path
             Directory.CreateDirectory(Path.Combine(path, "data")) |> ignore
             File.WriteAllText(Path.Combine(path, "base.txt"), "Base file\\r\\n") 
             File.WriteAllText(Path.Combine(path, "data", "1.txt"), "File 1\\r\\n")
@@ -46,22 +47,32 @@ type ``Vector scenarios through API``(output) =
     member s.``Runs same method for multiple input files``() =
         async {
             let savedWD = Environment.CurrentDirectory
-            try            
-                let root = s.FullPath
+            try   
+                let root = s.ExperimentRoot
                 Environment.CurrentDirectory <- root
                 do! prepareSources(root)
 
-                let! res = API.buildAsync root ["base.txt"; "data/*.txt"] ["output/*.txt"] concatCommand false
+                let! res = API.buildAsync root ["base.txt"; "data/*.txt"] ["output/out*.txt"] concatCommand false
                 assertResultOk res
 
-                let res = API.compute (root, ArtefactId.Path "output/*.txt")
+                let outputId = ArtefactId.Path "output/out*.txt"
+                let res = API.compute (root, outputId)
                 assertResultOk res
 
-                do! assertNonEmptyFile(Path.Combine(root, "output", "base_1.txt"))
-                do! assertNonEmptyFile(Path.Combine(root, "output", "base_2.txt"))
-                do! assertNonEmptyFile(Path.Combine(root, "output", "base_3.txt"))
+                do! assertNonEmptyFile(Path.Combine(root, "output", "out1.txt"))
+                do! assertNonEmptyFile(Path.Combine(root, "output", "out2.txt"))
+                do! assertNonEmptyFile(Path.Combine(root, "output", "out3.txt"))
+
+                // Checks the output alph file:
+                let alph = AlphFiles.tryLoad (PathUtils.idToAlphFileFullPath root outputId) |> Option.get
+                match alph.Origin with 
+                | DataOrigin.CommandOrigin cmd ->
+                    Assert.True(cmd.Inputs.[0].Hash.IsScalar, "base.txt is scalar")
+                    Assert.Equal(3, cmd.Inputs.[1].Hash |> MdMap.toShallowSeq |> Seq.length)
+                    Assert.Equal(3, cmd.Outputs.[0].Hash |> MdMap.toShallowSeq |> Seq.length)
+                | _ -> failwith "Unexpected origin"
             finally
-                Environment.CurrentDirectory <- savedWD            
+                Environment.CurrentDirectory <- savedWD      
         } |> toAsyncFact
 
    

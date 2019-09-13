@@ -6,7 +6,6 @@ open System.Text
 open ItisLab.Alpheus.AlphFiles
 open ItisLab.Alpheus.Logger
 open ItisLab.Alpheus.PathUtils
-open ItisLab.Alpheus.AsyncUtils
 open ItisLab.Alpheus
 open System.IO
 open Angara.Data
@@ -260,15 +259,22 @@ let saveAsync (experimentRoot, artefactId) storageName saveAll =
                     async {
                         let artToSaveDescriptorsAsync (art:ArtefactVertex) =
                             async {
-                                let artFullPath = toFullPath art.Id
-                                let! artVersion = art.ActualVersionAsync
-                                let pathsToSave = artefactVersionToPaths artFullPath artVersion |> Array.ofSeq
+                                let! pathAndVersionToSave = 
+                                    art.Id
+                                    |> enumerateItems experimentRoot 
+                                    |> MdMap.toSeq 
+                                    |> Seq.map(fun (index, path) -> 
+                                        async {
+                                            let! v = art.ActualVersion.Get index
+                                            return path, v
+                                        })
+                                    |> Async.Parallel
                                 let absentChooser pair =
                                     let path,verOpt = pair
                                     match verOpt with
                                     |   None -> Some(path)
                                     |   Some(_) -> None
-                                let absentPaths = Array.choose absentChooser pathsToSave
+                                let absentPaths = Array.choose absentChooser pathAndVersionToSave
                                 if Array.length absentPaths>0 then 
                                     Logger.logWarning LogCategory.API (sprintf "The following paths are not saved, as they are not on disk: %A" absentPaths)
                                 let presentChooser pair = 
@@ -276,7 +282,7 @@ let saveAsync (experimentRoot, artefactId) storageName saveAll =
                                     match verOpt with
                                     |   None -> None
                                     |   Some(v) -> Some(path,v)
-                                return Array.choose presentChooser pathsToSave
+                                return Array.choose presentChooser pathAndVersionToSave
                             }
                         let! versionedArtefactsToSave = artefactsToSave |> Seq.map artToSaveDescriptorsAsync |> Array.ofSeq |> Async.Parallel
                         return versionedArtefactsToSave |> Seq.concat |> Seq.toArray
@@ -304,8 +310,9 @@ let saveAsync (experimentRoot, artefactId) storageName saveAll =
 
 /// Adds one more method vertex to the experiment graph
 /// deps: a list of paths to the input artefacts. outputs: a list of paths to the produced artefacts
+/// This function depends on the current directory.
 let buildAsync experimentRoot deps outputs command doNotCleanOutputs =
-    let getId = pathToId experimentRoot
+    let getId = pathToId experimentRoot // WARNING: this method depends on the current directory!
     let inputIDs = List.map getId deps
     let outputIDs = List.map getId outputs
     logVerbose LogCategory.API (sprintf "Dependencies: %A" inputIDs)
@@ -325,8 +332,7 @@ let buildAsync experimentRoot deps outputs command doNotCleanOutputs =
 
 
         // saving command and current working dir
-        let cwd = Directory.GetCurrentDirectory()
-        let rootBasedCwd = Path.GetRelativePath(experimentRoot, cwd) + Path.DirectorySeparatorChar.ToString()
+        let rootBasedCwd = Path.GetRelativePath(experimentRoot, System.Environment.CurrentDirectory) + Path.DirectorySeparatorChar.ToString()
         methodVertex.WorkingDirectory <- rootBasedCwd
         methodVertex.DoNotCleanOutputs <- doNotCleanOutputs
 

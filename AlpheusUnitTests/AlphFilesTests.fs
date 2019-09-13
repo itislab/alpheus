@@ -36,14 +36,14 @@ type AlphFileSerializationTests(output)=
 
     [<Fact>]
     member s.``Alph file round serialization-deserialization for source origin``() =
-        let artefactPath = Path.Combine(s.Path, "test.dat")
+        let artefactPath = Path.Combine(s.RelativeExperimentRoot, "test.dat")
         let snapshotSection : VersionedArtefact = { RelativePath = artefactPath; Hash = MdMap.scalar (Some "0000") }
         let alphFile : AlphFile = {
             FileFormatVersion = Versioning.AlphFileCurrentVersion
             IsTracked = true
             Origin = DataOrigin.SourceOrigin snapshotSection
         }
-        let path = Path.Combine(s.Path,"test.json")
+        let path = Path.Combine(s.RelativeExperimentRoot,"test.json")
         save alphFile path
         let loaded = tryLoad path
         match loaded with

@@ -32,7 +32,7 @@ type ConfigSerialization(output)=
                             ] |> Map.ofList
                 }
 
-            let path = Path.Combine(s.Path,"config.json")
+            let path = Path.Combine(s.RelativeExperimentRoot,"config.json")
 
             // saving
             do! saveConfigFileAsync configFile path
@@ -49,18 +49,18 @@ type ConfigSerialization(output)=
     [<Fact>]
     member s.``isExperimentDirectory handles initialized directory`` () =
         async {
-            let! dummyConfig = createExperimentDirectoryAsync(s.Path)
+            let! dummyConfig = createExperimentDirectoryAsync(s.RelativeExperimentRoot)
 
-            let isRoot = isExperimentDirectory s.Path
+            let isRoot = isExperimentDirectory s.RelativeExperimentRoot
             Assert.True(isRoot)
         } |> toAsyncFact
 
     [<Fact>]
     member s.``openExperimentDirectoryAsync loads just initialized directory`` () =
         async {
-            let! dummyConfig = createExperimentDirectoryAsync(s.Path)
+            let! dummyConfig = createExperimentDirectoryAsync(s.RelativeExperimentRoot)
 
-            let! loadedConfig = openExperimentDirectoryAsync(s.Path)
+            let! loadedConfig = openExperimentDirectoryAsync(s.RelativeExperimentRoot)
 
             Assert.Equal(dummyConfig,loadedConfig)
 
@@ -69,22 +69,22 @@ type ConfigSerialization(output)=
     [<Fact>]
     member s.``isExperimentDirectory handles uninitialized directory`` () =
         async {
-            let isRoot = isExperimentDirectory s.Path
+            let isRoot = isExperimentDirectory s.RelativeExperimentRoot
             Assert.False(isRoot)
         } |> toAsyncFact
 
     [<Fact>]
     member s.``tryLocateExpereimentRoot finds nothing on unintialized dir``() = 
-        match tryLocateExperimentRoot s.Path with
+        match tryLocateExperimentRoot s.RelativeExperimentRoot with
         |   None -> Assert.True(true)
         |   Some(found) -> Assert.True(false, sprintf "tryLocateExpereimentRoot found the root where there is no root: %s" found)
 
     [<Fact>]
     member s.``tryLocateExpereimentRoot finds the root upward on the tree``() = 
         async {
-            let dir1 = Path.Combine(s.Path,"dir1")
-            let dir2 = Path.Combine(s.Path,"dir1","dir2")
-            let dir3 = Path.Combine(s.Path,"dir1","dir2","dir3")
+            let dir1 = Path.Combine(s.RelativeExperimentRoot,"dir1")
+            let dir2 = Path.Combine(s.RelativeExperimentRoot,"dir1","dir2")
+            let dir3 = Path.Combine(s.RelativeExperimentRoot,"dir1","dir2","dir3")
             Directory.CreateDirectory(dir1) |> ignore
             Directory.CreateDirectory(dir2) |> ignore
             Directory.CreateDirectory(dir3) |> ignore

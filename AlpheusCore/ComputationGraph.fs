@@ -10,6 +10,7 @@ open Angara.States
 open ItisLab.Alpheus.DependencyGraph
 open ItisLab.Alpheus.PathUtils
 open ItisLab.Alpheus.AngaraGraphCommon
+open FSharp.Control
 
 
 type ArtefactItem =
@@ -25,17 +26,18 @@ type SourceMethod(source: SourceVertex, experimentRoot,
         async {
             let expectedArtefact = source.Output
             let artefact = expectedArtefact.Artefact
+            let items = artefact.Id |> PathUtils.enumerateItems experimentRoot
 
             // if alph file exists on disk (e.g. isTracked), we need to re-save it to update the expected version
             let alphExists = source.Output.Artefact.Id |> PathUtils.idToAlphFileFullPath source.ExperimentRoot |> File.Exists
             if alphExists then
-                do! source.Output.ExpectActualVersionAsync() 
+                let expect = items |> MdMap.toSeq |> Seq.map fst |> Seq.map source.Output.ExpectActualVersionAsync 
+                do! expect |> Async.Parallel |> Async.Ignore
                 artefact.SaveAlphFile()            
             
             // Output of the method is an scalar or a vector of full paths to the data of the artefact.
             let outputArtefact : Artefact =
-                artefact.Id 
-                |> PathUtils.enumerateItems experimentRoot
+                items
                 |> MdMap.toTree
                 |> toJaggedArrayOrValue (fun (index, fullPath) -> { FullPath = fullPath; Index = index }) []
         

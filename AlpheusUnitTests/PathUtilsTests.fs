@@ -153,9 +153,9 @@ type PathUtilsTests(output) =
 
     [<Fact>]
     member s.``pathToId creates ArtefactId from a path to an alph file``() =
-        let alphFilePath = Path.Combine(s.Path, "source", "test.alph")
+        let alphFilePath = Path.Combine(s.RelativeExperimentRoot, "source", "test.alph")
         Directory.CreateDirectory(Path.GetDirectoryName(alphFilePath)) |> ignore
-        let artefactPath = Path.Combine(s.Path, "source", "test.dat")
+        let artefactPath = Path.Combine(s.RelativeExperimentRoot, "source", "test.dat")
         let relativeArtefactPath     = relativePath alphFilePath artefactPath
         let snapshortSection : AlphFiles.VersionedArtefact = { RelativePath = relativeArtefactPath; Hash = MdMap.scalar (Some "0000") }
         let alphFile : AlphFiles.AlphFile = {
@@ -165,8 +165,8 @@ type PathUtilsTests(output) =
         }
         AlphFiles.save alphFile alphFilePath
 
-        let artefactId = pathToId s.Path alphFilePath 
-        Assert.Equal(relativePath s.Path artefactPath, idToExperimentPath artefactId)
+        let artefactId = pathToId s.RelativeExperimentRoot alphFilePath 
+        Assert.Equal(relativePath s.RelativeExperimentRoot artefactPath, idToExperimentPath artefactId)
 
     [<Theory>]
     [<InlineData(TargetPlatform.Windows, @"c:\experiment\source\test.csv", @"c:\experiment\source\test.csv.alph")>]
@@ -237,8 +237,8 @@ type PathUtilsTests(output) =
     [<Theory>]
     [<MemberData("Patterns")>]
     member s.``enumerateItems enumerates files according to a pattern`` (artefactId:string, expected: (string list * string)[]) =
-        let dir path = Path.Combine(s.FullPath, path) |> Directory.CreateDirectory |> ignore
-        let file path = (Path.Combine(s.FullPath, path) |> File.CreateText).Close()
+        let dir path = Path.Combine(s.ExperimentRoot, path) |> Directory.CreateDirectory |> ignore
+        let file path = (Path.Combine(s.ExperimentRoot, path) |> File.CreateText).Close()
 
         dir "dir1"
         dir "dir1/test2"
@@ -252,8 +252,8 @@ type PathUtilsTests(output) =
         file "dir3/dir5/test5.txt"
 
         let artefactId = ArtefactId.Path artefactId
-        let items = enumerateItems s.FullPath artefactId
-        let simplify = relativePath s.FullPath >> unixPath
+        let items = enumerateItems s.ExperimentRoot artefactId
+        let simplify = relativePath s.ExperimentRoot >> unixPath
         let actual = items |> MdMap.toSeq |> Seq.map(fun (keyPaths, valuePath) -> keyPaths, simplify valuePath) |> Seq.toArray
         Assert.Equal<string list * string>(expected, actual)
         //let files = enumerateItems s.FullPath artefactId |> Seq.map (fun () relativePath s.FullPath >> unixPath) |> Seq.toArray
