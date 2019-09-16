@@ -232,7 +232,6 @@ and LinkToArtefact(artefact: ArtefactVertex, expectedVersion: ArtefactVersion) =
         async {
             let! actual = artefact.ActualVersion.Get index
             lock lockObj (fun() -> expected <- expected |> MdMap.add index actual)
-            logVerbose DependencyGraph (sprintf "ExpectActualVersionAsync: %d" (expected|>MdMap.toShallowSeq|>Seq.length))
             return ()
         }
 
