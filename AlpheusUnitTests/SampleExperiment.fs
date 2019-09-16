@@ -47,9 +47,9 @@ type SampleExperiment(output) as this =
 
             // creating graph
             let g = DependencyGraph.Graph.Build(rootPath, [])
-            let! method3 = g.AddMethod "" [artefactIds.[0]; artefactIds.[1]] [artefactIds.[2]] 
-            let! method4 = g.AddMethod "" [artefactIds.[0]; artefactIds.[1]] [artefactIds.[3]] 
-            let! method5 = g.AddMethod "" [artefactIds.[2]; artefactIds.[3]] [artefactIds.[4]] 
+            let! method3 = g.AddMethod "" [artefactIds.[0]; artefactIds.[1]] [artefactIds.[2]] rootPath false
+            let! method4 = g.AddMethod "" [artefactIds.[0]; artefactIds.[1]] [artefactIds.[3]] rootPath false
+            let! method5 = g.AddMethod "" [artefactIds.[2]; artefactIds.[3]] [artefactIds.[4]] rootPath false
 
             let outputs = List.concat [method3.Outputs; method4.Outputs; method5.Outputs] |> List.map(fun link -> link.Artefact)
             g.LoadDependencies outputs |> ignore

@@ -324,6 +324,7 @@ and CommandLineVertex(methodId : MethodId, experimentRoot: string, inputs: LinkT
     /// and updates the *.alph file.
     member s.OnSucceeded(index: string list) : Async<unit> =
         async {
+            logVerbose DependencyGraph (sprintf "Method %A[%A] succeeded" methodId index)
             let outLinksUpdates =
                 s.Outputs 
                 |> Seq.map(fun out -> async { 
@@ -338,6 +339,7 @@ and CommandLineVertex(methodId : MethodId, experimentRoot: string, inputs: LinkT
                     })
             do! Seq.append outLinksUpdates inputLinksUpdates |> Async.Parallel |> Async.Ignore
 
+            logVerbose DependencyGraph (sprintf "Saving alph files for outputs of %A[%A]" methodId index)
             s.Outputs |> Seq.iter(fun out -> out.Artefact.SaveAlphFile())
         }
 
@@ -385,13 +387,15 @@ and Graph (experimentRoot:string) =
     /// If some input/output artefact has no actual version, the empty version is used as expected.
     /// Creates/rewrites the .alph files corresponding to the output artefacts.
     /// Returns the added method.
-    member s.AddMethod (command:string) (inputIds: ArtefactId seq) (outputIds: ArtefactId seq) =
+    member s.AddMethod (command:string) (inputIds: ArtefactId seq) (outputIds: ArtefactId seq) workingDirectory doNotCleanOutputs =
         async {
             let idToLink = s.GetOrAddArtefact >> LinkToArtefact
             let inputs = inputIds |> Seq.map idToLink  
             let outputs = outputIds |> Seq.map idToLink
             let outputs = outputs |> Seq.map (fun x -> LinkToArtefact(x.Artefact,x.ExpectedVersion |> MdMap.map(fun _ -> None))) // invalidating outputs (for the case if the previously defined command is updated)
             let method = s.AddOrGetCommand command inputs outputs
+            method.WorkingDirectory <- workingDirectory
+            method.DoNotCleanOutputs <- doNotCleanOutputs
             do! outputs 
                 |> AsyncSeq.ofSeq
                 |> AsyncSeq.iterAsyncParallel (fun output -> System.Threading.Tasks.Task.Run(fun () -> output.Artefact.SaveAlphFile()) |> Async.AwaitTask)
