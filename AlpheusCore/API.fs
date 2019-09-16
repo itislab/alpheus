@@ -323,42 +323,15 @@ let buildAsync experimentRoot deps outputs command doNotCleanOutputs =
 
     async {
         let! g = buildDependencyGraphAsync experimentRoot inputIDs
-        let! methodVertex = g.AddMethod command inputIDs outputIDs
+        
+        // saving command and current working dir
+        let rootBasedCwd = Path.GetRelativePath(experimentRoot, System.Environment.CurrentDirectory) + Path.DirectorySeparatorChar.ToString()
+        let! methodVertex = g.AddMethod command inputIDs outputIDs rootBasedCwd doNotCleanOutputs
     
         if doNotCleanOutputs then
             Logger.logInfo Logger.API "Clearing of outputs by alpheus is disabled for this computation"
         Logger.logVerbose Logger.API (sprintf "Dependency graph is built (%d artefacts; %d methods)" g.ArtefactsCount g.MethodsCount)
         Logger.logVerbose Logger.API (sprintf "Graph artefacts: %A" g.Artefacts)
-
-
-        // saving command and current working dir
-        let rootBasedCwd = Path.GetRelativePath(experimentRoot, System.Environment.CurrentDirectory) + Path.DirectorySeparatorChar.ToString()
-        methodVertex.WorkingDirectory <- rootBasedCwd
-        methodVertex.DoNotCleanOutputs <- doNotCleanOutputs
-
-        // saving .alph files for the outputs
-        let updateArtefactAlph artefactId =
-            result {
-                let! artefact = g.GetArtefact artefactId
-                artefact.SaveAlphFile()
-                return ()
-            }
-
-        let allOk results =
-            let errorChooser item =
-                match item with
-                |   Ok _ -> None
-                |   Error e -> Some(e)
-            let firstError = results |> Seq.choose errorChooser |> Seq.tryHead
-            match firstError with
-            |   None -> Ok()
-            |   Some(e) -> Error e
-
-            
-        let updateResults = 
-            outputIDs
-            |> Seq.map updateArtefactAlph |> Array.ofSeq
-            
-
-        return allOk updateResults
+        
+        return Ok()
     }
