@@ -75,7 +75,7 @@ let configAddAzureStorageAsync experimentRoot storageName accName accKey contain
         do! Config.saveConfigAsync config
     }
 
-/// Returns the configured artefact storages for the experiment folder supplied
+/// Returns the (configured artefact storages * defaultStorage name) for the experiment folder supplied
 let configListStoragesAsync expereimentRoot =
     async {
         let! config = Config.openExperimentDirectoryAsync expereimentRoot
@@ -84,7 +84,7 @@ let configListStoragesAsync expereimentRoot =
     }
 
 //
-let setDefaultStorageName experimentRoot newDefaultStorageName =
+let configStorageSetDefault experimentRoot newDefaultStorageName =
     async {
         let! config = Config.openExperimentDirectoryAsync experimentRoot
         let newDefaultExists = Map.containsKey newDefaultStorageName config.ConfigFile.Storage

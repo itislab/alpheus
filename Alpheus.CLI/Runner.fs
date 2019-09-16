@@ -32,7 +32,7 @@ let run (programName:string) (parseResults:ParseResults<AlpheusArgs>) : Result<u
                     return Ok()
                 elif storageArgs.Contains SetDefault then
                     let newDefaultStorage = storageArgs.GetResult <@ SetDefault @>
-                    return! API.setDefaultStorageName experimentRoot newDefaultStorage
+                    return! API.configStorageSetDefault experimentRoot newDefaultStorage
                 elif storageArgs.Contains List then
                     let sb = StringBuilder()
                     let! storages,defaultStorageName = API.configListStoragesAsync experimentRoot

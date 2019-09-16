@@ -12,6 +12,7 @@ open ItisLab.Alpheus.DependencyGraph
 open System
 open ItisLab.Alpheus
 open Angara.Data
+open System.Linq.Expressions
 
 /// can be used as calssData for XUnit theory. returns all of the artefactIDs for the sample experiment
 type ArtefactIdSource() =
@@ -217,8 +218,74 @@ type DepGraphSaveRestore(output) =
             let! restoredContent = File.ReadAllTextAsync(path) |> Async.AwaitTask
             Assert.Equal(origContent,restoredContent)
 
-        } |> toAsyncFact
+        }
+
+
+    [<Fact>]
+    member s.``API storage list: default is local``() =
+        async {
+            let! storages,defStorage = API.configListStoragesAsync s.FullPath
+
+            Assert.Equal(1,storages.Count)
+
+            let localKey = storages |> Map.toSeq |> Seq.map fst |> Seq.head
+
+            Assert.Equal("local",localKey)
+
+            Assert.Equal(localKey,defStorage)
+        }
+
+    [<Fact>]
+    member s.``API storage add local: addes second storage``() =
+        async {
+            let newPath = Path.Combine(s.FullPath, "storage2")
+
+            Directory.CreateDirectory(newPath) |> ignore
+            
+            do! API.configAddDirectoryStorageAsync s.FullPath "local2"  newPath
+
+            let! storages2,defStorage2 = API.configListStoragesAsync s.FullPath
+
+            Assert.Equal(2,storages2.Count)
+            Assert.Equal("local",defStorage2)
+
+            let secondDef = Map.find "local2" storages2
+            match secondDef with
+            |   Config.Directory p -> Assert.Equal(newPath, p)
+            |   _ -> Assert.True(false, "expected to see local dir storage definition")
+        }
+
+    [<Fact>]
+    member s.``API storage set default: changes default storage``() =
+        async {
+            let newPath = Path.Combine(s.FullPath, "storage2")
+
+            Directory.CreateDirectory(newPath) |> ignore
+            
+            do! API.configAddDirectoryStorageAsync s.FullPath "local2" newPath
+            
+            let! res = API.configStorageSetDefault s.FullPath "local2"
+
+            assertResultOk res
+
+            let! _,defStorage = API.configListStoragesAsync s.FullPath
+
+            Assert.Equal("local2", defStorage)
+        }
     
+    [<Fact>]
+    member s.``API storage remove: default is removed``() =
+        async {            
+            do! API.configRemoveStorageAsync s.FullPath "local"
+
+            let! storages,defStorage = API.configListStoragesAsync s.FullPath
+
+            Assert.Equal(0,storages.Count)
+
+            // default is still set to local
+            Assert.Equal("local",defStorage)
+        }
+
     [<Theory>] // gitgnore must always hold the entries with straight slashes (even on windows)
     [<InlineData(@"dir1/test2/")>]
     [<InlineData(@"dir2/test3.txt")>]
