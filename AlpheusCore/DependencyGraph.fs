@@ -9,6 +9,7 @@ open ItisLab.Alpheus
 open ItisLab.Alpheus.PathUtils
 open Angara.Data
 open FSharp.Control
+open Logger
 
 // Disable warning on requiring to override GetHashCode in case of Equals overriding
 // As I want vertices to be alphnumerically sorted, but compared by reference
@@ -231,6 +232,7 @@ and LinkToArtefact(artefact: ArtefactVertex, expectedVersion: ArtefactVersion) =
         async {
             let! actual = artefact.ActualVersion.Get index
             lock lockObj (fun() -> expected <- expected |> MdMap.add index actual)
+            logVerbose DependencyGraph (sprintf "ExpectActualVersionAsync: %d" (expected|>MdMap.toShallowSeq|>Seq.length))
             return ()
         }
 
