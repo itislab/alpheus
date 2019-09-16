@@ -74,17 +74,40 @@ let configAddAzureStorageAsync experimentRoot storageName accName accKey contain
         do! Config.saveConfigAsync config
     }
 
-/// Returns the configured artefact storages for the experiment folder supplied
+/// Returns the (configured artefact storages * defaultStorage name) for the experiment folder supplied
 let configListStoragesAsync expereimentRoot =
     async {
         let! config = Config.openExperimentDirectoryAsync expereimentRoot
-        return config.ConfigFile.Storage
+        let defaultStorageName = config.ConfigFile.DefaultStorage
+        return config.ConfigFile.Storage, defaultStorageName
+    }
+
+//
+let configStorageSetDefault experimentRoot newDefaultStorageName =
+    async {
+        let! config = Config.openExperimentDirectoryAsync experimentRoot
+        let newDefaultExists = Map.containsKey newDefaultStorageName config.ConfigFile.Storage
+
+        if newDefaultExists then            
+            let configFile =
+                {
+                    config.ConfigFile with
+                        DefaultStorage = newDefaultStorageName
+                }
+            let config = {
+                config with
+                    ConfigFile = configFile
+            }
+            do! Config.saveConfigAsync config
+            return Ok()
+        else
+            return Error(UserError(sprintf "Storage name you've specified \"%s\" is not configured. Add storage configuration first and then set is as default" newDefaultStorageName))        
     }
 
 /// Removed the storage by its name from the experiment folder specified
-let configRemoveStorageAsync expereimentRoot storageToRemove =
+let configRemoveStorageAsync experimentRoot storageToRemove =
     async {
-        let! config = Config.openExperimentDirectoryAsync expereimentRoot
+        let! config = Config.openExperimentDirectoryAsync experimentRoot
         let configFile =
             {
                 config.ConfigFile with
@@ -209,102 +232,120 @@ let restoreAsync (experimentRoot, artefactId : ArtefactId) =
 
 /// Saves the supplied artefact to the supplied storage.
 /// saveAll means to save all dependencies for the specified artefact
-let saveAsync (experimentRoot, artefactId) storageName saveAll =    
+let saveAsync (experimentRoot, artefactId) specifiedStorageName saveAll =    
     let alphFilePath = artefactId |> idToAlphFileFullPath experimentRoot
     let artefactPath = artefactId |> idToFullPath experimentRoot
 
     let toFullPath = idToFullPath experimentRoot
     
     async {
-        let! alphFile =
-            async {
-                let! loadResults = AlphFiles.tryLoadAsync alphFilePath                                                                        
-                match loadResults with
-                | None ->                                
-                    // This is a "source" file without .alph file created yet. creating an .alphfile for it                                                                                
-                    let! hashResult = Hash.hashVectorPathAndSave artefactPath
-                    let snapshotSection : AlphFiles.VersionedArtefact =
-                        { Hash = hashResult
-                          RelativePath = relativePath alphFilePath artefactPath }
-                    return 
-                        {
-                          FileFormatVersion = Versioning.AlphFileCurrentVersion
-                          IsTracked = true
-                          Origin = SourceOrigin snapshotSection }
-                | Some(alphFile) ->
-                    return { alphFile with IsTracked = true }                             
-        }                                       
-        do! AlphFiles.saveAsync alphFile alphFilePath
+        let! config = Config.openExperimentDirectoryAsync experimentRoot
+        let isStorageRegistered name =
+            config.ConfigFile.Storage |> Map.toSeq |> Seq.map fst |> Seq.exists (fun x -> x = name)
+
+        let storageName = 
+            match specifiedStorageName with
+            |   Some(name) -> name
+            |   None ->
+                config.ConfigFile.DefaultStorage
+                // extracting default storage
+        if isStorageRegistered storageName then
+            let! alphFile =
+                async {
+                    let! loadResults = AlphFiles.tryLoadAsync alphFilePath                                                                        
+                    match loadResults with
+                    | None ->                                
+                        // This is a "source" file without .alph file created yet. creating an .alphfile for it                                                                                
+                        let! hashResult = Hash.hashVectorPathAndSave artefactPath
+                        let snapshotSection : AlphFiles.VersionedArtefact =
+                            {   Hash = hashResult
+                                RelativePath = relativePath alphFilePath artefactPath }
+                        return 
+                            {   FileFormatVersion = Versioning.AlphFileCurrentVersion
+                                IsTracked = true
+                                Origin = SourceOrigin snapshotSection }
+                    | Some(alphFile) ->
+                        return { alphFile with IsTracked = true }                             
+            }                                       
+            do! AlphFiles.saveAsync alphFile alphFilePath
                     
-        let! g = buildDependencyGraphAsync experimentRoot [artefactId]                                                                            
+            let! g = buildDependencyGraphAsync experimentRoot [artefactId]                                                                            
                     
-        let artefactsToSaveResult =
-            if saveAll then
-                Ok (g.Artefacts |> Seq.filter (fun art -> art.IsTracked) |> Array.ofSeq)
-            else
-                match g.GetArtefact artefactId with
-                |   Ok artefactVertex -> Ok [| artefactVertex |]
-                |   Error e -> Error e
+            let artefactsToSaveResult =
+                if saveAll then
+                    Ok (g.Artefacts |> Seq.filter (fun art -> art.IsTracked) |> Array.ofSeq)
+                else
+                    match g.GetArtefact artefactId with
+                    |   Ok artefactVertex -> Ok [| artefactVertex |]
+                    |   Error e -> Error e
         
-        match artefactsToSaveResult with
-        |   Ok artefactsToSave ->
-            let! config = Config.openExperimentDirectoryAsync experimentRoot
-            let storageToSaveToOption =                                
-                config.ConfigFile.Storage |> Map.toSeq |> Seq.filter (fun pair -> let k,_ = pair in k=storageName) |> Seq.map snd |> Seq.tryHead
+            match artefactsToSaveResult with
+            |   Ok artefactsToSave ->
+                let! config = Config.openExperimentDirectoryAsync experimentRoot
+                let storageToSaveToOption =                                
+                    config.ConfigFile.Storage |> Map.toSeq |> Seq.filter (fun pair -> let k,_ = pair in k=storageName) |> Seq.map snd |> Seq.tryHead
           
-            match storageToSaveToOption with
-            | Some storageToSaveTo ->
-                let save = StorageFactory.getStorageSaver experimentRoot storageToSaveTo
-                let! saveDescriptors = 
-                    async {
-                        let artToSaveDescriptorsAsync (art:ArtefactVertex) =
-                            async {
-                                let! pathAndVersionToSave = 
-                                    art.Id
-                                    |> enumerateItems experimentRoot 
-                                    |> MdMap.toSeq 
-                                    |> Seq.map(fun (index, path) -> 
-                                        async {
-                                            let! v = art.ActualVersion.Get index
-                                            return path, v
-                                        })
-                                    |> Async.Parallel
-                                let absentChooser pair =
-                                    let path,verOpt = pair
-                                    match verOpt with
-                                    |   None -> Some(path)
-                                    |   Some(_) -> None
-                                let absentPaths = Array.choose absentChooser pathAndVersionToSave
-                                if Array.length absentPaths>0 then 
-                                    Logger.logWarning LogCategory.API (sprintf "The following paths are not saved, as they are not on disk: %A" absentPaths)
-                                let presentChooser pair = 
-                                    let path,verOpt = pair
-                                    match verOpt with
-                                    |   None -> None
-                                    |   Some(v) -> Some(path,v)
-                                return Array.choose presentChooser pathAndVersionToSave
-                            }
-                        let! versionedArtefactsToSave = artefactsToSave |> Seq.map artToSaveDescriptorsAsync |> Array.ofSeq |> Async.Parallel
-                        return versionedArtefactsToSave |> Seq.concat |> Seq.toArray
-                    }
+                match storageToSaveToOption with
+                | Some storageToSaveTo ->
+                    let save = StorageFactory.getStorageSaver experimentRoot storageToSaveTo
+                    let! saveDescriptors = 
+                        async {
+                            let artToSaveDescriptorsAsync (art:ArtefactVertex) =
+                                async {
+                                    let! pathAndVersionToSave = 
+                                        art.Id
+                                        |> enumerateItems experimentRoot 
+                                        |> MdMap.toSeq 
+                                        |> Seq.map(fun (index, path) -> 
+                                            async {
+                                                let! v = art.ActualVersion.Get index
+                                                return path, v
+                                            })
+                                        |> Async.Parallel
+                                    let absentChooser pair =
+                                        let path,verOpt = pair
+                                        match verOpt with
+                                        |   None -> Some(path)
+                                        |   Some(_) -> None
+                                    let absentPaths = Array.choose absentChooser pathAndVersionToSave
+                                    if Array.length absentPaths>0 then 
+                                        Logger.logWarning LogCategory.API (sprintf "The following paths are not saved, as they are not on disk: %A" absentPaths)
+                                    let presentChooser pair = 
+                                        let path,verOpt = pair
+                                        match verOpt with
+                                        |   None -> None
+                                        |   Some(v) -> Some(path,v)
+                                    return Array.choose presentChooser pathAndVersionToSave
+                                }
+                            let! versionedArtefactsToSave = artefactsToSave |> Seq.map artToSaveDescriptorsAsync |> Array.ofSeq |> Async.Parallel
+                            return versionedArtefactsToSave |> Seq.concat |> Seq.toArray
+                        }
                     
                     
-                let! _ = save saveDescriptors
+                    let! _ = save saveDescriptors
 
-                // adding the saved artefact into the gitignore
-                let newIgnoreEntry (art:ArtefactVertex) = art.Id |> idToExperimentPath |> unixPath
-                let newIgnoreEntries = artefactsToSave |> Array.map newIgnoreEntry
-                let gitIgnorePath = Path.Combine(experimentRoot,".gitignore")
-                do! GitIgnoreManager.addEntriesAsync gitIgnorePath newIgnoreEntries
+                    // adding the saved artefact into the gitignore
+                    let newIgnoreEntry (art:ArtefactVertex) = art.Id |> idToExperimentPath |> unixPath
+                    let newIgnoreEntries = artefactsToSave |> Array.map newIgnoreEntry
+                    let gitIgnorePath = Path.Combine(experimentRoot,".gitignore")
+                    do! GitIgnoreManager.addEntriesAsync gitIgnorePath newIgnoreEntries
 
-                return Ok()
-            | None ->
-                // specified storage is not found
-                let storageNames = config.ConfigFile.Storage |> Map.toSeq |> Seq.map fst |> List.ofSeq
-                let errMsg = 
-                    sprintf "The storage name you've specified (\"%s\") does not exist. Please use one of the available storages %A or register a new one." storageName storageNames
-                return Error (UserError errMsg)
-        |   Error er -> return Error er
+                    return Ok()
+                | None ->
+                    // specified storage is not found
+                    let storageNames = config.ConfigFile.Storage |> Map.toSeq |> Seq.map fst |> List.ofSeq
+                    let errMsg = 
+                        sprintf "The storage name you've specified (\"%s\") does not exist. Please use one of the available storages %A or register a new one." storageName storageNames
+                    return Error (UserError errMsg)
+            |   Error er -> return Error er
+        else
+            let isDefault = Option.isNone specifiedStorageName
+            let error =
+                if isDefault then
+                    sprintf "The default storage named \"%s\" is not configured. Please, either add storage configuration \"%s\" or set another default storage" storageName storageName
+                else
+                    sprintf "The storage you've specified \"%s\" is not configured. Please configure it with \"alpheus config storage setDefault\"" storageName
+            return Error(UserError error)
     }
 
 

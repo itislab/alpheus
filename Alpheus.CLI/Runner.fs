@@ -30,15 +30,24 @@ let run (programName:string) (parseResults:ParseResults<AlpheusArgs>) : Result<u
                     let name,accName,accKey,container = storageArgs.GetResult <@ AddAzure @>                                        
                     do! API.configAddAzureStorageAsync experimentRoot name accName accKey container
                     return Ok()
+                elif storageArgs.Contains SetDefault then
+                    let newDefaultStorage = storageArgs.GetResult <@ SetDefault @>
+                    return! API.configStorageSetDefault experimentRoot newDefaultStorage
                 elif storageArgs.Contains List then
                     let sb = StringBuilder()
+                    let! storages,defaultStorageName = API.configListStoragesAsync experimentRoot
                     let printer name storage =
                         let storageStr = 
                             match storage with
                             |   Config.Directory(path) -> sprintf "Local directory \"%s\"" path
                             |   Config.Azure(def) -> sprintf "Azure BLOB accountName:%s container:%s" def.AccountName def.ContainerName
-                        sb.AppendLine(sprintf "%20s\t\t%s" name storageStr) |> ignore
-                    let! storages = API.configListStoragesAsync experimentRoot
+                        let nameExt =
+                            if name = defaultStorageName then
+                                sprintf "%s [default]" name
+                            else
+                                name
+                        sb.AppendLine(sprintf "%20s\t\t%s" nameExt storageStr) |> ignore
+                    
                     Map.iter printer storages
                     printfn "You have following storages configured:\n%s" (sb.ToString())
                     return Ok()
@@ -97,10 +106,10 @@ let run (programName:string) (parseResults:ParseResults<AlpheusArgs>) : Result<u
         result {
             let saveArgs = parseResults.GetResult <@ Save @>
             let saveAll = saveArgs.Contains AllUnsaved 
-            let storageName = saveArgs.GetResult <@ SaveArgs.Storage @>
+            let specifiedStorageName = saveArgs.TryGetResult <@ SaveArgs.Storage @>
             let inputpath = saveArgs.GetResult <@ SaveArgs.Path @>
             let! artefact = API.artefactFor inputpath
-            return! API.saveAsync artefact storageName saveAll |> Async.RunSynchronously
+            return! API.saveAsync artefact specifiedStorageName saveAll |> Async.RunSynchronously
         }
     elif parseResults.Contains Build then                
         BuildCommand.run (parseResults.GetResult <@ Build @>)

@@ -57,7 +57,7 @@ type SingleUseOneTimeDirectory(output:ITestOutputHelper) =
     /// One-time single-use unique named directory to carry on tests within
     member s.RelativeExperimentRoot = relativePath
 
-    /// Full path of the experiment root
+    /// Full path of the experiment root - One-time single-use unique named directory to carry on tests within 
     member s.ExperimentRoot = fullPath
 
     member s.Platform = if isTestRuntimeWindows then TargetPlatform.Windows else TargetPlatform.Linux
