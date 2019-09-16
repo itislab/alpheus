@@ -21,7 +21,7 @@ let main argv =
         ExecuteCommand.terminateAllSubprocesses()))
 
     try 
-        let parseResults = parser.ParseCommandLine(argv,ignoreMissing=false,ignoreUnrecognized=true,raiseOnUsage=false)
+        let parseResults = parser.ParseCommandLine(argv, ignoreMissing=false, ignoreUnrecognized=true, raiseOnUsage=true)
         match parseResults |> run programName with
         | Ok() -> 0
         | Error(er) ->

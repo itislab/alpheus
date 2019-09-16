@@ -15,12 +15,14 @@ type StorageArgs =
     |   [<First>]   AddAzure of name:string * AccountName:string * AccountKey:string * ContainerName:string
     |   [<First>]   Remove of name:string
     |   [<First>]   List
+    |   [<First>]   SetDefault of name:string
 with
     interface IArgParserTemplate with
         member s.Usage =
             match s with
             |   AddLocal _ -> "Register local directoy artefact storage (or replaces existing one with the same name)"
             |   AddAzure _ -> "Register Azure Blob artefact storage (or replaces existing one with the same name)"
+            |   SetDefault _ -> "Set particular storage to be used for saving artefacts by default"
             |   Remove _ -> "Remove specified artefact storage"
             |   List -> "Prints configured storages"
 
@@ -71,14 +73,14 @@ with
 type SaveArgs =
     |   AllUnsaved
     |   [<Mandatory; MainCommand>]Path of ``File or Dir``:string
-    |   [<Mandatory>] Storage of ``storage name``:string
+    |   Storage of ``storage name``:string
 with
     interface IArgParserTemplate with
         member s.Usage =
             match s with
             |   Path _ -> "File/Directory to save in storage(s)"
             |   AllUnsaved -> "Save all of the artefacts with status unsaved"
-            |   Storage _ -> "Where to send a artefact copy. If not specified, the artefacts are sent to all registered storages"
+            |   Storage _ -> "Where to send a artefact copy. If not specified, the artefacts are sent to the default storage"
 
 type RestoreArgs =
     |   [<Mandatory; MainCommand>]Path of ``File or Dir``:string
@@ -86,7 +88,7 @@ with
     interface IArgParserTemplate with
         member s.Usage =
             match s with
-            |   Path _ -> "File/Directory to restore from"            
+            |   Path _ -> "File/Directory to restore"            
 
 
 [<CliPrefix(CliPrefix.None)>]

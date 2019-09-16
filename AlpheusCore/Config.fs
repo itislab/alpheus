@@ -19,6 +19,8 @@ type Storage =
 type ConfigFile = {
     FileFormatVersion: int
     Storage : Map<string,Storage>
+    // the name of the storage that is used if explicit storage name is not specified during the storage related commands
+    DefaultStorage: string
 }
 
 type Config = {
@@ -34,6 +36,7 @@ let defaultConfigFile = {
         [
             ("local",Directory(".alpheus/storage"))
         ] |> Map.ofList
+    DefaultStorage = "local"
 }
 
 
