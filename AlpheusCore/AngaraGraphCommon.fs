@@ -67,11 +67,19 @@ let rec internal toJaggedArrayOrValue (mapValue: (string list * 'a) -> 'c) (inde
                 | MdMapTree.Map _ -> toJaggedArrayOrValue mapValue newIndex t 
                 | MdMapTree.Value _ -> failwith "Data is incomplete and has missing elements"))
 
-
+/// Truncates `index` so its length is `rank`, if rank is less or equal to the length of the index.
+/// Throws if the rank is greater than the length of the index.
+let rec internal truncateIndex (rank: int) (index: string list)  = 
+    if rank < 0 then failwith "Rank is negative"
+    else if rank = 0 then []
+    else // rank > 0
+        match index with
+        | [] -> failwith "Rank is greater than the length of the index"
+        | head :: tail -> head :: (truncateIndex (rank-1) tail)
 
 let extractActualVersionsFromLinks index links =
     links
-    |> Seq.map (fun (a:LinkToArtefact) -> a.Artefact.ActualVersion.Resolve index)
+    |> Seq.map (fun (a:LinkToArtefact) -> index |> truncateIndex a.Artefact.Rank |> a.Artefact.ActualVersion.Get)
     |> Async.Parallel
 
 let extractExpectedVersionsFromLinks index links =

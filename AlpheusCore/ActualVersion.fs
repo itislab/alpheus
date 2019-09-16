@@ -12,6 +12,10 @@ open FSharp.Control
 type ActualArtefactVersion(id: ArtefactId, experimentRoot: string) = 
     let mutable version = MdMap.empty<string, Lazy<Task<HashString option>>>
     let versionLock = obj()
+    let rank = Artefacts.rank id
+
+    let checkRank (index: string list) =
+        if index.Length <> rank then invalidArg "index" (sprintf "Rank of artefact is %d while index length is %d" rank index.Length)
 
     let readItemVersionAsync (index: string list) =
         async {
@@ -30,26 +34,25 @@ type ActualArtefactVersion(id: ArtefactId, experimentRoot: string) =
     member s.Id = id
 
     /// Invalidates the given artefact instance version.
-    member s.Invalidate(index: string list) = 
-       lock versionLock (fun() -> version <- version |> MdMap.add index (lazyReadVersion index))
+    member s.Invalidate(index: string list) =
+        checkRank index
+        lock versionLock (fun() -> version <- version |> MdMap.add index (lazyReadVersion index))
 
     /// Gets an actual version for the given exact index.
     member s.Get (index: string list) : Async<HashString option> =
-        let myVersion = version
-        match myVersion |> MdMap.tryFind index with
-        | Some v -> v.Value |> Async.AwaitTask
-        | None -> 
-            s.Invalidate index
-            s.Get index
-
-    /// Gets an actual version for the given index which is either exact or has more dimensions than the artefact.
-    member s.Resolve (index: string list) : Async<HashString option> =
-        let myVersion = version
-        match myVersion |> Utils.resolveIndex index with
-        | Some v -> v.Value |> Async.AwaitTask
-        | None -> 
-            s.Invalidate index
-            s.Get index
+        checkRank index
+        let factory = 
+            match version |> MdMap.tryFind index with
+            | Some v -> v
+            | None -> 
+                lock versionLock (fun () ->
+                    match version |> MdMap.tryFind index with
+                    | Some v -> v
+                    | None ->
+                        s.Invalidate index
+                        version |> MdMap.find index
+                )
+        factory.Value |> Async.AwaitTask            
 
     override s.ToString() = 
         let myVersion = version
