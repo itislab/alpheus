@@ -15,8 +15,8 @@ type LogCategory =
     | Storage
     /// Higher level API
     | API
-    /// To be used in the Alpheus experiment folder management and manipulation
-    | ExperimentFolder
+    /// Hash management
+    | Hash
     /// Dependency graph manipulation and management
     | DependencyGraph
     /// Managing (updating) the .gitignore file

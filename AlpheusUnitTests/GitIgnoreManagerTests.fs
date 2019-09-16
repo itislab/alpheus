@@ -119,7 +119,7 @@ type RecordsMenagement(output) =
     /// Used to in many tests
     member private s.callAddEntriesAsync testCase =
         async {
-            let gitIgnoreFile = Path.Combine(s.Path,"gitignore.txt")
+            let gitIgnoreFile = Path.Combine(s.RelativeExperimentRoot,"gitignore.txt")
 
             let toBeAddedLines = testCase.toBeAddedEntries
 

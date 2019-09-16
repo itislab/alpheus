@@ -18,7 +18,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Versioning.fs" />
-    <Compile Include="AsyncUtils.fs" />
+    <Compile Include="Utils.fs" />
     <Compile Include="CustomSerializers.fs" />
     <Compile Include="ResultBuilder.fs" />
     <Compile Include="Logger.fs" />
@@ -36,6 +36,7 @@
     <Compile Include="Config.fs" />
     <Compile Include="ArtefactArchiver.fs" />
     <Compile Include="StorageFactory.fs" />
+    <Compile Include="ActualVersion.fs" />
     <Compile Include="DependencyGraph.fs" />
     <Compile Include="DependencyGraphUtils.fs" />
     <Compile Include="DependencyGraphToAngaraWrapper.fs" />

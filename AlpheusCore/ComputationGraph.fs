@@ -10,6 +10,7 @@ open Angara.States
 open ItisLab.Alpheus.DependencyGraph
 open ItisLab.Alpheus.PathUtils
 open ItisLab.Alpheus.AngaraGraphCommon
+open FSharp.Control
 
 
 type ArtefactItem =
@@ -25,49 +26,18 @@ type SourceMethod(source: SourceVertex, experimentRoot,
         async {
             let expectedArtefact = source.Output
             let artefact = expectedArtefact.Artefact
+            let items = artefact.Id |> PathUtils.enumerateItems experimentRoot
 
-            let ensureScalar (artefactVersion:ArtefactVersion) =
-                if not artefactVersion.IsScalar then
-                    failwithf "Source artefacts can't be vectored: %A" artefact.Id
-                else
-                    artefactVersion.AsScalar()
-
-            let expectedVersionOpt = expectedArtefact.ExpectedVersion |> ensureScalar
-        
-            let! expectedV =
-                async {
-                    match expectedVersionOpt with
-                    | None ->
-                        // this could be file/dir without alph file.
-                        let! v = artefact.ActualVersionAsync
-                        return (v |> ensureScalar).Value
-                    | Some(v) -> return v
-                }
-
-            let! actualVersionRes = artefact.ActualVersionAsync
-            let actualVersionOpt = ensureScalar actualVersionRes
-
-            match actualVersionOpt with
-            |   None -> // The artefact does not exist on disk
-                // This may be OK in case the specified version is available in storages
-                // todo: note that in case of vectore, only some of the items can exists/restore/etc.
-                let! presenceCheck = checkStoragePresence [|expectedV|]
-                if presenceCheck.[0] then
-                    // If some methods needs this artefact as input, the artefact will be restored during the method execution
-                    ()
-                else
-                    failwithf "Source artefact %A is not on disk and can't be found in any of the storages. Consider adding additional storages to look in. Can't proceed with computation." artefact.Id
-            |   Some(_) ->
-                // we now consider actual version as expected
-                source.Output.ExpectActualVersionAsync() |> Async.RunSynchronously
-                // if alph file exists on disk (e.g. isTracked), we need to re-save it to update the expected version
-                if artefact.IsTracked then
-                    artefact.SaveAlphFile()
+            // if alph file exists on disk (e.g. isTracked), we need to re-save it to update the expected version
+            let alphExists = source.Output.Artefact.Id |> PathUtils.idToAlphFileFullPath source.ExperimentRoot |> File.Exists
+            if alphExists then
+                let expect = items |> MdMap.toSeq |> Seq.map fst |> Seq.map source.Output.ExpectActualVersionAsync 
+                do! expect |> Async.Parallel |> Async.Ignore
+                artefact.SaveAlphFile()            
             
             // Output of the method is an scalar or a vector of full paths to the data of the artefact.
             let outputArtefact : Artefact =
-                artefact.Id 
-                |> PathUtils.enumerateItems experimentRoot
+                items
                 |> MdMap.toTree
                 |> toJaggedArrayOrValue (fun (index, fullPath) -> { FullPath = fullPath; Index = index }) []
         
@@ -80,7 +50,8 @@ type CommandMethod(command: CommandLineVertex,
                     checkStoragePresence: HashString seq -> Async<bool array>,
                     restoreFromStorage: (HashString*string) array -> Async<unit>) = // version*filename
     inherit AngaraGraphNode(DependencyGraph.Command command)  
-    
+
+
     override s.Execute(inputs, _) = // ignoring checkpoints
         async{
             // Rules of execution

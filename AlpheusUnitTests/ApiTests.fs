@@ -63,7 +63,7 @@ type DepGraphConstruction(output) =
     member s.``dependencyGraph loads for separate artefacts``(artefactId:ArtefactId) =
         async {
             Logger.logInfo Logger.Test (sprintf "testing %A" artefactId)
-            let! graph = buildDependencyGraphAsync s.RootPath [artefactId]
+            let! graph = buildDependencyGraphAsync s.ExperimentRoot [artefactId]
             Assert.True(graph.ArtefactsCount>0,"Graph must be non-empty")
             } |> toAsyncFact
 
@@ -71,7 +71,7 @@ type DepGraphConstruction(output) =
     member s.``dependencyGraph loads for all at once``() =
         async {
             Logger.logInfo Logger.Test (sprintf "testing %A" s.ArtefactIds)
-            let! graph = buildDependencyGraphAsync s.RootPath (List.ofArray s.ArtefactIds)
+            let! graph = buildDependencyGraphAsync s.ExperimentRoot (List.ofArray s.ArtefactIds)
             Assert.True(graph.ArtefactsCount>0,"Graph must be non-empty")
             } |> toAsyncFact
 
@@ -82,9 +82,9 @@ type DepGraphConstruction(output) =
         async {
             // preparing and running build command
             let inputIDs = testCase.inputsIndices |> Array.map (fun idx -> s.ArtefactIds.[idx].ToString()) |> List.ofArray
-            let inputPaths = inputIDs |> List.map (fun x -> Path.Combine(s.Path,x))
-            let outputPaths = testCase.OutputIDs |> Array.map (fun x -> Path.Combine(s.Path,x)) |> List.ofArray
-            let! buildResult = buildAsync s.RootPath inputPaths outputPaths "../copy_prog $in1 $out1" false
+            let inputPaths = inputIDs |> List.map (fun x -> Path.Combine(s.RelativeExperimentRoot,x))
+            let outputPaths = testCase.OutputIDs |> Array.map (fun x -> Path.Combine(s.RelativeExperimentRoot,x)) |> List.ofArray
+            let! buildResult = buildAsync s.ExperimentRoot inputPaths outputPaths "../copy_prog $in1 $out1" false
             assertResultOk buildResult
         } |> toAsyncFact
 
@@ -95,16 +95,16 @@ type DepGraphConstruction(output) =
         async {
             // preparing and running build command
             let inputIDs = testCase.inputsIndices |> Array.map (fun idx -> s.ArtefactIds.[idx].ToString()) |> List.ofArray
-            let inputPaths = inputIDs |> List.map (fun x -> Path.Combine(s.Path,x))
-            let outputPaths = testCase.OutputIDs |> Array.map (fun x -> Path.Combine(s.Path,x)) |> List.ofArray
-            let! buildResult = buildAsync s.RootPath inputPaths outputPaths "../copy_prog $in1 $out1" false
+            let inputPaths = inputIDs |> List.map (fun x -> Path.Combine(s.RelativeExperimentRoot,x))
+            let outputPaths = testCase.OutputIDs |> Array.map (fun x -> Path.Combine(s.RelativeExperimentRoot,x)) |> List.ofArray
+            let! buildResult = buildAsync s.ExperimentRoot inputPaths outputPaths "../copy_prog $in1 $out1" false
             assertResultOk buildResult
 
             //let alphFiles = List.map artefactPathToAlphFilePath outputPaths
             // checking grpah for each newly created output artefact
             let checkGraphAsync outputId expectedMethodCount expectedArtefactCount = 
                 async {
-                    let! graph = buildDependencyGraphAsync s.RootPath [outputId]
+                    let! graph = buildDependencyGraphAsync s.ExperimentRoot [outputId]
                     Assert.Equal(expectedMethodCount,graph.MethodsCount)
                     Assert.Equal(expectedArtefactCount,graph.ArtefactsCount)
                 }
@@ -120,16 +120,16 @@ type DepGraphConstruction(output) =
         async {
             // preparing and running build command
             let inputIDs = testCase.inputsIndices |> Array.map (fun idx -> s.ArtefactIds.[idx]) |> List.ofArray
-            let inputPaths = inputIDs |> List.map (fun x -> Path.Combine(s.Path,x.ToString()))
-            let outputPaths = testCase.OutputIDs |> Array.map (fun x -> Path.Combine(s.Path,x)) |> List.ofArray
-            let! buildResult = buildAsync s.RootPath inputPaths outputPaths "../copy_prog $in1 $out1" false
+            let inputPaths = inputIDs |> List.map (fun x -> Path.Combine(s.RelativeExperimentRoot,x.ToString()))
+            let outputPaths = testCase.OutputIDs |> Array.map (fun x -> Path.Combine(s.RelativeExperimentRoot,x)) |> List.ofArray
+            let! buildResult = buildAsync s.ExperimentRoot inputPaths outputPaths "../copy_prog $in1 $out1" false
             assertResultOk buildResult
             Logger.logInfo Logger.Test "Graph is build via API call successfuly"
 
             // checking graph for each newly created output artefact
             let checkGraphAsync outputId = 
                 async {
-                    let! graph = buildDependencyGraphAsync s.RootPath [outputId]
+                    let! graph = buildDependencyGraphAsync s.ExperimentRoot [outputId]
                     let output = graph.Artefacts |> Seq.find (fun a -> a.Id = outputId)
                     let expectedDependecies = inputIDs |> Set.ofList
                     let actualDependecies =
@@ -148,13 +148,13 @@ type DepGraphLocalComputation(output) =
 
     [<Fact>]
     member s.``API Compute: concat 2 files``() =
-        let expRoot = s.FullPath
+        let expRoot = s.ExperimentRoot
         let savedWD = Environment.CurrentDirectory
         try
             // we will concat these files
-            File.Copy("data/cat.cmd",Path.Combine(s.Path,"cat.cmd"))
-            File.Copy("data/texturalData.txt",Path.Combine(s.Path,"1.txt"))
-            File.Copy("data/texturalData2.txt",Path.Combine(s.Path,"2.txt"))
+            File.Copy("data/cat.cmd",Path.Combine(s.RelativeExperimentRoot,"cat.cmd"))
+            File.Copy("data/texturalData.txt",Path.Combine(s.RelativeExperimentRoot,"1.txt"))
+            File.Copy("data/texturalData2.txt",Path.Combine(s.RelativeExperimentRoot,"2.txt"))
         
             // setting proper working directory
             Environment.CurrentDirectory <- expRoot
@@ -196,10 +196,10 @@ type DepGraphSaveRestore(output) =
     member s.``API Save-Restore: file artefact saves & restores``() =
         async {
             let artId = s.ArtefactIds.[0]
-            let path = artId |> PathUtils.idToFullPath s.FullPath
+            let path = artId |> PathUtils.idToFullPath s.ExperimentRoot
 
             // local storage is available by default
-            let! saveResult =  API.saveAsync (s.FullPath, artId) (Some "local") false
+            let! saveResult =  API.saveAsync (s.ExperimentRoot, artId) (Some "local") false
             assertResultOk saveResult
              
             // saving the content for later verification
@@ -210,7 +210,7 @@ type DepGraphSaveRestore(output) =
 
             Assert.False(File.Exists(path))
 
-            let! restoreResult = API.restoreAsync (s.FullPath, artId)
+            let! restoreResult = API.restoreAsync (s.ExperimentRoot, artId)
             assertResultOk restoreResult
 
             // checking that it actually restored and it's content matches
@@ -224,7 +224,7 @@ type DepGraphSaveRestore(output) =
     [<Fact>]
     member s.``API storage list: default is local``() =
         async {
-            let! storages,defStorage = API.configListStoragesAsync s.FullPath
+            let! storages,defStorage = API.configListStoragesAsync s.ExperimentRoot
 
             Assert.Equal(1,storages.Count)
 
@@ -238,13 +238,13 @@ type DepGraphSaveRestore(output) =
     [<Fact>]
     member s.``API storage add local: addes second storage``() =
         async {
-            let newPath = Path.Combine(s.FullPath, "storage2")
+            let newPath = Path.Combine(s.ExperimentRoot, "storage2")
 
             Directory.CreateDirectory(newPath) |> ignore
             
-            do! API.configAddDirectoryStorageAsync s.FullPath "local2"  newPath
+            do! API.configAddDirectoryStorageAsync s.ExperimentRoot "local2"  newPath
 
-            let! storages2,defStorage2 = API.configListStoragesAsync s.FullPath
+            let! storages2,defStorage2 = API.configListStoragesAsync s.ExperimentRoot
 
             Assert.Equal(2,storages2.Count)
             Assert.Equal("local",defStorage2)
@@ -258,17 +258,17 @@ type DepGraphSaveRestore(output) =
     [<Fact>]
     member s.``API storage set default: changes default storage``() =
         async {
-            let newPath = Path.Combine(s.FullPath, "storage2")
+            let newPath = Path.Combine(s.ExperimentRoot, "storage2")
 
             Directory.CreateDirectory(newPath) |> ignore
             
-            do! API.configAddDirectoryStorageAsync s.FullPath "local2" newPath
+            do! API.configAddDirectoryStorageAsync s.ExperimentRoot "local2" newPath
             
-            let! res = API.configStorageSetDefault s.FullPath "local2"
+            let! res = API.configStorageSetDefault s.ExperimentRoot "local2"
 
             assertResultOk res
 
-            let! _,defStorage = API.configListStoragesAsync s.FullPath
+            let! _,defStorage = API.configListStoragesAsync s.ExperimentRoot
 
             Assert.Equal("local2", defStorage)
         }
@@ -276,9 +276,9 @@ type DepGraphSaveRestore(output) =
     [<Fact>]
     member s.``API storage remove: default is removed``() =
         async {            
-            do! API.configRemoveStorageAsync s.FullPath "local"
+            do! API.configRemoveStorageAsync s.ExperimentRoot "local"
 
-            let! storages,defStorage = API.configListStoragesAsync s.FullPath
+            let! storages,defStorage = API.configListStoragesAsync s.ExperimentRoot
 
             Assert.Equal(0,storages.Count)
 
@@ -295,10 +295,10 @@ type DepGraphSaveRestore(output) =
         async {
             let artefactId = ArtefactId.Path artIdStr
             // local storage is available by default
-            let! saveResult =  API.saveAsync (s.FullPath, artefactId) (Some "local") false
+            let! saveResult =  API.saveAsync (s.ExperimentRoot, artefactId) (Some "local") false
             assertResultOk saveResult
 
-            let gitIgnorePath = Path.Combine(s.Path,".gitignore")
+            let gitIgnorePath = Path.Combine(s.RelativeExperimentRoot,".gitignore")
 
             Assert.True(File.Exists(gitIgnorePath), ".gitignore file must be created")
 
@@ -312,7 +312,7 @@ let equalStatuses expected actual =
     let s2 = Map.toSeq actual
     Seq.forall2 (fun x y -> let idx1,v1 = x in let idx2,v2 = y in (idx1=idx2) && MdMap.equal (fun _ elem1 elem2 -> elem1=elem2) v1 v2) s1 s2
 
-type ScalarScenarios(output) =
+type ScalarScenarios(output) as this =
     inherit SingleUseOneTimeDirectory(output)
 
     let concatCommand = 
@@ -357,8 +357,8 @@ type ScalarScenarios(output) =
         async {
             let savedWD = Environment.CurrentDirectory
             try            
-                let path = Path.GetFullPath s.Path
-                Environment.CurrentDirectory <- s.Path
+                let path = Path.GetFullPath s.RelativeExperimentRoot
+                Environment.CurrentDirectory <- s.RelativeExperimentRoot
                 do! buildExperiment(path)
 
                 let res = API.compute(path, ArtefactId.Path "1_2_3.txt")
@@ -375,8 +375,8 @@ type ScalarScenarios(output) =
         async {
             let savedWD = Environment.CurrentDirectory
             try            
-                let path = Path.GetFullPath s.Path
-                Environment.CurrentDirectory <- s.Path
+                let path = Path.GetFullPath s.RelativeExperimentRoot
+                Environment.CurrentDirectory <- s.RelativeExperimentRoot
                 do! buildExperiment(path)
 
                 let res = API.status(path, ArtefactId.Path "1_2_3.txt")
@@ -403,8 +403,8 @@ type ScalarScenarios(output) =
         async {
             let savedWD = Environment.CurrentDirectory
             try            
-                let path = Path.GetFullPath s.Path
-                Environment.CurrentDirectory <- s.Path
+                let path = Path.GetFullPath s.RelativeExperimentRoot
+                Environment.CurrentDirectory <- s.RelativeExperimentRoot
                 do! buildExperiment(path)
                 output.WriteLine("TEST: experiment graph is constructed")
                 
@@ -434,8 +434,8 @@ type ScalarScenarios(output) =
         async {
             let savedWD = Environment.CurrentDirectory
             try            
-                let path = Path.GetFullPath s.Path
-                Environment.CurrentDirectory <- s.Path
+                let path = Path.GetFullPath s.RelativeExperimentRoot
+                Environment.CurrentDirectory <- s.RelativeExperimentRoot
                 
                 do! buildExperiment(path)
                 output.WriteLine("TEST: experiment graph is constructed")
@@ -470,8 +470,8 @@ type ScalarScenarios(output) =
         async {
             let savedWD = Environment.CurrentDirectory
             try            
-                let path = Path.GetFullPath s.Path
-                Environment.CurrentDirectory <- s.Path
+                let path = Path.GetFullPath s.RelativeExperimentRoot
+                Environment.CurrentDirectory <- s.RelativeExperimentRoot
                 
                 do! buildExperiment(path)
                 output.WriteLine("TEST: experiment graph is constructed")
@@ -503,8 +503,8 @@ type ScalarScenarios(output) =
         async {
             let savedWD = Environment.CurrentDirectory
             try            
-                let path = Path.GetFullPath s.Path
-                Environment.CurrentDirectory <- s.Path
+                let path = Path.GetFullPath s.RelativeExperimentRoot
+                Environment.CurrentDirectory <- s.RelativeExperimentRoot
                 
                 do! buildExperiment(path)
                 output.WriteLine("TEST: experiment graph is constructed")
@@ -536,8 +536,8 @@ type ScalarScenarios(output) =
         async {
             let savedWD = Environment.CurrentDirectory
             try            
-                let path = Path.GetFullPath s.Path
-                Environment.CurrentDirectory <- s.Path
+                let path = Path.GetFullPath s.RelativeExperimentRoot
+                Environment.CurrentDirectory <- s.RelativeExperimentRoot
                     
                 do! buildExperiment(path)
                 output.WriteLine("TEST: experiment graph is constructed")
@@ -573,8 +573,8 @@ type ScalarScenarios(output) =
         async {
             let savedWD = Environment.CurrentDirectory
             try            
-                let path = Path.GetFullPath s.Path
-                Environment.CurrentDirectory <- s.Path
+                let path = Path.GetFullPath s.RelativeExperimentRoot
+                Environment.CurrentDirectory <- s.RelativeExperimentRoot
                 
                 do! buildExperiment(path)
                 output.WriteLine("TEST: experiment graph is constructed")
@@ -607,8 +607,8 @@ type ScalarScenarios(output) =
         async {
             let savedWD = Environment.CurrentDirectory
             try            
-                let path = Path.GetFullPath s.Path
-                Environment.CurrentDirectory <- s.Path
+                let path = Path.GetFullPath s.RelativeExperimentRoot
+                Environment.CurrentDirectory <- s.RelativeExperimentRoot
                 
                 do! buildExperiment(path)
                 output.WriteLine("TEST: experiment graph is constructed")
@@ -645,8 +645,8 @@ type ScalarScenarios(output) =
         async {
             let savedWD = Environment.CurrentDirectory
             try            
-                let path = Path.GetFullPath s.Path
-                Environment.CurrentDirectory <- s.Path
+                let path = Path.GetFullPath s.RelativeExperimentRoot
+                Environment.CurrentDirectory <- s.RelativeExperimentRoot
                 
                 do! buildExperiment(path)
                 output.WriteLine("TEST: experiment graph is constructed")
@@ -679,8 +679,8 @@ type ScalarScenarios(output) =
         async {
             let savedWD = Environment.CurrentDirectory
             try            
-                let path = Path.GetFullPath s.Path
-                Environment.CurrentDirectory <- s.Path
+                let path = Path.GetFullPath s.RelativeExperimentRoot
+                Environment.CurrentDirectory <- s.RelativeExperimentRoot
                 
                 do! buildExperiment(path)
                 output.WriteLine("TEST: experiment graph is constructed")
@@ -720,8 +720,8 @@ type ScalarScenarios(output) =
         async {
             let savedWD = Environment.CurrentDirectory
             try            
-                let path = Path.GetFullPath s.Path
-                Environment.CurrentDirectory <- s.Path
+                let path = Path.GetFullPath s.RelativeExperimentRoot
+                Environment.CurrentDirectory <- s.RelativeExperimentRoot
                 do! buildExperiment(path)
 
                 let res = API.compute(path, ArtefactId.Path "1_2_3.txt") // first compute all
@@ -743,8 +743,8 @@ type ScalarScenarios(output) =
         async {
             let savedWD = Environment.CurrentDirectory
             try            
-                let path = Path.GetFullPath s.Path
-                Environment.CurrentDirectory <- s.Path
+                let path = Path.GetFullPath s.RelativeExperimentRoot
+                Environment.CurrentDirectory <- s.RelativeExperimentRoot
                 do! buildExperiment(path)
 
                 let res = API.compute(path, ArtefactId.Path "1_2_3.txt") // first compute all
@@ -776,8 +776,8 @@ type ScalarScenarios(output) =
         async {
             let savedWD = Environment.CurrentDirectory
             try            
-                let path = Path.GetFullPath s.Path
-                Environment.CurrentDirectory <- s.Path
+                let path = Path.GetFullPath s.RelativeExperimentRoot
+                Environment.CurrentDirectory <- s.RelativeExperimentRoot
                 do! buildExperiment(path)
 
                 assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt") // first compute all
@@ -803,8 +803,8 @@ type ScalarScenarios(output) =
         async {
             let savedWD = Environment.CurrentDirectory
             try            
-                let path = Path.GetFullPath s.Path
-                Environment.CurrentDirectory <- s.Path
+                let path = Path.GetFullPath s.RelativeExperimentRoot
+                Environment.CurrentDirectory <- s.RelativeExperimentRoot
                 do! buildExperiment(path)
 
                 assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt") // first compute all
@@ -839,8 +839,8 @@ type ScalarScenarios(output) =
         async {
             let savedWD = Environment.CurrentDirectory
             try            
-                let path = Path.GetFullPath s.Path
-                Environment.CurrentDirectory <- s.Path
+                let path = Path.GetFullPath s.RelativeExperimentRoot
+                Environment.CurrentDirectory <- s.RelativeExperimentRoot
                 do! buildExperiment(path)
 
                 assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt") // computing all
@@ -881,8 +881,8 @@ type ScalarScenarios(output) =
         async {
             let savedWD = Environment.CurrentDirectory
             try            
-                let path = Path.GetFullPath s.Path
-                Environment.CurrentDirectory <- s.Path
+                let path = Path.GetFullPath s.RelativeExperimentRoot
+                Environment.CurrentDirectory <- s.RelativeExperimentRoot
                 do! buildExperiment(path)
 
                 assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt") // computing all
@@ -915,7 +915,7 @@ type ScalarScenarios(output) =
                             ArtefactId.Path "1_2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate ArtefactLocation.Remote); 
                             ArtefactId.Path "1_2_3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.NeedsRecomputation OutdatedReason.OutputsOutdated);
                         ] |> Map.ofList
-                    Assert.True(equalStatuses expectedStatuses r)
+                    Assert.True(equalStatuses expectedStatuses r, sprintf "Expected: %A,\nactual: %A" expectedStatuses r)
                 |   Error e->
                         Assert.True(false, sprintf "Error: %A" e)
             finally
@@ -927,8 +927,8 @@ type ScalarScenarios(output) =
         async {
             let savedWD = Environment.CurrentDirectory
             try            
-                let path = Path.GetFullPath s.Path
-                Environment.CurrentDirectory <- s.Path
+                let path = Path.GetFullPath s.RelativeExperimentRoot
+                Environment.CurrentDirectory <- s.RelativeExperimentRoot
                 do! buildExperiment(path)
 
                 assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt") // computing all
@@ -966,7 +966,7 @@ type ScalarScenarios(output) =
                             ArtefactId.Path "1_2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate ArtefactLocation.Remote); 
                             ArtefactId.Path "1_2_3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate ArtefactLocation.Remote);
                         ] |> Map.ofList
-                    Assert.True(equalStatuses expectedStatuses r)
+                    Assert.True(equalStatuses expectedStatuses r, sprintf "Expected: %A,\nactual: %A" expectedStatuses r)
                 |   Error e->
                         Assert.True(false, sprintf "Error: %A" e)
             finally

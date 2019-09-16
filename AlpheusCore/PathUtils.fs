@@ -197,3 +197,9 @@ let rec applyIndex (index: string list) (path: string) =
         else 
             let newCommand = path.Substring(0, idx) + head + path.Substring(idx+1)
             applyIndex tail newCommand
+
+
+/// Creates all non-existing directories for the given path.
+let ensureDirectories (outputPath: string) =
+    let dirPath = if isDirectory outputPath then outputPath else Path.GetDirectoryName(outputPath)
+    Directory.CreateDirectory(dirPath) |> ignore

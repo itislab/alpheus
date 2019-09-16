@@ -28,8 +28,8 @@ type SingleUseOneTimeDirectory(output:ITestOutputHelper) =
 
     let tempName = System.Guid.NewGuid().ToString()
     let dir1 = System.IO.Path.Combine("data","singleTimeDirs")
-    let path = System.IO.Path.Combine(dir1,tempName) + string System.IO.Path.DirectorySeparatorChar
-    let fullPath = System.IO.Path.GetFullPath(path)
+    let relativePath = System.IO.Path.Combine(dir1,tempName) + string System.IO.Path.DirectorySeparatorChar
+    let fullPath = System.IO.Path.GetFullPath(relativePath)
     
     //let outputTextWriter = new OutputTextWriter(output)
 
@@ -48,24 +48,24 @@ type SingleUseOneTimeDirectory(output:ITestOutputHelper) =
 
         if not(System.IO.Directory.Exists(dir1)) then
             System.IO.Directory.CreateDirectory(dir1) |> ignore  
-        output.WriteLine(sprintf "Creating unique test dir %s" path)
-        System.IO.Directory.CreateDirectory(path) |> ignore
+        output.WriteLine(sprintf "Creating unique test dir %s" relativePath)
+        System.IO.Directory.CreateDirectory(relativePath) |> ignore
 
     member s.Output
         with get() = output
 
     /// One-time single-use unique named directory to carry on tests within
-    member s.Path = path
+    member s.RelativeExperimentRoot = relativePath
 
-    /// One-time single-use unique named directory to carry on tests within
-    member s.FullPath = fullPath
+    /// Full path of the experiment root - One-time single-use unique named directory to carry on tests within 
+    member s.ExperimentRoot = fullPath
 
     member s.Platform = if isTestRuntimeWindows then TargetPlatform.Windows else TargetPlatform.Linux
 
     interface IDisposable with
         member s.Dispose() =
-            System.IO.Directory.Delete(path,true)
-            output.WriteLine(sprintf "Successfully deleted unique test dir %s" path)
+            System.IO.Directory.Delete(fullPath,true)
+            output.WriteLine(sprintf "Successfully deleted unique test dir %s" relativePath)
 
 
 /// runs the command in Unix Shell

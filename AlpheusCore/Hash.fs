@@ -114,10 +114,11 @@ let rec hashDirectoryAsync (fullPath:string) =
         return hashAlg.Hash
     }
 
-
+/// Builds hash for the given path which can be either a file or a directory 
+/// (depends on what exists). If neither exists, returns None.
 let hashPathAsync fullPath =
     async {
-            // Logger.logVerbose Logger.ExperimentFolder (sprintf "Hashing %s ..." fullPath)
+            // Logger.logVerbose Logger.Hash (sprintf "Hashing %s ..." fullPath)
             // todo: let items = PathUtils.enumeratePath fullPath
             if File.Exists fullPath then
                 let! hash = hashFileAsync fullPath
@@ -138,9 +139,9 @@ let hashPathAndSave (fullPath:string) =
             match hashStr with
             |   None -> return None
             |   Some(hashStr) ->
-                // Logger.logVerbose Logger.ExperimentFolder (sprintf "writing %s " hashFilePath)
+                // Logger.logVerbose Logger.Hash (sprintf "writing %s " hashFilePath)
                 do! File.WriteAllTextAsync(hashFilePath, hashStr) |> Async.AwaitTask
-                // Logger.logVerbose Logger.ExperimentFolder (sprintf "%s written successfully" hashFilePath)
+                // Logger.logVerbose Logger.Hash (sprintf "%s written successfully" hashFilePath)
                 return Some(hashStr)
         }
     let getFileLastWriteTimeUTCAsync filepath =
@@ -165,9 +166,9 @@ let hashPathAndSave (fullPath:string) =
         }
 
     async { 
-        Logger.logVerbose Logger.ExperimentFolder (sprintf "Artefact %s - acquiring data hash..." fullPath)
+        Logger.logVerbose Logger.Hash (sprintf "Artefact %s - acquiring data hash..." fullPath)
         if File.Exists hashFilePath then
-            // Logger.logVerbose Logger.ExperimentFolder (sprintf "%s hash file exists" hashFilePath)
+            // Logger.logVerbose Logger.Hash (sprintf "%s hash file exists" hashFilePath)
             let precomHashTime = File.GetLastWriteTimeUtc hashFilePath
             let! dataTime =
                 async {
@@ -179,26 +180,26 @@ let hashPathAndSave (fullPath:string) =
                     else
                         return None
                 }
-            // Logger.logVerbose Logger.ExperimentFolder (sprintf "%s artefact modification time extracted" fullPath)
+            // Logger.logVerbose Logger.Hash (sprintf "%s artefact modification time extracted" fullPath)
             match dataTime with
             |   None -> //data not exists
-                // Logger.logVerbose Logger.ExperimentFolder (sprintf "deleteing %s hash file as the artefact is absent" hashFilePath)
+                // Logger.logVerbose Logger.Hash (sprintf "deleteing %s hash file as the artefact is absent" hashFilePath)
                 File.Delete hashFilePath
-                // Logger.logVerbose Logger.ExperimentFolder (sprintf "sucessfuly deleted %s hash file" hashFilePath)
+                // Logger.logVerbose Logger.Hash (sprintf "sucessfuly deleted %s hash file" hashFilePath)
                 return None
             |   Some(dataWriteTime) ->                               
                     if precomHashTime > dataWriteTime then // considered up to date
                         let! hashStr = File.ReadAllTextAsync(hashFilePath) |> Async.AwaitTask
                         let hashStr2 : HashString = hashStr.Trim()
-                        Logger.logVerbose Logger.ExperimentFolder (sprintf "Artefact %s hash is extracted from up-to-date .hash file" fullPath)
+                        Logger.logVerbose Logger.Hash (sprintf "Artefact %s hash is extracted from up-to-date .hash file" fullPath)
                         return Some(hashStr2)
                     else
                         let! res =  hashAndSave()
-                        Logger.logVerbose Logger.ExperimentFolder (sprintf "Artefact %s hash is recalculated due to data change since the .hash file was written" fullPath)
+                        Logger.logVerbose Logger.Hash (sprintf "Artefact %s hash is recalculated due to data change since the .hash file was written" fullPath)
                         return res
         else
             let! res = hashAndSave()
-            Logger.logVerbose Logger.ExperimentFolder (sprintf "Artefact %s hash is calculated (didn't find precomputed .hash file)" fullPath)
+            Logger.logVerbose Logger.Hash (sprintf "Artefact %s hash is calculated (didn't find precomputed .hash file)" fullPath)
             return res
     }
 
@@ -206,8 +207,11 @@ let hashPathAndSave (fullPath:string) =
 /// the hash is computed and saved into a file.
 let hashVectorPathAndSave (fullPath:string) =
     async {
-        let resolvedFullPaths = PathUtils.enumeratePath fullPath
-        return! resolvedFullPaths |> AsyncUtils.mapAsync (fun (_, path) -> hashPathAndSave path)
+        try
+            let resolvedFullPaths = PathUtils.enumeratePath fullPath
+            return! resolvedFullPaths |> Utils.mapAsync (fun (_, path) -> hashPathAndSave path)
+        with
+            | :? System.IO.DirectoryNotFoundException -> return MdMap.Empty
     }
 
 

@@ -28,7 +28,7 @@ type ArchiverTests(output) =
             
             memStream.Seek(0L,SeekOrigin.Begin) |> ignore
     
-            let outPath = Path.Combine(s.Path,"restored.txt")
+            let outPath = Path.Combine(s.RelativeExperimentRoot,"restored.txt")
 
             do! artefactFromArchiveStreamAsync outPath memStream  true
 
@@ -54,7 +54,7 @@ type ArchiverTests(output) =
             
             memStream.Seek(0L,SeekOrigin.Begin) |> ignore
     
-            let outPath = Path.Combine(s.Path,"restored")
+            let outPath = Path.Combine(s.RelativeExperimentRoot,"restored")
 
             let outFiles = Array.map (fun x -> Path.Combine(outPath,x)) files
 

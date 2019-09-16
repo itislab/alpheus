@@ -130,7 +130,7 @@ type FastHashTests(output)=
     [<Fact>]
     member s.``Fast hash creates hash file for hashed file`` () =
         async {
-            let path = System.IO.Path.Combine(s.Path,"file1.txt")
+            let path = System.IO.Path.Combine(s.RelativeExperimentRoot,"file1.txt")
             let hashFilePath = path+".hash"
             System.IO.File.WriteAllText(path,"Test content")
 
@@ -142,7 +142,7 @@ type FastHashTests(output)=
     [<Fact>]
     member s.``Fast hash creates hash file for hashed directory`` () =
         async {
-            let dirPath =  System.IO.Path.Combine(s.Path,"dir1")
+            let dirPath =  System.IO.Path.Combine(s.RelativeExperimentRoot,"dir1")
             let filePath = System.IO.Path.Combine(dirPath,"file1.txt")
             let hashFilePath = dirPath+".hash"
 
@@ -158,15 +158,15 @@ type FastHashTests(output)=
     [<Fact>]
     member s. ``Hidden files are excluded from hash calculation`` () =
         async {
-            let! hash1 = ItisLab.Alpheus.Hash.hashDirectoryAsync s.Path
+            let! hash1 = ItisLab.Alpheus.Hash.hashDirectoryAsync s.RelativeExperimentRoot
     
-            let hidFileName = System.IO.Path.Combine(s.Path,".gitfile1")
+            let hidFileName = System.IO.Path.Combine(s.RelativeExperimentRoot,".gitfile1")
     
             do! File.WriteAllTextAsync(hidFileName,"test hidden files") |> Async.AwaitTask
             let initialAttrs = File.GetAttributes(hidFileName)
             File.SetAttributes(hidFileName, initialAttrs ||| FileAttributes.Hidden)
     
-            let! hash2 = ItisLab.Alpheus.Hash.hashDirectoryAsync s.Path
+            let! hash2 = ItisLab.Alpheus.Hash.hashDirectoryAsync s.RelativeExperimentRoot
     
             assertByteArraysEqual hash1 hash2
     
@@ -175,7 +175,7 @@ type FastHashTests(output)=
     [<Fact>]
     member s.``Fast hash respects up-to-date dot-hash file for file artefact`` () =
         async {
-            let path = System.IO.Path.Combine(s.Path,"file1.txt")
+            let path = System.IO.Path.Combine(s.RelativeExperimentRoot,"file1.txt")
             let hashFilePath = path+".hash"
             do! Async.AwaitTask(System.IO.File.WriteAllTextAsync(path,"Test content"))
             // We need to wait to make .hash file-modification time to be later then original file modification time
@@ -200,7 +200,7 @@ type FastHashTests(output)=
     [<Fact>]
     member s.``Fast hash ignores stale dot-hash file for file artefact`` () =
         async {
-            let path = System.IO.Path.Combine(s.Path,"file1.txt")
+            let path = System.IO.Path.Combine(s.RelativeExperimentRoot,"file1.txt")
             let hashFilePath = path+".hash"
 
             // Writing 128 zeros to be used as precomputed hash value to be ignored
@@ -226,7 +226,7 @@ type FastHashTests(output)=
     [<Fact>]
     member s.``Fast hash respects up-to-date dot-hash file for directory artefact`` () =
         async {
-            let dirPath = System.IO.Path.Combine(s.Path,"test1")
+            let dirPath = System.IO.Path.Combine(s.RelativeExperimentRoot,"test1")
             let subdirPath = System.IO.Path.Combine(dirPath,"subdir1")
             let filePath = System.IO.Path.Combine(subdirPath,"text.txt")
             let hashFilePath = dirPath+".hash"
@@ -255,7 +255,7 @@ type FastHashTests(output)=
     [<Fact>]
     member s.``Fast hash ignores stale dot-hash file for directory artefact`` () =
         async {
-            let dirPath = System.IO.Path.Combine(s.Path,"test1")
+            let dirPath = System.IO.Path.Combine(s.RelativeExperimentRoot,"test1")
             let subdirPath = System.IO.Path.Combine(dirPath,"subdir1")
             let filePath = System.IO.Path.Combine(subdirPath,"text.txt")
             let hashFilePath = dirPath+".hash"
@@ -286,7 +286,7 @@ type FastHashTests(output)=
     [<Fact>]
     member s.``Fast hash return None for not-exitent files`` () =
         async {
-            let path = System.IO.Path.Combine(s.Path,"file1.txt")
+            let path = System.IO.Path.Combine(s.RelativeExperimentRoot,"file1.txt")
             
             let! hash1res = ItisLab.Alpheus.Hash.hashPathAndSave path     
             match hash1res with
@@ -299,7 +299,7 @@ type FastHashTests(output)=
     [<Fact>]
     member s.``Fast hash return None for not-exitent files if dot-hash exists`` () =
         async {
-            let path = System.IO.Path.Combine(s.Path,"file1.txt")
+            let path = System.IO.Path.Combine(s.RelativeExperimentRoot,"file1.txt")
             do! Async.AwaitTask(System.IO.File.WriteAllTextAsync(path+".hash","00000"))
         
             let! hash1res = ItisLab.Alpheus.Hash.hashPathAndSave path     
