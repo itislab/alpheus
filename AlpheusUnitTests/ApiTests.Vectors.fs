@@ -46,33 +46,28 @@ type ``Vector scenarios through API``(output) =
     [<Fact>]
     member s.``Runs same method for multiple input files``() =
         async {
-            let savedWD = Environment.CurrentDirectory
-            try   
-                let root = s.ExperimentRoot
-                Environment.CurrentDirectory <- root
-                do! prepareSources(root)
+            let root = s.ExperimentRoot 
+            do! prepareSources(root)
 
-                let! res = API.buildAsync root ["base.txt"; "data/*.txt"] ["output/out*.txt"] concatCommand false
-                assertResultOk res
+            let! res = API.buildAsync root root ["base.txt"; "data/*.txt"] ["output/out*.txt"] concatCommand false
+            assertResultOk res
 
-                let outputId = ArtefactId.Path "output/out*.txt"
-                let res = API.compute (root, outputId)
-                assertResultOk res
+            let outputId = ArtefactId.Path "output/out*.txt"
+            let res = API.compute (root, outputId)
+            assertResultOk res
 
-                do! assertNonEmptyFile(Path.Combine(root, "output", "out1.txt"))
-                do! assertNonEmptyFile(Path.Combine(root, "output", "out2.txt"))
-                do! assertNonEmptyFile(Path.Combine(root, "output", "out3.txt"))
+            do! assertNonEmptyFile(Path.Combine(root, "output", "out1.txt"))
+            do! assertNonEmptyFile(Path.Combine(root, "output", "out2.txt"))
+            do! assertNonEmptyFile(Path.Combine(root, "output", "out3.txt"))
 
-                // Checks the output alph file:
-                let alph = AlphFiles.tryLoad (PathUtils.idToAlphFileFullPath root outputId) |> Option.get
-                match alph.Origin with 
-                | DataOrigin.CommandOrigin cmd ->
-                    Assert.True(cmd.Inputs.[0].Hash.IsScalar, "base.txt is scalar")
-                    Assert.Equal(3, cmd.Inputs.[1].Hash |> MdMap.toShallowSeq |> Seq.length)
-                    Assert.Equal(3, cmd.Outputs.[0].Hash |> MdMap.toShallowSeq |> Seq.length)
-                | _ -> failwith "Unexpected origin"
-            finally
-                Environment.CurrentDirectory <- savedWD      
+            // Checks the output alph file:
+            let alph = AlphFiles.tryLoad (PathUtils.idToAlphFileFullPath root outputId) |> Option.get
+            match alph.Origin with 
+            | DataOrigin.CommandOrigin cmd ->
+                Assert.True(cmd.Inputs.[0].Hash.IsScalar, "base.txt is scalar")
+                Assert.Equal(3, cmd.Inputs.[1].Hash |> MdMap.toShallowSeq |> Seq.length)
+                Assert.Equal(3, cmd.Outputs.[0].Hash |> MdMap.toShallowSeq |> Seq.length)
+            | _ -> failwith "Unexpected origin"
         } |> toAsyncFact
 
    

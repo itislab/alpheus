@@ -5,7 +5,7 @@ open ItisLab.Alpheus.CLI
 open ItisLab.Alpheus.Trace
 open System
 
-let run (buildArgs:ParseResults<BuildArgs>) = 
+let run workingDir (buildArgs:ParseResults<BuildArgs>) = 
     result {
         let deps = buildArgs.GetResults <@ D @>
         let outputs = buildArgs.GetResults <@ O @>
@@ -24,6 +24,6 @@ let run (buildArgs:ParseResults<BuildArgs>) =
         match roots with
         | [] -> return! Error (UserError "An output artefact is not specified")
         | [None] -> return! Error (UserError "Not an experiment folder: .alpheus")
-        | [Some experimentRoot] -> return! (API.buildAsync experimentRoot deps outputs command doNotCleanOutputs |> Async.RunSynchronously)
+        | [Some experimentRoot] -> return! (API.buildAsync experimentRoot workingDir deps outputs command doNotCleanOutputs |> Async.RunSynchronously)
         | _ -> return! Error (UserError "Not all of the input or output artefacts are under the same experiment root folder")
     }

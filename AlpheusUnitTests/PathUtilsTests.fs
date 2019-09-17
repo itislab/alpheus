@@ -148,7 +148,7 @@ type PathUtilsTests(output) =
     [<InlineData(TargetPlatform.Linux, @"/experiment/", @"/experiment/source/test/*/", @"source/test/*/")>]
     member s.``pathToId creates ArtefactId from a path to an artefact``(targetPlatform: TargetPlatform, experimentRoot:string, artefactPath:string, actualPath: ExperimentRelativePath) =
         if targetPlatform = s.Platform then
-            let id = pathToId experimentRoot artefactPath
+            let id = pathToId experimentRoot s.ExperimentRoot artefactPath
             Assert.Equal(actualPath, idToExperimentPath id)
 
     [<Fact>]
@@ -165,7 +165,7 @@ type PathUtilsTests(output) =
         }
         AlphFiles.save alphFile alphFilePath
 
-        let artefactId = pathToId s.RelativeExperimentRoot alphFilePath 
+        let artefactId = pathToId s.RelativeExperimentRoot Environment.CurrentDirectory alphFilePath 
         Assert.Equal(relativePath s.RelativeExperimentRoot artefactPath, idToExperimentPath artefactId)
 
     [<Theory>]

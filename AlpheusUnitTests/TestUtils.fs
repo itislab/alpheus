@@ -22,7 +22,6 @@ type TargetPlatform =
 /// Class that can be a parent to all tests classes that require single-use one-time unique named directory creation befor test
 /// and deletion after the test
 /// use .Path property to get the pass to the directory
-[<Xunit.Collection("Disk involving test collection")>] // this prevents parallel tests execution
 type SingleUseOneTimeDirectory(output:ITestOutputHelper) =
     let output = output
 

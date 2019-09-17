@@ -121,10 +121,14 @@ let configRemoveStorageAsync experimentRoot storageToRemove =
     }
 
 /// Returns the experiment root and artefact id for the given arbitrary path.
-let artefactFor path : Result<string*ArtefactId, AlpheusError> = 
+let artefactFor workingDir (path:string) : Result<string*ArtefactId, AlpheusError> = 
     result {
-        let! experimentRoot = (Config.tryLocateExperimentRoot path, UserError (sprintf "The given path is not under an Alpheus experiment folder: %s" path))
-        let artefactId = path |> pathToId experimentRoot
+        let path2 =
+            if Path.IsPathRooted(path) then path
+            else
+                Path.Combine(workingDir,path)
+        let! experimentRoot = (Config.tryLocateExperimentRoot path2, UserError (sprintf "The given path is not under an Alpheus experiment folder: %s" path))
+        let artefactId = path2 |> pathToId experimentRoot workingDir
         return (experimentRoot, artefactId)
     }
 
@@ -351,9 +355,9 @@ let saveAsync (experimentRoot, artefactId) specifiedStorageName saveAll =
 
 /// Adds one more method vertex to the experiment graph
 /// deps: a list of paths to the input artefacts. outputs: a list of paths to the produced artefacts
-/// This function depends on the current directory.
-let buildAsync experimentRoot deps outputs command doNotCleanOutputs =
-    let getId = pathToId experimentRoot // WARNING: this method depends on the current directory!
+/// workingDirecotry - the full path to the dir, relative to which the command and the inputs/outputs are considered
+let buildAsync experimentRoot workingDir deps outputs command doNotCleanOutputs =
+    let getId = pathToId experimentRoot workingDir // WARNING: this method depends on the current directory!
     let inputIDs = List.map getId deps
     let outputIDs = List.map getId outputs
     logVerbose LogCategory.API (sprintf "Dependencies: %A" inputIDs)
@@ -366,7 +370,7 @@ let buildAsync experimentRoot deps outputs command doNotCleanOutputs =
         let! g = buildDependencyGraphAsync experimentRoot inputIDs
         
         // saving command and current working dir
-        let rootBasedCwd = Path.GetRelativePath(experimentRoot, System.Environment.CurrentDirectory) + Path.DirectorySeparatorChar.ToString()
+        let rootBasedCwd = Path.GetRelativePath(experimentRoot, workingDir) + Path.DirectorySeparatorChar.ToString()
         let! methodVertex = g.AddMethod command inputIDs outputIDs rootBasedCwd doNotCleanOutputs
     
         if doNotCleanOutputs then

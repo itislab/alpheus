@@ -22,7 +22,7 @@ let main argv =
 
     try 
         let parseResults = parser.ParseCommandLine(argv, ignoreMissing=false, ignoreUnrecognized=true, raiseOnUsage=true)
-        match parseResults |> run programName with
+        match parseResults |> run Environment.CurrentDirectory programName with
         | Ok() -> 0
         | Error(er) ->
             match er with
