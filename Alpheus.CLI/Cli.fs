@@ -28,13 +28,11 @@ with
 
 [<CliPrefix(CliPrefix.None)>]
 type ConfigArgs =
-    |   [<CliPrefix(CliPrefix.DoubleDash)>]Local
     |   Storage of ParseResults<StorageArgs>
 with
     interface IArgParserTemplate with
         member s.Usage =
             match s with
-            |   Local -> "Edit local configuration"
             |   Storage _ -> "Artefact storage configuration"
 
 [<CliPrefix(CliPrefix.Dash)>]
@@ -90,16 +88,23 @@ with
             match s with
             |   Path _ -> "File/Directory to restore"            
 
+type VerbosityLevel =
+    | Quite = 0
+    | Err  = 1
+    | Warn = 2
+    | Info  = 3
+    | Verbose = 4
 
 [<CliPrefix(CliPrefix.None)>]
 type AlpheusArgs = 
-    | [<First>] Init of ParseResults<InitArgs>
-    | [<First>] Config of ParseResults<ConfigArgs>
-    | [<First>] Build of ParseResults<BuildArgs>    
-    | [<First>] Compute of ParseResults<ComputeArgs>
-    | [<First>] Status of ParseResults<StatusArgs>
-    | [<First>] Save of ParseResults<SaveArgs>
-    | [<First>] Restore of ParseResults<RestoreArgs>
+    | Init of ParseResults<InitArgs>
+    | Config of ParseResults<ConfigArgs>
+    | Build of ParseResults<BuildArgs>    
+    | Compute of ParseResults<ComputeArgs>
+    | Status of ParseResults<StatusArgs>
+    | Save of ParseResults<SaveArgs>
+    | Restore of ParseResults<RestoreArgs>
+    | [<AltCommandLine("-v")>][<CliPrefix(CliPrefix.DoubleDash)>] Verbosity of VerbosityLevel
 with
     interface IArgParserTemplate with
         member s.Usage =
@@ -111,3 +116,4 @@ with
             |   Status _ -> "Prints the graph status for particular .alph file"
             |   Save _ -> "Save a copy of file/directory to the storage(s)"
             |   Restore _ -> "Restore a copy of the file/directory from storage"
+            |   Verbosity _ -> "Level of verbosity for produced text messages"

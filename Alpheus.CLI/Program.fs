@@ -22,7 +22,25 @@ let main argv =
 
     try 
         let parseResults = parser.ParseCommandLine(argv, ignoreMissing=false, ignoreUnrecognized=true, raiseOnUsage=true)
-        match parseResults |> run Environment.CurrentDirectory programName with
+
+        let effectiveVerbosityLevel =
+            match parseResults.TryGetResult Verbosity with
+            |   Some(setLevel) ->
+                match setLevel with
+                |   VerbosityLevel.Quite -> Logger.QuiteLevel
+                |   VerbosityLevel.Err -> Logger.ErrorLevel
+                |   VerbosityLevel.Warn -> Logger.WarningLevel
+                |   VerbosityLevel.Info -> Logger.InfoLevel
+                |   VerbosityLevel.Verbose -> Logger.VerboseLevel
+                |   unknown ->
+                    Logger.logWarning Logger.CLI (sprintf "Unknown verbosity level %A. Default vebosity level 'Info' will be used" unknown)
+                    Logger.InfoLevel
+            |   None -> Logger.InfoLevel // default verbosity for CLI
+        Logger.LogLevel <- effectiveVerbosityLevel
+
+        let cwd = Path.GetFullPath Environment.CurrentDirectory 
+
+        match parseResults |> run programName cwd with
         | Ok() -> 0
         | Error(er) ->
             match er with
