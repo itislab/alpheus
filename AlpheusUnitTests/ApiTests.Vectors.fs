@@ -12,36 +12,34 @@ open ItisLab.Alpheus.DependencyGraph
 open System
 open ItisLab.Alpheus
 open Angara.Data
+open FluentAssertions
 
 type ``Vector scenarios through API``(output) =
     inherit SingleUseOneTimeDirectory(output)
 
     let concatCommand = 
         if isTestRuntimeWindows then
-            "cmd /C \"copy $in1 /A + $in2 /A $out1 /A\""
+            "cmd /C \"copy $in1 + $in2 $out1 /b\""
         else
             "/bin/sh -c \"cat $in1 > $out1; cat $in2 >> $out1\""
-
-
 
     let prepareSources(path) =
         async {
             let path = Path.GetFullPath path
             let! _ = API.createExperimentDirectory path
             Directory.CreateDirectory(Path.Combine(path, "data")) |> ignore
-            File.WriteAllText(Path.Combine(path, "base.txt"), "Base file\\r\\n") 
-            File.WriteAllText(Path.Combine(path, "data", "1.txt"), "File 1\\r\\n")
-            File.WriteAllText(Path.Combine(path, "data", "2.txt"), "File 2\\r\\n")
-            File.WriteAllText(Path.Combine(path, "data", "3.txt"), "File 3\\r\\n")
+            File.WriteAllText(Path.Combine(path, "base.txt"), "Base file") 
+            File.WriteAllText(Path.Combine(path, "data", "1.txt"), "File 1")
+            File.WriteAllText(Path.Combine(path, "data", "2.txt"), "File 2")
+            File.WriteAllText(Path.Combine(path, "data", "3.txt"), "File 3")
 
             return ()
         }
 
-    let assertNonEmptyFile path = 
-        async {
-            let! content = File.ReadAllTextAsync(path) |> Async.AwaitTask
-            Assert.True(content.Length > 0)
-        }
+    let assertFileContent path content =
+        let actualContent = File.ReadAllText path
+        actualContent.Should().Be(content, sprintf "it is a content of the file %s" path) |> ignore
+
 
     [<Fact>]
     member s.``Runs same method for multiple input files``() =
@@ -59,20 +57,64 @@ type ``Vector scenarios through API``(output) =
                 let res = API.compute (root, outputId)
                 assertResultOk res
 
-                do! assertNonEmptyFile(Path.Combine(root, "output", "out1.txt"))
-                do! assertNonEmptyFile(Path.Combine(root, "output", "out2.txt"))
-                do! assertNonEmptyFile(Path.Combine(root, "output", "out3.txt"))
+                "Base fileFile 1" |> assertFileContent (Path.Combine(root, "output", "out1.txt"))
+                "Base fileFile 2" |> assertFileContent (Path.Combine(root, "output", "out2.txt"))
+                "Base fileFile 3" |> assertFileContent (Path.Combine(root, "output", "out3.txt"))
 
                 // Checks the output alph file:
                 let alph = AlphFiles.tryLoad (PathUtils.idToAlphFileFullPath root outputId) |> Option.get
                 match alph.Origin with 
                 | DataOrigin.CommandOrigin cmd ->
-                    Assert.True(cmd.Inputs.[0].Hash.IsScalar, "base.txt is scalar")
-                    Assert.Equal(3, cmd.Inputs.[1].Hash |> MdMap.toShallowSeq |> Seq.length)
-                    Assert.Equal(3, cmd.Outputs.[0].Hash |> MdMap.toShallowSeq |> Seq.length)
+                    cmd.Inputs.[0].Hash.IsScalar.Should().BeTrue("base.txt is scalar") |> ignore
+                    (cmd.Inputs.[1].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "2nd input is a vector of 3 elements") |> ignore
+                    (cmd.Outputs.[0].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "The output is a vector of 3 elements") |> ignore
                 | _ -> failwith "Unexpected origin"
             finally
                 Environment.CurrentDirectory <- savedWD      
-        } |> toAsyncFact
+        }
+
+    [<Fact>]
+    member s.``Runs two methods one after another for multiple input files``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try   
+                let root = s.ExperimentRoot
+                Environment.CurrentDirectory <- root
+                do! prepareSources(root)
+
+                let! res = API.buildAsync root ["base.txt"; "data/*.txt"] ["output/out*.txt"] concatCommand false
+                assertResultOk res
+
+                let! res = API.buildAsync root ["base.txt"; "output/out*.txt"] ["output2/*.txt"] concatCommand false
+                assertResultOk res
+
+                let outputId = ArtefactId.Path "output/out*.txt"
+                let output2Id = ArtefactId.Path "output2/*.txt"
+                let res = API.compute (root, output2Id)
+                assertResultOk res
+
+                "Base fileBase fileFile 1" |> assertFileContent (Path.Combine(root, "output2", "1.txt"))
+                "Base fileBase fileFile 2" |> assertFileContent (Path.Combine(root, "output2", "2.txt"))
+                "Base fileBase fileFile 3" |> assertFileContent (Path.Combine(root, "output2", "3.txt"))
+
+                // Checks the output alph file:
+                let alph = AlphFiles.tryLoad (PathUtils.idToAlphFileFullPath root outputId) |> Option.get
+                match alph.Origin with 
+                | DataOrigin.CommandOrigin cmd ->
+                    cmd.Inputs.[0].Hash.IsScalar.Should().BeTrue("base.txt is scalar") |> ignore
+                    (cmd.Inputs.[1].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "2nd input is a vector of 3 elements") |> ignore
+                    (cmd.Outputs.[0].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "The output is a vector of 3 elements") |> ignore
+                | _ -> failwith "Unexpected origin"
+
+                let alph = AlphFiles.tryLoad (PathUtils.idToAlphFileFullPath root output2Id) |> Option.get
+                match alph.Origin with 
+                | DataOrigin.CommandOrigin cmd ->
+                    cmd.Inputs.[0].Hash.IsScalar.Should().BeTrue("base.txt is scalar") |> ignore
+                    (cmd.Inputs.[1].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "2nd input is a vector of 3 elements") |> ignore
+                    (cmd.Outputs.[0].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "The output is a vector of 3 elements") |> ignore
+                | _ -> failwith "Unexpected origin"
+            finally
+                Environment.CurrentDirectory <- savedWD      
+        } 
 
    
