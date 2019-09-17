@@ -315,6 +315,13 @@ let equalStatuses expected actual =
 type ScalarScenarios(output) as this =
     inherit SingleUseOneTimeDirectory(output)
 
+    let twoOutputsCommand = 
+        if isTestRuntimeWindows then
+            "cmd /C \"cmd.exe /C copy $in1 $out1 & cmd.exe /C copy $in2 $out2\""
+        else
+            "/bin/sh -c \"cat $in1 > $out1; cat $in2 >> $out2\""
+
+
     let concatCommand = 
         if isTestRuntimeWindows then
             "cmd /C \"cat.cmd $out1 $in1 $in2\""
@@ -353,6 +360,75 @@ type ScalarScenarios(output) as this =
         }
 
     [<Fact>]
+    member s.``Alph files are not created for source during build``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try            
+                let path = Path.GetFullPath s.RelativeExperimentRoot
+                Environment.CurrentDirectory <- s.RelativeExperimentRoot
+                do! buildExperiment(path)
+
+                Assert.False(File.Exists(Path.Combine(path,"1.txt.alph")))
+                Assert.False(File.Exists(Path.Combine(path,"2.txt.alph")))
+                Assert.False(File.Exists(Path.Combine(path,"3.txt.alph")))
+            finally
+                Environment.CurrentDirectory <- savedWD            
+        }
+
+    [<Fact>]
+    member s.``Alph files are not created for source during compute``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try            
+                let path = Path.GetFullPath s.RelativeExperimentRoot
+                Environment.CurrentDirectory <- s.RelativeExperimentRoot
+                do! buildExperiment(path)
+
+                let res = API.compute(path, ArtefactId.Path "1_2_3.txt")
+                assertResultOk res
+
+
+                Assert.False(File.Exists(Path.Combine(path,"1.txt.alph")))
+                Assert.False(File.Exists(Path.Combine(path,"2.txt.alph")))
+                Assert.False(File.Exists(Path.Combine(path,"3.txt.alph")))
+            finally
+                Environment.CurrentDirectory <- savedWD            
+        }
+
+    [<Fact>]
+    member s.``Alph files are created for outputs during build``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try            
+                let path = Path.GetFullPath s.RelativeExperimentRoot
+                Environment.CurrentDirectory <- s.RelativeExperimentRoot
+                do! buildExperiment(path)
+
+                Assert.True(File.Exists(Path.Combine(path,"1_2.txt.alph")))
+                Assert.True(File.Exists(Path.Combine(path,"1_2_3.txt.alph")))
+            finally
+                Environment.CurrentDirectory <- savedWD            
+        }
+
+    [<Fact>]
+    member s.``Alph files are not deleted for outputs during compute``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try            
+                let path = Path.GetFullPath s.RelativeExperimentRoot
+                Environment.CurrentDirectory <- s.RelativeExperimentRoot
+                do! buildExperiment(path)
+
+                let res = API.compute(path, ArtefactId.Path "1_2_3.txt")
+                assertResultOk res
+                
+                Assert.True(File.Exists(Path.Combine(path,"1_2.txt.alph")))
+                Assert.True(File.Exists(Path.Combine(path,"1_2_3.txt.alph")))
+            finally
+                Environment.CurrentDirectory <- savedWD            
+        }
+
+    [<Fact>]
     member s.``Uncomputed chain is computed``() =
         async {
             let savedWD = Environment.CurrentDirectory
@@ -368,7 +444,7 @@ type ScalarScenarios(output) as this =
                 do! assertNonEmptyFile(Path.Combine(path,"1_2_3.txt"))
             finally
                 Environment.CurrentDirectory <- savedWD            
-        } |> toAsyncFact
+        }
 
     [<Fact>]
     member s.``Status: Uncomputed chain``() =
@@ -969,6 +1045,170 @@ type ScalarScenarios(output) as this =
                     Assert.True(equalStatuses expectedStatuses r, sprintf "Expected: %A,\nactual: %A" expectedStatuses r)
                 |   Error e->
                         Assert.True(false, sprintf "Error: %A" e)
+            finally
+                Environment.CurrentDirectory <- savedWD            
+        }
+
+    [<Fact>]
+    member s.``compute: 2 outputs of single command``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try            
+                let path = Path.GetFullPath s.ExperimentRoot
+                Environment.CurrentDirectory <- s.ExperimentRoot
+                
+                do! buildExperiment(path)
+
+                
+                let! buildRes = API.buildAsync path ["1.txt"; "2.txt"] ["1_copy.txt";"2_copy.txt"] twoOutputsCommand false
+
+                assertResultOk buildRes
+
+                output.WriteLine("TEST: command is built")
+
+                assertResultOk <| API.compute(path, ArtefactId.Path "1_copy.txt") // computing all
+
+                output.WriteLine("TEST: artefacts are produced")
+                
+                let fileNames =  ["1.txt";"2.txt";"1_copy.txt";"2_copy.txt"]
+                let fullFilenames = List.map (fun x -> Path.Combine(path,x)) fileNames
+
+                List.iter (fun x -> Assert.True(File.Exists(x))) fullFilenames
+
+                let! contents = fullFilenames |> List.map (fun x -> File.ReadAllTextAsync(x) |> Async.AwaitTask) |> Async.Parallel                
+
+                Assert.Equal(contents.[0],contents.[2])
+                Assert.Equal(contents.[1],contents.[3])
+            finally
+                Environment.CurrentDirectory <- savedWD            
+        }
+
+    [<Fact>]
+    member s.``status: 2 outputs of single uncomputed command``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try            
+                let path = Path.GetFullPath s.ExperimentRoot
+                Environment.CurrentDirectory <- s.ExperimentRoot
+                
+                do! buildExperiment(path)
+
+                
+                let! buildRes = API.buildAsync path ["1.txt"; "2.txt"] ["1_copy.txt";"2_copy.txt"] twoOutputsCommand false
+
+                assertResultOk buildRes
+
+                output.WriteLine("TEST: command is built")                
+
+                let res = API.status(path, ArtefactId.Path "1_copy.txt")
+                match res with
+                |   Ok r ->
+                    let expectedStatuses:Map<ArtefactId,MdMap<string,StatusGraph.ArtefactStatus>> = 
+                        [ 
+                            ArtefactId.Path "1.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate ArtefactLocation.Local);
+                            ArtefactId.Path "2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate ArtefactLocation.Local);
+                            ArtefactId.Path "1_copy.txt",MdMap.scalar (StatusGraph.ArtefactStatus.NeedsRecomputation OutdatedReason.InputsOutdated); // technically it is true that inputs are outdated. But does the user expect such behavior?
+                            ArtefactId.Path "2_copy.txt",MdMap.scalar (StatusGraph.ArtefactStatus.NeedsRecomputation OutdatedReason.InputsOutdated);
+                            
+                        ] |> Map.ofList
+                    Assert.True(equalStatuses expectedStatuses r)
+                |   Error e->
+                        Assert.True(false, sprintf "Error: %A" e)
+                
+            finally
+                Environment.CurrentDirectory <- savedWD            
+        }
+
+    [<Fact>]
+    member s.``status: 2 outputs of single computed command``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try            
+                let path = Path.GetFullPath s.ExperimentRoot
+                Environment.CurrentDirectory <- s.ExperimentRoot
+                
+                do! buildExperiment(path)
+
+                
+                let! buildRes = API.buildAsync path ["1.txt"; "2.txt"] ["1_copy.txt";"2_copy.txt"] twoOutputsCommand false
+
+                assertResultOk buildRes
+
+                output.WriteLine("TEST: command is built")             
+                
+                let compRes = API.compute (path, ArtefactId.Path "1_copy.txt")
+
+                assertResultOk compRes
+
+                output.WriteLine("TEST: command is run successfully")             
+
+                let res = API.status(path, ArtefactId.Path "1_copy.txt")
+                match res with
+                |   Ok r ->
+                    let expectedStatuses:Map<ArtefactId,MdMap<string,StatusGraph.ArtefactStatus>> = 
+                        [ 
+                            ArtefactId.Path "1.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate ArtefactLocation.Local);
+                            ArtefactId.Path "2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate ArtefactLocation.Local);
+                            ArtefactId.Path "1_copy.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate ArtefactLocation.Local);
+                            ArtefactId.Path "2_copy.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate ArtefactLocation.Local);
+                            
+                        ] |> Map.ofList
+                    Assert.True(equalStatuses expectedStatuses r)
+                |   Error e->
+                        Assert.True(false, sprintf "Error: %A" e)
+                
+            finally
+                Environment.CurrentDirectory <- savedWD            
+        }
+
+    [<Fact>]
+    member s.``status: 2 outputs of single computed command, one local, one stored``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try            
+                let path = Path.GetFullPath s.ExperimentRoot
+                Environment.CurrentDirectory <- s.ExperimentRoot
+                
+                do! buildExperiment(path)
+
+                
+                let! buildRes = API.buildAsync path ["1.txt"; "2.txt"] ["1_copy.txt";"2_copy.txt"] twoOutputsCommand false
+
+                assertResultOk buildRes
+
+                output.WriteLine("TEST: command is built")             
+                
+                let compRes = API.compute (path, ArtefactId.Path "1_copy.txt")
+
+                assertResultOk compRes
+
+                output.WriteLine("TEST: command is run successfully")     
+                
+                let! saveRes = API.saveAsync (path, ArtefactId.Path "1_copy.txt") None false
+
+                output.WriteLine("TEST: 1_copy.txt saved into storage")     
+
+                assertResultOk saveRes
+
+                File.Delete(Path.Combine(path, "1_copy.txt"))
+
+                output.WriteLine("TEST: 1_copy.txt deleted from disk")     
+                
+                let res = API.status(path, ArtefactId.Path "1_copy.txt")
+                match res with
+                |   Ok r ->
+                    let expectedStatuses:Map<ArtefactId,MdMap<string,StatusGraph.ArtefactStatus>> = 
+                        [ 
+                            ArtefactId.Path "1.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate ArtefactLocation.Local);
+                            ArtefactId.Path "2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate ArtefactLocation.Local);
+                            ArtefactId.Path "1_copy.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate ArtefactLocation.Remote);
+                            ArtefactId.Path "2_copy.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate ArtefactLocation.Local);
+                            
+                        ] |> Map.ofList
+                    Assert.True(equalStatuses expectedStatuses r)
+                |   Error e->
+                        Assert.True(false, sprintf "Error: %A" e)
+                
             finally
                 Environment.CurrentDirectory <- savedWD            
         }
