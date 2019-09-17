@@ -175,9 +175,11 @@ type ArtefactVertex(id:ArtefactId, experimentRoot:string) =
                     Origin = DataOrigin.CommandOrigin { computeSection with Signature = Hash.getSignature computeSection}
                     IsTracked = s.IsTracked
                 }
-        lock saveLock (fun() -> 
+        lock saveLock (fun() ->
+            logVerbose DependencyGraph (sprintf "Saving alph file for artefact %A" s.Id)
             PathUtils.ensureDirectories alphFileFullPath
-            AlphFiles.save content alphFileFullPath)
+            AlphFiles.save content alphFileFullPath
+            logVerbose DependencyGraph (sprintf "Saved alph file for artefact %A" s.Id))
         
     interface System.IComparable with
         member s.CompareTo(other) =
@@ -337,9 +339,9 @@ and CommandLineVertex(methodId : MethodId, experimentRoot: string, inputs: LinkT
                         let inputIndex = index |> List.truncate input.Artefact.Rank
                         do! input.ExpectActualVersionAsync inputIndex
                     })
-            do! Seq.append outLinksUpdates inputLinksUpdates |> Async.Parallel |> Async.Ignore
+            do! Seq.append outLinksUpdates inputLinksUpdates |> Async.Parallel |> Async.Ignore            
 
-            logVerbose DependencyGraph (sprintf "Saving alph files for outputs of %A[%A]" methodId index)
+            logVerbose DependencyGraph (sprintf "Saving alph files for outputs of %A%A" methodId index)
             s.Outputs |> Seq.iter(fun out -> out.Artefact.SaveAlphFile())
         }
 

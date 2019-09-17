@@ -129,8 +129,7 @@ type CommandMethod(command: CommandLineVertex,
                     // 5a) hashing outputs disk content                
                     // 5b) updating dependency versions in dependency graph
                     // 6) dumping updated alph files to disk
-                    do! command.OnSucceeded(index)
-                    logVerbose "alph file saved"
+                    do! command.OnSucceeded(index)                    
             |   UpToDate _ ->
                 logVerbose "skipping as up to date"
             //comp.Outputs |> Seq.map (fun (output:DependencyGraph.VersionedArtefact) -> output.ExpectedVersion) |> List.ofSeq

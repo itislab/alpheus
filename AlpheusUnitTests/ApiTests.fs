@@ -13,6 +13,7 @@ open System
 open ItisLab.Alpheus
 open Angara.Data
 open System.Linq.Expressions
+open FluentAssertions
 
 /// can be used as calssData for XUnit theory. returns all of the artefactIDs for the sample experiment
 type ArtefactIdSource() =
@@ -312,7 +313,7 @@ let equalStatuses expected actual =
     let s2 = Map.toSeq actual
     Seq.forall2 (fun x y -> let idx1,v1 = x in let idx2,v2 = y in (idx1=idx2) && MdMap.equal (fun _ elem1 elem2 -> elem1=elem2) v1 v2) s1 s2
 
-type ScalarScenarios(output) as this =
+type ScalarScenarios(output) =
     inherit SingleUseOneTimeDirectory(output)
 
     let concatCommand = 
@@ -767,6 +768,43 @@ type ScalarScenarios(output) as this =
                 |   Error e->
                         Assert.True(false, sprintf "Error: %A" e)
                 
+            finally
+                Environment.CurrentDirectory <- savedWD            
+        }
+
+    [<Fact>]
+    member s.``Compute: creates hash file for inputs and outputs``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try            
+                let path = Path.GetFullPath s.RelativeExperimentRoot
+                Environment.CurrentDirectory <- s.RelativeExperimentRoot
+                do! buildExperiment(path)
+
+                
+                let outId = ArtefactId.Path "1_2_3.txt"
+                let res = API.compute(path, outId) // first compute all
+                assertResultOk res
+
+                for id in [ "1.txt"; "2.txt"; "3.txt"; "1_2.txt"; "1_2_3.txt" ] do
+                    let hashFile = ArtefactId.Path id |> PathUtils.idToFullPath s.ExperimentRoot |> PathUtils.pathToHashFile 
+                    do! assertNonEmptyFile hashFile
+            finally
+                Environment.CurrentDirectory <- savedWD            
+        }
+
+    [<Fact>]
+    member s.``Build: doesn't create hash file for inputs and outputs``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try            
+                let path = Path.GetFullPath s.RelativeExperimentRoot
+                Environment.CurrentDirectory <- s.RelativeExperimentRoot
+                do! buildExperiment(path)
+                  
+                for id in [ "1.txt"; "2.txt"; "3.txt"; "1_2.txt"; "1_2_3.txt" ] do
+                    let hashFile = ArtefactId.Path id |> PathUtils.idToFullPath s.ExperimentRoot |> PathUtils.pathToHashFile 
+                    File.Exists(hashFile).Should().BeFalse("build shouldn't save hashes to disk to minimize duration of the command") |> ignore
             finally
                 Environment.CurrentDirectory <- savedWD            
         }
