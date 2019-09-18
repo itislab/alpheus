@@ -8,6 +8,8 @@ open ItisLab.Alpheus.Tests.Utils
 open ItisLab.Alpheus
 open ItisLab.Alpheus.DependencyGraph
 open FluentAssertions
+open Angara.Data
+open ItisLab.Alpheus.AlphFiles
 
 
 type ``Dependency graph tests``(output) =
@@ -21,11 +23,42 @@ type ``Dependency graph tests``(output) =
         | Result.Error error -> failwithf "%A" error
 
     [<Fact>]
-    member s.``Concurrency issue test``() =
+    member s.``Concurrent update of expected versions eventually produces correct vector of hashes``() =
+        let expectedVersion = MdMap.Empty
+        let artefact = ArtefactVertex (Path "test*.txt", s.ExperimentRoot)
+        let link = LinkToArtefact(artefact, expectedVersion)
+        let producer = MethodVertex.Command (CommandLineVertex("method", s.ExperimentRoot, [], [link], "command"))
+        artefact.ProducedBy <- producer
+        let indexSpace = List.init 100 (fun i -> [string i])
+
+        let alphPath = artefact.Id |> PathUtils.idToAlphFileFullPath s.ExperimentRoot
+        let getNumOfSavedIndices() =
+            let alph = AlphFiles.tryLoad alphPath |> Option.get
+            match alph.Origin with
+            | DataOrigin.CommandOrigin cmd ->
+                let output = cmd.Outputs.[0]
+                let n = output.Hash |> MdMap.toShallowSeq |> Seq.length
+                n
+            | _ -> failwith "Wrong origin"         
+
+        indexSpace
+            |> List.iter(fun index -> 
+                let path = artefact.Id |> PathUtils.idToFullPath s.ExperimentRoot |> PathUtils.applyIndex index
+                File.WriteAllText (path, string index))
+
+        indexSpace 
+            |> List.map (fun index -> 
+                async {
+                    link.Artefact.ActualVersion.Invalidate index
+                    do! link.ExpectActualVersionAsync index
+                    link.Artefact.SaveAlphFile()
+                })
+            |> Async.Parallel
+            |> Async.Ignore
+            |> Async.RunSynchronously
     
-        //let link = LinkToArtefact(artefact, expectedVersion)
-        ()
-    
+        getNumOfSavedIndices().Should().Be(indexSpace.Length, "number of versions equals number of indices")
+
 
     [<Fact>]
     member s.``DependencyGraph is empty initially``() =
