@@ -68,6 +68,6 @@ type ``Vector scenarios through API``(output) =
                 Assert.Equal(3, cmd.Inputs.[1].Hash |> MdMap.toShallowSeq |> Seq.length)
                 Assert.Equal(3, cmd.Outputs.[0].Hash |> MdMap.toShallowSeq |> Seq.length)
             | _ -> failwith "Unexpected origin"
-        } |> toAsyncFact
+        }
 
    
