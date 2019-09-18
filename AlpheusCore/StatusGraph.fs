@@ -21,7 +21,7 @@ type ArtefactItem =
 
 
 type SourceMethod(source: SourceVertex, experimentRoot, checkStoragePresense) = 
-    inherit AngaraGraphNode(DependencyGraph.Source source)
+    inherit AngaraGraphNode<ArtefactItem>(DependencyGraph.Source source)
 
     override s.Execute(_, _) = // ignoring checkpoints
         async{
@@ -65,7 +65,7 @@ type SourceMethod(source: SourceVertex, experimentRoot, checkStoragePresense) =
 type CommandMethod(command: CommandLineVertex,
                     experimentRoot,
                     checkStoragePresence: HashString seq -> Async<bool array>) =
-    inherit AngaraGraphNode(DependencyGraph.Command command)  
+    inherit AngaraGraphNode<ArtefactItem>(DependencyGraph.Command command)  
 
     override s.Execute(inputs, _) = //ignoring checkpoint.
         async{
@@ -107,7 +107,7 @@ type CommandMethod(command: CommandLineVertex,
         } |> Async.RunSynchronously
 
 let buildStatusGraph (g:DependencyGraph.Graph) experimetRoot checkStoragePresence =    
-    let factory method : AngaraGraphNode =
+    let factory method : AngaraGraphNode<ArtefactItem> =
         match method with
         |   DependencyGraph.Source(source) -> upcast SourceMethod(source, experimetRoot, checkStoragePresence)
         |   DependencyGraph.Command(computed) -> upcast CommandMethod(computed, experimetRoot, checkStoragePresence)
@@ -117,7 +117,7 @@ type ArtefactStatus =
 |   UpToDate of ArtefactLocation
 |   NeedsRecomputation of OutdatedReason
         
-let getStatuses (g:FlowGraph<AngaraGraphNode>) =
+let getStatuses (g:FlowGraph<AngaraGraphNode<ArtefactItem>>) =
     let state = 
         {
             TimeIndex = 0UL
@@ -125,7 +125,7 @@ let getStatuses (g:FlowGraph<AngaraGraphNode>) =
             Vertices = Map.empty
         }
     try
-        use engine = new Engine<AngaraGraphNode>(state,Scheduler.ThreadPool())        
+        use engine = new Engine<AngaraGraphNode<ArtefactItem>>(state,Scheduler.ThreadPool())        
         engine.Start()
         // engine.Changes.Subscribe(fun x -> x.State.Vertices)
         let final = Control.pickFinal engine.Changes

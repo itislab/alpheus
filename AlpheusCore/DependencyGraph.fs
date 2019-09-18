@@ -278,6 +278,8 @@ and SourceVertex(methodId: MethodId, output: LinkToArtefact, experimentRoot: str
     member s.MethodId : MethodId = methodId
     member s.ExperimentRoot : string = experimentRoot
 
+    override s.ToString() = sprintf "id = %s" methodId
+
 
 /// Represents a method defined as a command line.
 and CommandLineVertex(methodId : MethodId, experimentRoot: string, inputs: LinkToArtefact list, outputs: LinkToArtefact list, command: string) =
@@ -352,6 +354,8 @@ and CommandLineVertex(methodId : MethodId, experimentRoot: string, inputs: LinkT
 
     override s.Equals(obj1:obj) =
         Object.ReferenceEquals(s,obj1)
+
+    override s.ToString() = sprintf "id = %s, command = %s" methodId command
 
 
 /// Alpheus dependencies graph

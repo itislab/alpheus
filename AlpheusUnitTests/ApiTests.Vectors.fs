@@ -14,7 +14,7 @@ open ItisLab.Alpheus
 open Angara.Data
 open FluentAssertions
 
-type ``Vector scenarios through API``(output) =
+type ``Vector scenarios``(output) =
     inherit SingleUseOneTimeDirectory(output)
 
     let concatCommand = 
@@ -22,6 +22,12 @@ type ``Vector scenarios through API``(output) =
             "cmd /C \"copy $in1 + $in2 $out1 /b\""
         else
             "/bin/sh -c \"cat $in1 > $out1; cat $in2 >> $out1\""
+
+    let concatVectorCommand = 
+        if isTestRuntimeWindows then
+            "cmd /C \"copy $in1 $out1 /b\""
+        else
+            "todo"
 
     let prepareSources(path) =
         async {
@@ -113,6 +119,49 @@ type ``Vector scenarios through API``(output) =
                     (cmd.Inputs.[1].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "2nd input is a vector of 3 elements") |> ignore
                     (cmd.Outputs.[0].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "The output is a vector of 3 elements") |> ignore
                 | _ -> failwith "Unexpected origin"
+            finally
+                Environment.CurrentDirectory <- savedWD      
+        } 
+
+    [<Fact>]
+    member s.``Aggregates results of a vector operation``() =
+        async {
+            let savedWD = Environment.CurrentDirectory
+            try   
+                let root = s.ExperimentRoot
+                Environment.CurrentDirectory <- root
+                do! prepareSources(root)
+
+                let! res = API.buildAsync root ["base.txt"; "data/*.txt"] ["output/out*.txt"] concatCommand false
+                assertResultOk res
+
+                let! res = API.buildAsync root ["output/out*.txt"] ["summary.txt"] concatVectorCommand false
+                assertResultOk res
+
+                let summaryId = ArtefactId.Path "summary.txt"
+                let res = API.compute (root, summaryId)
+                assertResultOk res
+
+                //"Base fileBase fileFile 1" |> assertFileContent (Path.Combine(root, "output2", "1.txt"))
+                //"Base fileBase fileFile 2" |> assertFileContent (Path.Combine(root, "output2", "2.txt"))
+                //"Base fileBase fileFile 3" |> assertFileContent (Path.Combine(root, "output2", "3.txt"))
+
+                //// Checks the output alph file:
+                //let alph = AlphFiles.tryLoad (PathUtils.idToAlphFileFullPath root outputId) |> Option.get
+                //match alph.Origin with 
+                //| DataOrigin.CommandOrigin cmd ->
+                //    cmd.Inputs.[0].Hash.IsScalar.Should().BeTrue("base.txt is scalar") |> ignore
+                //    (cmd.Inputs.[1].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "2nd input is a vector of 3 elements") |> ignore
+                //    (cmd.Outputs.[0].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "The output is a vector of 3 elements") |> ignore
+                //| _ -> failwith "Unexpected origin"
+
+                //let alph = AlphFiles.tryLoad (PathUtils.idToAlphFileFullPath root output2Id) |> Option.get
+                //match alph.Origin with 
+                //| DataOrigin.CommandOrigin cmd ->
+                //    cmd.Inputs.[0].Hash.IsScalar.Should().BeTrue("base.txt is scalar") |> ignore
+                //    (cmd.Inputs.[1].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "2nd input is a vector of 3 elements") |> ignore
+                //    (cmd.Outputs.[0].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "The output is a vector of 3 elements") |> ignore
+                //| _ -> failwith "Unexpected origin"
             finally
                 Environment.CurrentDirectory <- savedWD      
         } 

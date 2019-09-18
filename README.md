@@ -172,6 +172,16 @@ This also means that it is possible to change an extension of the output file (e
 are two unclear issues so far: (1) if there are two vector inputs, what is the joint input? is it cartaesian product of the two or just
 pairs with same indices? if the latter, how to order input items? (2) how to name outputs in this case?
 
+To aggregate results of a vector operation, just don't specify an asterisk in the output:
+
+```
+alpheus build -o "summary.txt" -d "scripts/build_summary.py" -d "files/*.txt" "python $in1 $in2 $out1"
+```
+
+In this case, the script gets the input pattern as an argument, e.g. a full path for "files/*.txt" as `$in2`.
+
+
+
 ### Using external storage for artefacts
 
 

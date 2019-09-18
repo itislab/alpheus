@@ -64,7 +64,7 @@ type SingleUseOneTimeDirectory(output:ITestOutputHelper) =
 
     interface IDisposable with
         member s.Dispose() =
-            System.IO.Directory.Delete(fullPath,true)
+            //System.IO.Directory.Delete(fullPath,true)
             output.WriteLine(sprintf "Successfully deleted unique test dir %s" relativePath)
 
 

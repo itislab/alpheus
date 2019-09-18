@@ -12,8 +12,8 @@ open ItisLab.Alpheus.PathUtils
 
 let internal arrayType<'a> rank : Type =
     if rank < 0 then invalidArg "rank" "Rank is negative"
-    else if rank = 0 then typeof<ArtefactId>
-    else typeof<ArtefactId>.MakeArrayType(rank)
+    else if rank = 0 then typeof<'a>
+    else typeof<'a>.MakeArrayType(rank)
 
 let internal inputRank (v:MethodVertex) =
     match v with
@@ -27,17 +27,17 @@ let internal outputRank (v:MethodVertex) =
 
 let internal methodRank (v:MethodVertex) = min (outputRank v) (inputRank v)
 
-let getOutputTypes (v:MethodVertex) =
+let getOutputTypes<'a> (v:MethodVertex) =
     let rank = methodRank v
     match v with
-    | Source src -> [max 0 (src.Output.Artefact.Rank - rank) |> arrayType]
-    | Command cmd -> cmd.Outputs |> Seq.map(fun a -> max 0 (a.Artefact.Rank - rank) |> arrayType) |> List.ofSeq
+    | Source src -> [max 0 (src.Output.Artefact.Rank - rank) |> arrayType<'a>]
+    | Command cmd -> cmd.Outputs |> Seq.map(fun a -> max 0 (a.Artefact.Rank - rank) |> arrayType<'a>) |> List.ofSeq
 
-let getInputTypes (v:MethodVertex) =
+let getInputTypes<'a> (v:MethodVertex) =
     let rank = methodRank v
     match v with
     | Source src -> List.empty
-    | Command cmd -> cmd.Inputs |> Seq.map(fun a -> max 0 (a.Artefact.Rank - rank) |> arrayType) |> List.ofSeq
+    | Command cmd -> cmd.Inputs |> Seq.map(fun a -> max 0 (a.Artefact.Rank - rank) |> arrayType<'a>) |> List.ofSeq
 
 
 let rec internal toJaggedArrayOrValue (mapValue: (string list * 'a) -> 'c) (index: string list) (map: MdMapTree<string,'a>) : obj =
@@ -125,12 +125,13 @@ let getCommandVertexStatus checkStoragePresence (command:CommandLineVertex) inde
 /// This type represents an Angara Flow method.
 /// Note that execution modifies the given vertex and it is Angara Flow execution runtime who controls
 /// the concurrency.
+/// 'a is an artefact type, i.e. type of objects passed between methods.
 [<AbstractClass>]
-type AngaraGraphNode(producerVertex:MethodVertex) =
+type AngaraGraphNode<'a>(producerVertex:MethodVertex) =
     inherit ExecutableMethod(
         System.Guid.NewGuid(),
-        getInputTypes producerVertex,
-        getOutputTypes producerVertex)
+        getInputTypes<'a> producerVertex,
+        getOutputTypes<'a> producerVertex)
 
     member s.VertexID =
         match producerVertex with

@@ -20,7 +20,7 @@ type ArtefactItem =
 
 type SourceMethod(source: SourceVertex, experimentRoot,
                     checkStoragePresence : HashString seq -> Async<bool array>) = 
-    inherit AngaraGraphNode(DependencyGraph.Source source)
+    inherit AngaraGraphNode<ArtefactItem>(DependencyGraph.Source source)
 
     override s.Execute(_, _) = // ignoring checkpoints
         async {
@@ -49,7 +49,12 @@ type CommandMethod(command: CommandLineVertex,
                     experimentRoot,
                     checkStoragePresence: HashString seq -> Async<bool array>,
                     restoreFromStorage: (HashString*string) array -> Async<unit>) = // version*filename
-    inherit AngaraGraphNode(DependencyGraph.Command command)  
+    inherit AngaraGraphNode<ArtefactItem>(DependencyGraph.Command command)  
+
+    let reduceArtefactItem (inputIdx: int) (vector: ArtefactItem[]) : ArtefactItem =
+        // todo: this won't work for rank > 1
+        let path = command.Inputs.[inputIdx].Artefact.Id |> PathUtils.idToFullPath experimentRoot
+        { FullPath = path; Index = [] }
 
 
     override s.Execute(inputs, _) = // ignoring checkpoints
@@ -63,7 +68,11 @@ type CommandMethod(command: CommandLineVertex,
             //  1) restore inputs if they are absent on disk
             //  2) execute the command
             
-            let inputItems = inputs |> List.map (fun inp -> inp :?> ArtefactItem)
+            let inputItems = inputs |> List.mapi (fun i inp -> 
+                match inp with
+                | :? ArtefactItem as item -> item
+                | :? (ArtefactItem[]) as vector -> reduceArtefactItem i vector
+                | _ -> failwith "Unexpected type of the input")
                     
             let index =
                 inputItems 
@@ -142,14 +151,14 @@ type CommandMethod(command: CommandLineVertex,
 
 
 let buildGraph experimentRoot (g:DependencyGraph.Graph) checkStoragePresence restoreFromStorage =    
-    let factory method : AngaraGraphNode = 
+    let factory method : AngaraGraphNode<ArtefactItem> = 
         match method with
         | DependencyGraph.Source src -> upcast SourceMethod(src, experimentRoot, checkStoragePresence) 
         | DependencyGraph.Command cmd -> upcast CommandMethod(cmd, experimentRoot, checkStoragePresence, restoreFromStorage)
 
     g |> DependencyGraphToAngaraWrapper |> AngaraTranslator.translate factory
 
-let doComputations (g:FlowGraph<AngaraGraphNode>) = 
+let doComputations (g:FlowGraph<AngaraGraphNode<ArtefactItem>>) = 
     let state  = 
         {
             TimeIndex = 0UL
@@ -157,7 +166,7 @@ let doComputations (g:FlowGraph<AngaraGraphNode>) =
             Vertices = Map.empty
         }
     try
-        use engine = new Engine<AngaraGraphNode>(state,Scheduler.ThreadPool())        
+        use engine = new Engine<AngaraGraphNode<ArtefactItem>>(state,Scheduler.ThreadPool())        
         engine.Start()
         
         // engine.Changes.Subscribe(fun x -> x.State.Vertices)
