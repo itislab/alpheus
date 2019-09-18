@@ -45,8 +45,7 @@
     <Compile Include="ArtefactArchiverTests.fs" />
     <Compile Include="SampleExperiment.fs" />
     <Compile Include="PathUtilsTests.fs" />
-    <None Include="DependencyGraphTests.fs" />
-    <None Include="DependencyGraphDiskTests.fs" />
+    <Compile Include="DependencyGraphTests.fs" />
     <Compile Include="ExecuteCommandTests.fs" />
     <Compile Include="ApiTests.fs" />
     <Compile Include="ApiTests.Vectors.fs" />
@@ -54,6 +53,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="FluentAssertions" Version="5.9.0" />
     <PackageReference Include="FsCheck.Xunit" Version="2.14.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.2.0" />
     <PackageReference Include="xunit" Version="2.4.1" />

@@ -312,7 +312,8 @@ and CommandLineVertex(methodId : MethodId, experimentRoot: string, inputs: LinkT
     member s.WorkingDirectory 
         with get() = workingDirectory
         and set (v:ExperimentRelativePath) =
-            assert (v.EndsWith(Path.DirectorySeparatorChar) || v.EndsWith(Path.AltDirectorySeparatorChar))
+            if not(PathUtils.isDirectory v) then invalidArg "v" "WorkingDirectory doesn't end with directory separator char and considered as a path to a file"
+            if Path.IsPathRooted v then invalidArg "v" "WorkingDirectory is absolute"
             workingDirectory <- v
     
     member s.DoNotCleanOutputs
@@ -380,7 +381,7 @@ and Graph (experimentRoot:string) =
         let experimentRootPath = normalizePath experimentRootPath
         let g = Graph(experimentRootPath)
         let initialArtefacts = artefactIds |> Seq.map(fun id -> g.GetOrAddArtefact id) |> Seq.toList
-        g.LoadDependencies initialArtefacts |> ignore
+        g.LoadDependencies initialArtefacts
         g
 
     /// Adds new command line method to the graph with the given inputs and outputs.
@@ -403,8 +404,7 @@ and Graph (experimentRoot:string) =
         }
 
     /// Takes a list of outputs and builds (recreates using .alph files) a dependency graph
-    /// Returns all found dependencies incl. original "outputs" vertices
-    member s.LoadDependencies (outputs:ArtefactVertex list)  =
+    member s.LoadDependencies (outputs:ArtefactVertex list) =
         let mutable processedOutputs : Set<ArtefactVertex> = Set.empty   
           
         let queue = Queue<ArtefactVertex>()
@@ -421,8 +421,6 @@ and Graph (experimentRoot:string) =
                 // Absence of .alph file means that the artefact is initial (not produced)
                 // Thus it corresponds to a source vertex (no inputs)
                 // We must create it now
-                
-
                 s.AddOrGetSource (LinkToArtefact(dequeuedArtefact, MdMap.scalar None)) |> ignore
 
             | Some(alphFile) ->
@@ -449,9 +447,7 @@ and Graph (experimentRoot:string) =
                         if path.EndsWith(Path.DirectorySeparatorChar) then path else path + string Path.DirectorySeparatorChar
                     method.WorkingDirectory <- expRootRelatedWorkingDir
                     inputs |> Seq.map (fun inp -> inp.Artefact) |> Seq.filter(not << processedOutputs.Contains) |> Seq.iter (fun (x:ArtefactVertex) -> queue.Enqueue x)                         
-
-                processedOutputs <- Set.add dequeuedArtefact processedOutputs
-        processedOutputs
+            processedOutputs <- Set.add dequeuedArtefact processedOutputs
 
     member private s.GetOrAddArtefact artefactId =
         match artefactVertices |> Map.tryFind artefactId  with
