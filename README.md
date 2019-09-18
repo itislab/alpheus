@@ -215,11 +215,11 @@ _todo_
 
 ### File structure
 
+**Shared or exclusive code?**
 Working on a problem, eventually you get a solid results you want to keep, but fork another experiment to try another approach. 
-After some time, you might get multiple experiments (e.g. having different models) and the following issues appear:
-* Common code you want to be shared between them so all of them are kept up-to-date, but don't want to invalidate results of other experiments by modifying the shared code.
-* Compare results of the experiments.
-* Aggregare results of the experiments, e.g. create an ensemble model based on the experiments.
+After some time, you might get experiments (e.g. having different models) with some code that can be re-used in the experiments.
 
-Therefore the guideline on file structure is:
-_todo_
+The conflict is that from one side the shared code is useful since the code improvement automatically affects all the experiments. From 
+the other side, being modified it invalidates the computed results, which is bad.
+
+Therefore we suggest consider not sharing the code, but use copy/paste when you explicitly want to propagate changes from one experiment to another. git will help to resolve changes.
