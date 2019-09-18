@@ -127,7 +127,7 @@ type CommandMethod(command: CommandLineVertex,
                 let print (s:string) = Console.WriteLine s
                 let input idx = command.Inputs.[idx-1].Artefact.Id |> idToFullPath experimentRoot |> applyIndex index
                 let output idx = command.Outputs.[idx-1].Artefact.Id |> idToFullPath experimentRoot |> applyIndex index
-                let context : ComputationContext = { ExperimentRoot = experimentRoot; Print = print  }
+                let context : ComputationContext = { ExperimentRoot = experimentRoot; Print = print }
                 let exitCode = command |> ExecuteCommand.runCommandLineMethodAndWait context (input, output) 
 
                 // 4) upon 0 exit code hash the outputs

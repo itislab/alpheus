@@ -50,18 +50,15 @@ type ``Vector scenarios``(output) =
     [<Fact>]
     member s.``Runs same method for multiple input files``() =
         async {
-            let savedWD = Environment.CurrentDirectory
-            try   
-                let root = s.ExperimentRoot
-                Environment.CurrentDirectory <- root
-                do! prepareSources(root)
+            let root = s.ExperimentRoot 
+            do! prepareSources(root)
 
-                let! res = API.buildAsync root ["base.txt"; "data/*.txt"] ["output/out*.txt"] concatCommand false
-                assertResultOk res
+            let! res = API.buildAsync root root ["base.txt"; "data/*.txt"] ["output/out*.txt"] concatCommand false
+            assertResultOk res
 
-                let outputId = ArtefactId.Path "output/out*.txt"
-                let res = API.compute (root, outputId)
-                assertResultOk res
+            let outputId = ArtefactId.Path "output/out*.txt"
+            let res = API.compute (root, outputId)
+            assertResultOk res
 
                 "Base fileFile 1" |> assertFileContent (Path.Combine(root, "output", "out1.txt"))
                 "Base fileFile 2" |> assertFileContent (Path.Combine(root, "output", "out2.txt"))

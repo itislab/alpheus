@@ -45,8 +45,7 @@
     <Compile Include="ArtefactArchiverTests.fs" />
     <Compile Include="SampleExperiment.fs" />
     <Compile Include="PathUtilsTests.fs" />
-    <None Include="DependencyGraphTests.fs" />
-    <None Include="DependencyGraphDiskTests.fs" />
+    <Compile Include="DependencyGraphTests.fs" />
     <Compile Include="ExecuteCommandTests.fs" />
     <Compile Include="ApiTests.fs" />
     <Compile Include="ApiTests.Vectors.fs" />

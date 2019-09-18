@@ -5,21 +5,20 @@ open ItisLab.Alpheus.CLI
 open System.IO
 open System.Text
 
-let run (programName:string) (parseResults:ParseResults<AlpheusArgs>) : Result<unit, AlpheusError> =
+let run (programName:string) (workingDir:string) (parseResults:ParseResults<AlpheusArgs>) : Result<unit, AlpheusError> =
     let usage = parseResults.Parser.PrintUsage(programName = programName)
     if parseResults.IsUsageRequested then
         printfn "%s" usage
         Ok()
     else if parseResults.Contains Init then
         result {            
-            let! cwd = (Directory.GetCurrentDirectory(), (fun p -> not (Config.isExperimentDirectory p)), (UserError "The current directory is already an Alpheus experiment directory"))
+            let! cwd = (workingDir, (fun p -> not (Config.isExperimentDirectory p)), (UserError "The current directory is already an Alpheus experiment directory"))
             return API.createExperimentDirectory cwd |> Async.RunSynchronously |> ignore
         }
     elif parseResults.Contains Config then
         result {
             let configArgs = parseResults.GetResult <@ Config @>
-            let cwd = Directory.GetCurrentDirectory()
-            let! experimentRoot = (Config.tryLocateExperimentRoot cwd, UserError "The file you've specified is not under an Alpheus experiment folder")
+            let! experimentRoot = (Config.tryLocateExperimentRoot workingDir, UserError "The file you've specified is not under an Alpheus experiment folder")
             let! storageArgs = (configArgs.TryGetResult <@ CLI.Storage @>, UserError  "Please specify what to configure")
             return! async {                                
                 if storageArgs.Contains AddLocal then
@@ -63,14 +62,14 @@ let run (programName:string) (parseResults:ParseResults<AlpheusArgs>) : Result<u
         result {
             let computeArgs = parseResults.GetResult <@ Compute @>
             let filePath = computeArgs.GetResult <@ ComputeArgs.File @>
-            let! artefact = API.artefactFor filePath
+            let! artefact = API.artefactFor workingDir filePath
             return! API.compute artefact
         }
     elif parseResults.Contains Status then
         result {
             let statusArgs = parseResults.GetResult <@ Status @>
             let artefactPath = statusArgs.GetResult <@ StatusArgs.File  @>
-            let! artefact = API.artefactFor artefactPath
+            let! artefact = API.artefactFor workingDir artefactPath
             let statusesRes = API.status artefact
             match statusesRes with
             |   Ok(statuses)->
@@ -99,7 +98,7 @@ let run (programName:string) (parseResults:ParseResults<AlpheusArgs>) : Result<u
         result {
             let restoreArgs = parseResults.GetResult <@ Restore @>
             let artefactPath = restoreArgs.GetResult <@ RestoreArgs.Path @>
-            let! artefact = API.artefactFor artefactPath
+            let! artefact = API.artefactFor workingDir artefactPath
             return! API.restoreAsync artefact |> Async.RunSynchronously
         }
     elif parseResults.Contains Save then
@@ -108,11 +107,11 @@ let run (programName:string) (parseResults:ParseResults<AlpheusArgs>) : Result<u
             let saveAll = saveArgs.Contains AllUnsaved 
             let specifiedStorageName = saveArgs.TryGetResult <@ SaveArgs.Storage @>
             let inputpath = saveArgs.GetResult <@ SaveArgs.Path @>
-            let! artefact = API.artefactFor inputpath
+            let! artefact = API.artefactFor workingDir inputpath
             return! API.saveAsync artefact specifiedStorageName saveAll |> Async.RunSynchronously
         }
     elif parseResults.Contains Build then                
-        BuildCommand.run (parseResults.GetResult <@ Build @>)
+        BuildCommand.run workingDir (parseResults.GetResult <@ Build @>)
     else
         Error (UserError usage)
 

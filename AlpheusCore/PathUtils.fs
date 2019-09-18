@@ -33,18 +33,24 @@ let idToFullPath (experimentRoot: string) (artefactId:ArtefactId) =
     Path.GetFullPath(Path.Combine(experimentRoot, idToExperimentPath artefactId))
 
 /// Returns ArtefactId built from the given path, which can be an either option:
-/// - A path to the artefact, either full or relative to the current directory.
+/// - A path to the artefact, either full or relative to the working directory.
 /// - A path to artefact's alph file
-let rec pathToId (experimentRoot: string) (path: string) : ArtefactId =
+let rec pathToId (experimentRoot: string) workingDir (path: string) : ArtefactId =
     let experimentRoot = normalizePath experimentRoot
-    let path = normalizePath path
+    let path2 = normalizePath path
+    let path3 =
+        if Path.IsPathRooted(path2) then
+            path2
+        else
+            // relative to the workingDir
+            Path.Combine(workingDir,path2)
     if not(isDirectory experimentRoot) then invalidArg "experimentRoot" "The path is not a directory"
-    match isAlphFile path with
+    match isAlphFile path3 with
     | true ->
         // we need to know whether the corresponding artefact is directory (e.g. its ID ends with '\') or single file
         // to figure this out we read the alph file content. First output by convention corresponds to the associated artefact (NOTE: each artefact has correspondent alph file)
-        match AlphFiles.tryLoad path with
-        | None -> failwith (sprintf "Couldn't load the file: %s" path)
+        match AlphFiles.tryLoad path3 with
+        | None -> failwith (sprintf "Couldn't load the file: %s" path3)
         | Some alphFile ->
             let relative =
                 match alphFile.Origin with
@@ -54,10 +60,10 @@ let rec pathToId (experimentRoot: string) (path: string) : ArtefactId =
                     cmd.Outputs.[cmd.OutputIndex].RelativePath
                 | AlphFiles.SourceOrigin snap ->
                     snap.RelativePath 
-            relative |> alphRelativePathToId path experimentRoot
+            relative |> alphRelativePathToId path3 experimentRoot
             
     | false ->
-        let relativePath = relativePath experimentRoot path
+        let relativePath = relativePath experimentRoot path3
         ArtefactId.Path (unixPath relativePath)
 
 /// Transforms a path relative to the alph file into ArtefactId.
@@ -68,7 +74,7 @@ and alphRelativePathToId (alphFile: string) (experimentRoot: string) (relativePa
     if Path.IsPathRooted relativePath then invalidArg "relativePath" "The path is absolute"
     let alphFolder = Path.GetDirectoryName(alphFile) 
     let fullPath = Path.GetFullPath(Path.Combine(alphFolder, relativePath))
-    pathToId experimentRoot fullPath
+    pathToId experimentRoot String.Empty fullPath // empty string, as path supplied is rooted
 
 let private unvectorizePath (artefactPath:string) : string =
     let artefactPath = normalizePath artefactPath
