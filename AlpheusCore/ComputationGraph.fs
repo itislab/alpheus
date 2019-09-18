@@ -83,7 +83,7 @@ type CommandMethod(command: CommandLineVertex,
             match currentVertexStatus with
             |   Outdated _ ->
                 // We need to do computation            
-                // 1) deleting outputs if they exist   
+                // 1) clearing the outputs if they exist   
                 // 2) restoring inputs from storage if it is needed
                 // 3) execute external command
                 // 4) upon 0 exit code hash the outputs
@@ -91,8 +91,13 @@ type CommandMethod(command: CommandLineVertex,
                 // 6) write alph files for outputs
 
                 // 1) Deleting outputs
+                let recreatePath path =
+                    deletePath path
+                    if PathUtils.isDirectory path then
+                         ensureDirectories path
+                        
                 if not command.DoNotCleanOutputs then
-                    outputPaths |> List.iter deletePath
+                    outputPaths |> List.iter recreatePath
 
                 // 2) restoring inputs from storage if it is needed
                 let inputChooser (input:LinkToArtefact) =
@@ -115,15 +120,15 @@ type CommandMethod(command: CommandLineVertex,
 
 
                 // 3) executing a command
-                let print (s:string) = Console.WriteLine s
+                let print (s:string) = Logger.logInfo Logger.ExecutionOutput s
                 let input idx = command.Inputs.[idx-1].Artefact.Id |> idToFullPath experimentRoot |> applyIndex index
                 let output idx = command.Outputs.[idx-1].Artefact.Id |> idToFullPath experimentRoot |> applyIndex index
                 let context : ComputationContext = { ExperimentRoot = experimentRoot; Print = print }
                 let exitCode = command |> ExecuteCommand.runCommandLineMethodAndWait context (input, output) 
 
-                // 4) upon 0 exit code hash the outputs
-                if exitCode <> 0 then
-                    raise(InvalidOperationException(sprintf "Process exited with exit code %d" exitCode))
+                // 4) upon successful exit code hash the outputs
+                if not (Seq.exists (fun x -> exitCode = x) command.SuccessfulExitCodes) then
+                    raise(InvalidOperationException(sprintf "Process exited with non-successful exit code %d" exitCode))
                 else
                     logVerbose (sprintf "Program succeeded. Calculating hashes of the outputs...")
                     // 5a) hashing outputs disk content                

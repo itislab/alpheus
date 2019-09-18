@@ -4,7 +4,6 @@ open System
 open Argu
 open ItisLab.Alpheus.CLI
 open ItisLab.Alpheus.CliRunner
-open ItisLab.Alpheus.Trace
 open System.IO
 open System.Text
 

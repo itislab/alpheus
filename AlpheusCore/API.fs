@@ -356,7 +356,7 @@ let saveAsync (experimentRoot, artefactId) specifiedStorageName saveAll =
 /// Adds one more method vertex to the experiment graph
 /// deps: a list of paths to the input artefacts. outputs: a list of paths to the produced artefacts
 /// workingDirecotry - the full path to the dir, relative to which the command and the inputs/outputs are considered
-let buildAsync experimentRoot workingDir deps outputs command doNotCleanOutputs =
+let buildAsync experimentRoot workingDir deps outputs command executionSettings =
     let getId = pathToId experimentRoot workingDir // WARNING: this method depends on the current directory!
     let inputIDs = List.map getId deps
     let outputIDs = List.map getId outputs
@@ -370,11 +370,12 @@ let buildAsync experimentRoot workingDir deps outputs command doNotCleanOutputs 
         let! g = buildDependencyGraphAsync experimentRoot inputIDs
         
         // saving command and current working dir
-        let rootBasedCwd = Path.GetRelativePath(experimentRoot, workingDir) + Path.DirectorySeparatorChar.ToString()
-        let! methodVertex = g.AddMethod command inputIDs outputIDs rootBasedCwd doNotCleanOutputs
+        let rootBasedCwd = Path.GetRelativePath(experimentRoot, workingDir) + Path.DirectorySeparatorChar.ToString()       
+
+        let! _ = g.AddMethod command inputIDs outputIDs rootBasedCwd executionSettings
     
-        if doNotCleanOutputs then
-            Logger.logInfo Logger.API "Clearing of outputs by alpheus is disabled for this computation"
+        if executionSettings.DoNotCleanOutputs then
+            Logger.logVerbose Logger.API "Clearing of outputs by alpheus is disabled for this computation"
         Logger.logVerbose Logger.API (sprintf "Dependency graph is built (%d artefacts; %d methods)" g.ArtefactsCount g.MethodsCount)
         Logger.logVerbose Logger.API (sprintf "Graph artefacts: %A" g.Artefacts)
         

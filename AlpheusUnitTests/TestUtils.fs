@@ -56,7 +56,7 @@ type SingleUseOneTimeDirectory(output:ITestOutputHelper) =
     member s.Output
         with get() = output
 
-    /// One-time single-use unique named directory to carry on tests within
+    /// One-time single-use unique named directory to carry on tests within relative to current working directory
     member s.RelativeExperimentRoot = relativePath
 
     /// Full path of the experiment root - One-time single-use unique named directory to carry on tests within 

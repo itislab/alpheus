@@ -25,7 +25,7 @@ type ResultBuilder() =
     member __.Bind((assertion, error): (bool * 'E), f) = 
         if assertion then Ok() else Error error
         |> Result.bind f
-    member __.Zero() = None
+    member __.Zero() = Ok()
     member __.Combine(m, f) = Result.bind f m
     member __.Delay(f: unit -> _) = f
     member __.Run(f) = f()
