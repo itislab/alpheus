@@ -42,6 +42,9 @@ type SingleUseOneTimeDirectory(output:ITestOutputHelper) =
         |   :? InvalidOperationException -> ()
     
     do
+        // setting high verbosity level
+        ItisLab.Alpheus.Logger.LogLevel <- ItisLab.Alpheus.Logger.VerboseLevel
+        
         // redirect logging module of the alpheus to the XUnit output capturer
         ItisLab.Alpheus.Logger.LogFunction <- logToXunitOutput
 
