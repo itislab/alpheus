@@ -4,7 +4,7 @@ open System.Diagnostics
 
 [<Literal>]
 /// Corresponds to no output
-let QuiteLevel = 0
+let QuietLevel = 0
 [<Literal>]
 /// Messages about the fact that prevent the successful execution
 let ErrorLevel = 1

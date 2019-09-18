@@ -27,7 +27,7 @@ let main argv =
             match parseResults.TryGetResult Verbosity with
             |   Some(setLevel) ->
                 match setLevel with
-                |   VerbosityLevel.Quite -> Logger.QuiteLevel
+                |   VerbosityLevel.Quiet -> Logger.QuietLevel
                 |   VerbosityLevel.Err -> Logger.ErrorLevel
                 |   VerbosityLevel.Warn -> Logger.WarningLevel
                 |   VerbosityLevel.Info -> Logger.InfoLevel

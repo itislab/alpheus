@@ -89,7 +89,7 @@ with
             |   Path _ -> "File/Directory to restore"            
 
 type VerbosityLevel =
-    | Quite = 0
+    | Quiet = 0
     | Err  = 1
     | Warn = 2
     | Info  = 3
