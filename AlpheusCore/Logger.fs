@@ -28,6 +28,8 @@ type LogCategory =
     | CLI 
     /// To be used in the Alpheus graph execution system.
     | Execution
+    /// To be used in the outputs of external commands
+    | ExecutionOutput
     /// To be used in the Alpheus storage system.
     | Storage
     /// Higher level API

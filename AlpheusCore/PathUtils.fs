@@ -190,7 +190,6 @@ let deletePath (path:string) =
         if File.Exists path then
             File.Delete path
 
-
 /// Substitutes index of string values into a pattern command, e.g. "/files/*/*".
 /// Note that index length is allowed to be less or equal to the rank of the command.
 let rec applyIndex (index: string list) (path: string) =

@@ -49,7 +49,7 @@ type ``Vector scenarios through API``(output) =
             let root = s.ExperimentRoot 
             do! prepareSources(root)
 
-            let! res = API.buildAsync root root ["base.txt"; "data/*.txt"] ["output/out*.txt"] concatCommand false
+            let! res = API.buildAsync root root ["base.txt"; "data/*.txt"] ["output/out*.txt"] concatCommand DependencyGraph.DefaultExecutionSettings
             assertResultOk res
 
             let outputId = ArtefactId.Path "output/out*.txt"

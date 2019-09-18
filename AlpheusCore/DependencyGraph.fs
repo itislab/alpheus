@@ -94,6 +94,19 @@ let findExpectedArtefacts checkStoragePresence expectedVersionHashes actualVersi
                     return SomeAreLocalUnexpected
     }
 
+/// Optional settings of the execution
+type CommandExecutionSettings = {
+    /// If true disables the deletion of output artefact on disk before activation on CLI command
+    DoNotCleanOutputs: bool
+    /// Exit codes that are considered to be successful computation
+    SuccessfulExitCodes: int list
+}
+
+let DefaultExecutionSettings = {
+    DoNotCleanOutputs = false
+    SuccessfulExitCodes = [ 0 ]
+}
+
 type ArtefactVertex(id:ArtefactId, experimentRoot:string) =    
     // expereiment root is needed to calc actual data versions (via path to the actual data)
     let mutable producer : MethodVertex option = None
@@ -169,7 +182,9 @@ type ArtefactVertex(id:ArtefactId, experimentRoot:string) =
                       Command = commandVertex.Command                
                       WorkingDirectory = alphFileRelativeWorkingDir
                       Signature = String.Empty
-                      OutputsCleanDisabled = commandVertex.DoNotCleanOutputs }
+                      OutputsCleanDisabled = commandVertex.DoNotCleanOutputs
+                      SuccessfulExitCodes = commandVertex.SuccessfulExitCodes
+                      }
                 {
                     FileFormatVersion = Versioning.AlphFileCurrentVersion
                     Origin = DataOrigin.CommandOrigin { computeSection with Signature = Hash.getSignature computeSection}
@@ -278,12 +293,14 @@ and SourceVertex(methodId: MethodId, output: LinkToArtefact, experimentRoot: str
 
 
 /// Represents a method defined as a command line.
-and CommandLineVertex(methodId : MethodId, experimentRoot: string, inputs: LinkToArtefact list, outputs: LinkToArtefact list, command: string) =
+and CommandLineVertex(methodId : MethodId, experimentRoot: string, inputs: LinkToArtefact list, outputs: LinkToArtefact list, command: string, workingDir:ExperimentRelativePath, executionSettings: CommandExecutionSettings) =
     let exitCodeLockObj = obj()
     let outputStatusesLockObj = obj()
-    let mutable workingDirectory: ExperimentRelativePath = String.Empty
-    let mutable doNotClean = false
     let mutable commandExitCode: MdMap<string,int option> = MdMap.empty
+
+    do
+        if not(PathUtils.isDirectory workingDir) then invalidArg "workingDir" "WorkingDirectory doesn't end with directory separator char and considered as a path to a file"
+        if Path.IsPathRooted workingDir then invalidArg "workingDir" "WorkingDirectory is absolute"
 
     member s.MethodId = methodId    
     member s.ExperimentRoot = experimentRoot
@@ -297,7 +314,9 @@ and CommandLineVertex(methodId : MethodId, experimentRoot: string, inputs: LinkT
     member s.Outputs = outputs
 
     /// This command can be executed to get the up to date versions of outputs
-    member s.Command = command
+    member s.Command
+        with get() =
+            command
     
     /// None if the command execution was not launched or not finished yet, other wise holds the execution exit code
     member s.GetExitCode index =
@@ -307,18 +326,18 @@ and CommandLineVertex(methodId : MethodId, experimentRoot: string, inputs: LinkT
         lock exitCodeLockObj (fun () -> 
                                 commandExitCode <- MdMap.add index (Some exitCode) commandExitCode)
 
+    /// Command line exit codes that are considered successful
+    member s.SuccessfulExitCodes
+        with get() = executionSettings.SuccessfulExitCodes
+
     /// From where the Command must be executed.
     /// Experiment root related
     member s.WorkingDirectory 
-        with get() = workingDirectory
-        and set (v:ExperimentRelativePath) =
-            if not(PathUtils.isDirectory v) then invalidArg "v" "WorkingDirectory doesn't end with directory separator char and considered as a path to a file"
-            if Path.IsPathRooted v then invalidArg "v" "WorkingDirectory is absolute"
-            workingDirectory <- v
-    
+        with get() =
+            workingDir
+        
     member s.DoNotCleanOutputs
-        with get() = doNotClean
-        and set v = doNotClean <- v
+        with get() = executionSettings.DoNotCleanOutputs
 
     /// Reads the actual version of the output artefacts, 
     /// updates the expected versions for the input and output artefacts,
@@ -388,15 +407,13 @@ and Graph (experimentRoot:string) =
     /// If some input/output artefact has no actual version, the empty version is used as expected.
     /// Creates/rewrites the .alph files corresponding to the output artefacts.
     /// Returns the added method.
-    member s.AddMethod (command:string) (inputIds: ArtefactId seq) (outputIds: ArtefactId seq) workingDirectory doNotCleanOutputs =
+    member s.AddMethod (command:string) (inputIds: ArtefactId seq) (outputIds: ArtefactId seq) (workingDir:ExperimentRelativePath) (executionSettings:CommandExecutionSettings) =
         async {
             let idToLink = s.GetOrAddArtefact >> LinkToArtefact
             let inputs = inputIds |> Seq.map idToLink  
             let outputs = outputIds |> Seq.map idToLink
             let outputs = outputs |> Seq.map (fun x -> LinkToArtefact(x.Artefact,x.ExpectedVersion |> MdMap.map(fun _ -> None))) // invalidating outputs (for the case if the previously defined command is updated)
-            let method = s.AddOrGetCommand command inputs outputs
-            method.WorkingDirectory <- workingDirectory
-            method.DoNotCleanOutputs <- doNotCleanOutputs
+            let method = s.AddOrGetCommand command inputs outputs workingDir executionSettings
             do! outputs 
                 |> AsyncSeq.ofSeq
                 |> AsyncSeq.iterAsyncParallel (fun output -> System.Threading.Tasks.Task.Run(fun () -> output.Artefact.SaveAlphFile()) |> Async.AwaitTask)
@@ -414,7 +431,6 @@ and Graph (experimentRoot:string) =
             // Processing the graph artefact vertex
             // to process a vertex A means 1) to allocate verteces for direct A's producer method and it's direct inputs; 2) connect them 3) Enqueue them to be processed
             let dequeuedArtefact = queue.Dequeue()
-            let fullOutputPath = dequeuedArtefact.Id |> idToFullPath experimentRoot
             let alphFileFullPath = dequeuedArtefact.Id |> idToAlphFileFullPath experimentRoot
             match tryLoad alphFileFullPath with
             | None -> 
@@ -439,13 +455,17 @@ and Graph (experimentRoot:string) =
                     let inputs = alphCommand.Inputs |> List.map makeLink                                                                                
                     let outputs = alphCommand.Outputs |> List.map makeLink
 
-                    let method = s.AddOrGetCommand alphCommand.Command inputs outputs 
-                    method.DoNotCleanOutputs <- alphCommand.OutputsCleanDisabled
                     let expRootRelatedWorkingDir : ExperimentRelativePath = 
                         let alphFileDir = Path.GetDirectoryName(normalizePath(alphFileFullPath))
                         let path = Path.GetRelativePath(experimentRoot, Path.GetFullPath(Path.Combine(alphFileDir, alphCommand.WorkingDirectory)))
                         if path.EndsWith(Path.DirectorySeparatorChar) then path else path + string Path.DirectorySeparatorChar
-                    method.WorkingDirectory <- expRootRelatedWorkingDir
+
+                    let settings = {
+                        DoNotCleanOutputs = alphCommand.OutputsCleanDisabled
+                        SuccessfulExitCodes = alphCommand.SuccessfulExitCodes
+                    }
+
+                    let _ = s.AddOrGetCommand alphCommand.Command inputs outputs expRootRelatedWorkingDir settings
                     inputs |> Seq.map (fun inp -> inp.Artefact) |> Seq.filter(not << processedOutputs.Contains) |> Seq.iter (fun (x:ArtefactVertex) -> queue.Enqueue x)                         
             processedOutputs <- Set.add dequeuedArtefact processedOutputs
 
@@ -487,13 +507,17 @@ and Graph (experimentRoot:string) =
     /// Adds a method vertex for the given command and its inputs/outputs.
     /// Returns a method if it was added or if it already exists and has the expected type.
     /// Otherwise throws.
-    member private s.AddOrGetCommand (command: string) (inputs: LinkToArtefact seq) (outputs: LinkToArtefact seq) : CommandLineVertex = 
+    member private s.AddOrGetCommand (command:string) (inputs: LinkToArtefact seq) (outputs: LinkToArtefact seq) (workingDir:ExperimentRelativePath) (executionSettings: CommandExecutionSettings) : CommandLineVertex = 
         let methodId = getMethodId (outputs |> Seq.map(fun out -> out.Artefact.Id))
         match methodVertices |> Map.tryFind methodId with
         | Some (Command m) -> m
         | Some (_) -> invalidOp (sprintf "Method %A already exists but has wrong type" methodId)
         | None ->
-            let vertex = CommandLineVertex (methodId, experimentRoot, inputs |> Seq.toList, outputs |> Seq.toList, command)
+            let vertex = CommandLineVertex (methodId,
+                                            experimentRoot,
+                                            inputs |> Seq.toList,
+                                            outputs |> Seq.toList,
+                                            command, workingDir, executionSettings)
             inputs |> Seq.iter(fun inp -> inp.Artefact.AddUsedIn vertex)
             outputs |> Seq.iter(fun out -> out.Artefact.ProducedBy <- Command vertex)
             methodVertices <- methodVertices |> Map.add methodId (Command vertex) 
