@@ -210,3 +210,16 @@ _todo_
 ## Running in Cloud
 
 _todo_
+
+## Guidelines
+
+### File structure
+
+Working on a problem, eventually you get a solid results you want to keep, but fork another experiment to try another approach. 
+After some time, you might get multiple experiments (e.g. having different models) and the following issues appear:
+* Common code you want to be shared between them so all of them are kept up-to-date, but don't want to invalidate results of other experiments by modifying the shared code.
+* Compare results of the experiments.
+* Aggregare results of the experiments, e.g. create an ensemble model based on the experiments.
+
+Therefore the guideline on file structure is:
+_todo_
