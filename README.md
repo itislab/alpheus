@@ -97,7 +97,7 @@ Now the root folder can be called the _experiment folder_.
 
 ### Adding new method
 
-Experiment is a composition of _methods_ producing and consuming _artefacts_. Each method is a command line operation registered using the command `alpheus build`. An artefact is a file or a folder located within the experiment folder.
+Experiment is a composition of _methods_ producing and consuming _artefacts_. Each method is a command line operation registered using the command `alpheus build`. An artefact is a file or a folder located within the experiment folder. Folder artefacts are denoted with path with trailing '\\' on Windows and '/' on Linux.
 
 For example, the following command registers a method which produces an output artefact `author.txt` by running command `whoami > author.txt`:
 
@@ -110,7 +110,7 @@ Note that this command doesn't actually run anything, but just creates `author.t
 Let the `scripts/count.py` script contains two arguments: input file and output file, and puts number of characters in the input file to the output file. The following command registers a method which runs the script for the `author.txt` and builds `count.txt`:
 
 ```
-alpheus build -o "count.txt" -d "scripts/count.py" -d "author.txt" "python $in1 $in2 $out1"
+alpheus build -d "scripts/count.py" -d "author.txt" -o "count.txt" "python $in1 $in2 $out1"
 ```
 
 Note that we manifest that the new method depends on output of the first method, `author.txt`. This information is stored in the created file `count.txt.alph`. 
@@ -127,7 +127,7 @@ alpheus compute count.txt
 
 Alpheus builds the dependency graph of methods needed in order to produce the required file and then runs only those methods which have no up-to-date outputs. Alpheus automatically determines changes in files/directories, so you don't need to worry if the output is consistent. As a result, we get both `author.txt` and `count.txt`. 
 
-It is up to you whether you want to commit these files to the git repository or push them to an external storage, or keep them just on the local machine. In the latter case, on other machines these files must be recomputed, if needed.
+It is up to you whether you want to commit these files to the git repository or push them to an external ertefact storage (described later), or keep them just on the local machine. In the latter case, on other machines these files must be recomputed, if needed.
 
 
 ### Removing an artefact/method
@@ -135,6 +135,16 @@ It is up to you whether you want to commit these files to the git repository or 
 Just delete corresponding `*.alph` files. Note that you can break the dependencies by deleting artefacts required by other methods. In this case, the computation of those methods will fail.
 
 ### Getting status of an experiment
+
+You can see the status of the artefact in your experiment folder with the command `alpheus status`
+
+e.g.
+
+```
+alpheus status count.txt
+```
+
+The command will show you status of the artefact that you've specifed and also the artefacts that are used to produce the current one.
 
 There are two statuses of an artefact:
 
@@ -145,7 +155,7 @@ There are two statuses of an artefact:
     - The command producing the artefact is modified.
     - The order of the inputs is changed.
   
-- *Up-to-date* indicates that the correct version of the artefact is available either locally or on the attached storage, such that this artefact is a result of the command applied to the current inputs.
+- *Up-to-date* indicates that the correct version of the artefact is available either locally or on the artefact storage, such that this artefact is a result of the command applied to the current inputs.
   
 
 ### Vector operations
@@ -153,7 +163,7 @@ There are two statuses of an artefact:
 If you need to perform an identical operation with multiple artefacts, you should provide both input and output paths with an asterisk (*) when declaring a method:
 
 ```
-alpheus build -o "counts/*.txt" -d "scripts/count.py" -d "files/*.txt" "python $in1 $in2 $out1"
+alpheus build -d "scripts/count.py" -d "files/*.txt" -o "counts/*.txt" "python $in1 $in2 $out1"
 ```
 
 In the given example, the script `count.py` will be executed for each text file in the `files` folder, and 
@@ -171,6 +181,12 @@ This also means that it is possible to change an extension of the output file (e
 - Only one input can be a vector (i.e. contain one or more asterisks), others must be scalar. Reason for that
 are two unclear issues so far: (1) if there are two vector inputs, what is the joint input? is it cartaesian product of the two or just
 pairs with same indices? if the latter, how to order input items? (2) how to name outputs in this case?
+
+#### When to use vector operations
+
+You may wonder why not to create a method that enumerates needed files itself. You may and is adviced to do so in case you have lightwayt operation on many small files (e.g. image foramt conversion). Use Alpheus vector operations if your vector element processing is considerably heavy.
+
+As the Alpheus keeps track of readyness status of every vector element (file/dir that match the pattern with \*) it impose the overhead. On the other hand Alpheus will skip computation of up-to-date vector element and process only those vector elements that require (re)computation. This can help as a checkpoint in case of continueing of interrupted computation.
 
 ### Using external storage for artefacts
 
