@@ -2,7 +2,24 @@
 
 open System.Diagnostics
 
-let internal showVerbose = true
+[<Literal>]
+/// Corresponds to no output
+let QuietLevel = 0
+[<Literal>]
+/// Messages about the fact that prevent the successful execution
+let ErrorLevel = 1
+[<Literal>]
+/// Messages about the facts that can be clue to the potential errors or unexpected behavior
+let WarningLevel = 2
+[<Literal>]
+/// Messages that informs the user about ongoing events of normal successful computation
+let InfoLevel = 3
+[<Literal>]
+/// Messages about the technical details of execution
+let VerboseLevel = 4
+
+/// Currently active log level that is applied to all categories
+let mutable LogLevel = InfoLevel
 
 type LogCategory =
     /// To be used in tests for logging.
@@ -27,20 +44,24 @@ let mutable LogFunction = fun (category: LogCategory) (message:string) ->
     printfn "%A: %s" category message
 
 let logVerbose (category: LogCategory) (message:string) =
-    if showVerbose then LogFunction category message
-    else ()
+    if LogLevel >= VerboseLevel then
+        LogFunction category message
 
 let logInfo (category: LogCategory) (message:string) =
-    LogFunction category message
+    if LogLevel >= InfoLevel then
+        LogFunction category message
     
 let logWarning (category: LogCategory) (message:string) =
-    LogFunction category message
+    if LogLevel >= WarningLevel then
+        LogFunction category message
     
 let logError (category: LogCategory) (message:string) =
-    LogFunction category message
+    if LogLevel >= ErrorLevel then
+        LogFunction category message
 
 let logException (category: LogCategory) (e:exn) =
-    LogFunction category (e.ToString())
+    if LogLevel >= ErrorLevel then
+        LogFunction category (e.ToString())
 
 
 let doAndLogElapsedTime (log: string -> unit) (message: string) (func: unit -> Async<unit>) = 

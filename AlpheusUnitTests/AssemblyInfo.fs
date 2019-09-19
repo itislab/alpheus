@@ -1,4 +1,4 @@
-﻿namespace AlfeusUnitTestsItisLab.Alpheus.Tests
+﻿namespace ItisLab.Alpheus.Tests
 
 open Xunit
 
