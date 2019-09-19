@@ -154,7 +154,7 @@ type ``Vector scenarios``(output) =
         }
         
     [<Fact>]
-    member s.``Scatter-reduce: Creates many files and the processes them as a vector and then reduces``() =
+    member s.``Scatter-reduce: Creates many files and then reduces``() =
         async {
             let root = s.ExperimentRoot
             do! prepareSources(root)
@@ -171,6 +171,28 @@ type ``Vector scenarios``(output) =
             assertResultOk res
                         
             "Base filesample1 \r\nBase filesample2 \r\nBase filesample3 \r\n" |> assertFileContent (Path.Combine(root, "summary.txt"))
+        }
+
+    [<Fact>]
+    member s.``Scatter-vector-reduce: Creates many files and the processes them as a vector and then reduces``() =
+        async {
+            let root = s.ExperimentRoot
+            do! prepareSources(root)
+
+            let! res = API.buildAsync root (Path.Combine(root, "samples")) [] ["*.txt"] createManyFilesCommand false
+            assertResultOk res
+            let! res = API.buildAsync root root ["base.txt"; "samples/*.txt"] ["output/*.txt"] concatCommand false
+            assertResultOk res
+            let! res = API.buildAsync root root ["samples/*.txt"; "output/*.txt"] ["output2/*.txt"] concatCommand false
+            assertResultOk res
+            let! res = API.buildAsync root root ["output2/*.txt"] ["summary.txt"] concatVectorCommand false
+            assertResultOk res
+
+            let summaryId = ArtefactId.Path "summary.txt"
+            let res = API.compute (root, summaryId)
+            assertResultOk res
+                        
+            "sample1 \r\nBase filesample1 \r\nsample2 \r\nBase filesample2 \r\nsample3 \r\nBase filesample3 \r\n" |> assertFileContent (Path.Combine(root, "summary.txt"))
         }
 
    
