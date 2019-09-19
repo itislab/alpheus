@@ -38,9 +38,7 @@ type SourceMethod(source: SourceVertex, experimentRoot,
             // Output of the method is an scalar or a vector of full paths to the data of the artefact.
             let outputArtefact : Artefact =
                 items
-                |> MdMap.toTree
-                |> toJaggedArrayOrValue (fun (index, fullPath) -> { FullPath = fullPath; Index = index }) []
-        
+                |> toJaggedArrayOrValue (fun (index, fullPath) -> { FullPath = fullPath; Index = index })
 
             return Seq.singleton ([outputArtefact], null)
         } |> Async.RunSynchronously
@@ -79,8 +77,10 @@ type CommandMethod(command: CommandLineVertex,
                 |> Seq.map(fun item -> item.Index)
                 |> Seq.fold(fun (max: string list) index -> if index.Length > max.Length then index else max) []
             let methodItemId = command.MethodId |> applyIndex index
-            let logVerbose str = Logger.logVerbose Logger.Execution (sprintf "%s: %s" methodItemId str)
-            // logVerbose "Started"
+
+            let logVerbose str = Logger.logVerbose Logger.Execution (sprintf "%s%A: %s" methodItemId index str)
+            let logInfo str = Logger.logVerbose Logger.Execution (sprintf "%s%A: %s" methodItemId index str)
+            logInfo "Started"
 
             // Build the output paths by applying the index of this method.
             let outputPaths = 
@@ -104,22 +104,17 @@ type CommandMethod(command: CommandLineVertex,
                     outputPaths |> List.iter deletePath
 
                 // 2) restoring inputs from storage if it is needed
-                let inputChooser (input:LinkToArtefact) =
-                    async {
-                        let! actualHashOpt = extractActualVersionsFromLinks index [input]
-                        if Option.isSome actualHashOpt.[0] then
-                            return None
-                        else
-                            return Some(input)
-                    }
-                let! toRestoreOts = Seq.map inputChooser command.Inputs |> Array.ofSeq |> Async.Parallel
-                let toRestore = Array.choose id toRestoreOts
-                let hashesToRestore = toRestore |> extractExpectedVersionsFromLinks index |> Seq.map (fun x -> x.Value)
-                let pathsToRestore = toRestore |> Seq.map (fun x -> idToFullPath experimentRoot x.Artefact.Id |> applyIndex index )
-                let zipped = Seq.zip hashesToRestore pathsToRestore |> Array.ofSeq
-                if Array.length zipped > 0 then
+                let! hashesToRestorePerInput = 
+                    command.Inputs 
+                    |> Seq.map(versionsToRestore index)
+                    |> Async.Parallel
+                let hashesToRestore =
+                    hashesToRestorePerInput
+                    |> Array.collect List.toArray
+                    |> Array.map(fun (path, hash) -> hash, path)
+                if Array.length hashesToRestore > 0 then
                     logVerbose (sprintf "Restoring missing inputs from storage...")
-                    do! restoreFromStorage zipped
+                    do! restoreFromStorage hashesToRestore
                     logVerbose (sprintf "Inputs are restored")
 
 
@@ -134,6 +129,7 @@ type CommandMethod(command: CommandLineVertex,
                 if exitCode <> 0 then
                     raise(InvalidOperationException(sprintf "Process exited with exit code %d" exitCode))
                 else
+                    logInfo "Method succeeded"
                     logVerbose (sprintf "Program succeeded. Calculating hashes of the outputs...")
                     // 5a) hashing outputs disk content                
                     // 5b) updating dependency versions in dependency graph
@@ -143,8 +139,12 @@ type CommandMethod(command: CommandLineVertex,
                 logVerbose "skipping as up to date"
             //comp.Outputs |> Seq.map (fun (output:DependencyGraph.VersionedArtefact) -> output.ExpectedVersion) |> List.ofSeq
 
-            let outPathToArtefactItem outputPath : Artefact =
-                upcast { FullPath = outputPath; Index = index }
+            let outPathToArtefactItem (outputPath:string) : Artefact =
+                if outputPath.Contains('*') then
+                    let outputItems = PathUtils.enumeratePath outputPath
+                    outputItems |> toJaggedArrayOrValue (fun (extraIndex, itemFullPath) -> { FullPath = itemFullPath; Index = index @ extraIndex })
+                else
+                    upcast { FullPath = outputPath; Index = index }
             let result =  Seq.singleton(outputPaths |> List.map outPathToArtefactItem, null)
             return result
         } |> Async.RunSynchronously
@@ -156,7 +156,8 @@ let buildGraph experimentRoot (g:DependencyGraph.Graph) checkStoragePresence res
         | DependencyGraph.Source src -> upcast SourceMethod(src, experimentRoot, checkStoragePresence) 
         | DependencyGraph.Command cmd -> upcast CommandMethod(cmd, experimentRoot, checkStoragePresence, restoreFromStorage)
 
-    g |> DependencyGraphToAngaraWrapper |> AngaraTranslator.translate factory
+    let flow = g |> DependencyGraphToAngaraWrapper |> AngaraTranslator.translate factory
+    flow
 
 let doComputations (g:FlowGraph<AngaraGraphNode<ArtefactItem>>) = 
     let state  = 

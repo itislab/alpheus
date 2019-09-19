@@ -79,8 +79,8 @@ type ``Dependency graph tests``(output) =
     
             Assert.NotNull method
             g.ArtefactsCount.Should().Be(2, "there must be one output and one input (source) artefact") |> ignore
-            g.Artefacts.Should().Contain((fun (a:ArtefactVertex) -> a.Id = inArtefact), "there must be one input (source) artefact") |> ignore
-            g.Artefacts.Should().Contain((fun (a:ArtefactVertex) -> a.Id = outArtefact), "there must be one output artefact") |> ignore
+            g.Artefacts.ToArray().Should().Contain((fun (a:ArtefactVertex) -> a.Id = inArtefact), "there must be one input (source) artefact") |> ignore
+            g.Artefacts.ToArray().Should().Contain((fun (a:ArtefactVertex) -> a.Id = outArtefact), "there must be one output artefact") |> ignore
 
             g.MethodsCount.Should().Be(1, "there must be one added command method") |> ignore
             g.Methods.Should().OnlyContain((fun (m:MethodVertex) -> m.MethodId = method.MethodId), "there must be one command method") |> ignore

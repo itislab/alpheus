@@ -4,7 +4,7 @@ open ItisLab.Alpheus.DependencyGraph
 
 type DependencyGraphToAngaraWrapper(graph: Graph) =
     interface ItisLab.Alpheus.AngaraTranslator.IDependencyGraph<ArtefactVertex, MethodVertex> with
-        member x.Artefacts = graph.Artefacts |> Seq.ofArray
+        member x.Artefacts = graph.Artefacts |> Seq.ofList
         
         member x.InputsOf method = 
             match method with
