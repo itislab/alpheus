@@ -141,14 +141,14 @@ let getExpectedAndActualVersionsForLinks index links =
 let versionsToRestore index (link: LinkToArtefact) =
     async {
         let! expectedAndActual = link |> getExpectedAndActualVersions index
-        let artefactPathPattern = link.Artefact.Id |> PathUtils.idToAlphFileFullPath link.Artefact.ExperimentRoot
+        let artefactPathPattern = link.Artefact.Id |> PathUtils.idToFullPath link.Artefact.ExperimentRoot
         let toRestore =
             expectedAndActual 
             |> MdMap.toSeq
             |> Seq.choose(fun (j, (exp,act)) -> 
                 match act with
                 | Some _ -> None
-                | None -> act |> Option.map(fun act -> (artefactPathPattern |> PathUtils.applyIndex j, act)))
+                | None -> exp |> Option.map(fun exp -> (artefactPathPattern |> PathUtils.applyIndex j, exp)))
             |> Seq.toList
         return toRestore 
     }
