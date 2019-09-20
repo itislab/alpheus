@@ -27,7 +27,7 @@ type ``Dependency graph tests``(output) =
         let expectedVersion = MdMap.Empty
         let artefact = ArtefactVertex (Path "test*.txt", s.ExperimentRoot)
         let link = LinkToArtefact(artefact, expectedVersion)
-        let producer = MethodVertex.Command (CommandLineVertex("method", s.ExperimentRoot, [], [link], "command"))
+        let producer = MethodVertex.Command (CommandLineVertex("method", s.ExperimentRoot, [], [link], "command",s.RelativeExperimentRoot,DefaultExecutionSettings))
         artefact.ProducedBy <- producer
         let indexSpace = List.init 100 (fun i -> [string i])
 
@@ -75,7 +75,7 @@ type ``Dependency graph tests``(output) =
             let inArtefact = ArtefactId.Path "dir/testfile.txt"
             let outArtefact = ArtefactId.Path "output.txt"
         
-            let! method = g.AddMethod "command" [inArtefact] [outArtefact] workingDir false
+            let! method = g.AddMethod "command" [inArtefact] [outArtefact] workingDir DefaultExecutionSettings
     
             Assert.NotNull method
             g.ArtefactsCount.Should().Be(2, "there must be one output and one input (source) artefact") |> ignore
@@ -93,8 +93,8 @@ type ``Dependency graph tests``(output) =
             let inArtefact = ArtefactId.Path "dir/testfile.txt"
             let outArtefact = ArtefactId.Path "output.txt"
         
-            let! method = g.AddMethod "command" [inArtefact] [outArtefact] workingDir false    
-            let! method2 = g.AddMethod "command" [inArtefact] [outArtefact] workingDir false
+            let! method = g.AddMethod "command" [inArtefact] [outArtefact] workingDir DefaultExecutionSettings    
+            let! method2 = g.AddMethod "command" [inArtefact] [outArtefact] workingDir DefaultExecutionSettings
 
             method.Should().BeSameAs(method2, "AddMethod returns the existing method if it is already added") |> ignore
         }
@@ -106,7 +106,7 @@ type ``Dependency graph tests``(output) =
             let inArtefact = ArtefactId.Path "dir/testfile.txt"
             let outArtefact = ArtefactId.Path "output.txt"
            
-            let! method = g.AddMethod "command" [inArtefact] [outArtefact] workingDir false
+            let! method = g.AddMethod "command" [inArtefact] [outArtefact] workingDir DefaultExecutionSettings
             g.LoadDependencies [method.Outputs.[0].Artefact]
        
             g.MethodsCount.Should().Be(2, "there must be one command method and one source method") |> ignore
@@ -124,12 +124,12 @@ type ``Dependency graph tests``(output) =
             let inArtefact = ArtefactId.Path "dir/testfile.txt"
             let outArtefact = ArtefactId.Path "output.txt"
               
-            let! method = g.AddMethod "command" [inArtefact] [outArtefact] workingDir false 
+            let! method = g.AddMethod "command" [inArtefact] [outArtefact] workingDir DefaultExecutionSettings 
             File.Exists(outArtefact |> PathUtils.idToAlphFileFullPath s.ExperimentRoot).Should().BeTrue("AddMethod creates alph files for the outputs") |> ignore
 
             let g2 = DependencyGraph.Graph(s.ExperimentRoot)
             let out2Artefact = ArtefactId.Path "output2.txt"
-            let! method2 = g2.AddMethod "command2" [outArtefact] [out2Artefact] workingDir false
+            let! method2 = g2.AddMethod "command2" [outArtefact] [out2Artefact] workingDir DefaultExecutionSettings
 
             g2.MethodsCount.Should().Be(1, "there must be just one added method") |> ignore               
                
@@ -148,7 +148,7 @@ type ``Dependency graph tests``(output) =
             let inArtefactId = ArtefactId.Path "dir/testfile.txt"
             let outArtefactId = ArtefactId.Path "output.txt"
          
-            let! method = g.AddMethod "command" [inArtefactId] [outArtefactId] workingDir false
+            let! method = g.AddMethod "command" [inArtefactId] [outArtefactId] workingDir DefaultExecutionSettings
      
             let inArtefact = g |> getArtefact inArtefactId
             let outArtefact = g |> getArtefact outArtefactId

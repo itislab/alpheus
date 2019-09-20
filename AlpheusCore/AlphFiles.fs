@@ -28,6 +28,7 @@ type VersionedArtefact = {
 type CommandOutput =  {
     Inputs: VersionedArtefact list
     Outputs: VersionedArtefact list
+    SuccessfulExitCodes: int list
     OutputIndex: int
     WorkingDirectory: AlphRelativePath
     Command: string    

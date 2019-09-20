@@ -40,6 +40,7 @@ type BuildArgs =
     |   D of dependency:string
     |   O of output:string
     |   [<CliPrefix(CliPrefix.DoubleDash)>]Disable_Outputs_Clean
+    |   [<CliPrefix(CliPrefix.DoubleDash)>][<AltCommandLine("-ec")>]Successful_Exit_Codes of codes:int list
     | [<Last;CliPrefix(CliPrefix.None)>]Command
 with
     interface IArgParserTemplate with
@@ -48,6 +49,7 @@ with
             |   D _ -> "Dependency path (file or folder)"
             |   O _ -> "Output path (file or folder)"
             |   Disable_Outputs_Clean -> "Make the command responsible for clearing the outputs in case of re-computation. Useful for resumable computations. Default: The outputs are cleaned by alpheus"
+            |   Successful_Exit_Codes _ -> "Exit codes (space separated) of the command that are considered as successful computation. Default: 0"
             |   Command _ -> "Command that generates the outputs"
 
 [<CliPrefix(CliPrefix.None)>]
