@@ -450,6 +450,24 @@ type ScalarScenarios(output) =
         }
 
     [<Fact>]
+    member s.``Commands that never run, restores its inputs``() =
+        async {         
+            let path = Path.GetFullPath s.RelativeExperimentRoot
+            do! buildExperiment(path)
+
+            let res = API.compute(path, ArtefactId.Path "1_2.txt")
+            assertResultOk res
+
+            let! res2 = API.saveAsync (path, ArtefactId.Path "1_2.txt") None false
+            assertResultOk res2
+
+            File.Delete(Path.Combine(s.RelativeExperimentRoot,"1_2.txt"))            
+
+            let res3 = API.compute(path, ArtefactId.Path "1_2_3.txt")
+            assertResultOk res3
+        }
+
+    [<Fact>]
     member s.``Status: Uncomputed chain``() =
         async {         
             let path = Path.GetFullPath s.RelativeExperimentRoot
