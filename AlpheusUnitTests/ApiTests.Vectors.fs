@@ -55,7 +55,7 @@ type ``Vector scenarios``(output) as this =
     let concatStrings (strings: string seq) =
         match this.Platform with
         | TargetPlatform.Windows -> strings |> Seq.map(fun s -> s + " \r\n") |> String.concat ""
-        | TargetPlatform.Linux -> strings |> String.concat "\n"
+        | TargetPlatform.Linux -> strings |> Seq.map(fun s -> s + "\n") |> String.concat ""
         | _ -> failwith "Unknown platform"
 
 
