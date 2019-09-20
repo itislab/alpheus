@@ -14,7 +14,7 @@ open ItisLab.Alpheus
 open Angara.Data
 open FluentAssertions
 
-type ``Vector scenarios``(output) =
+type ``Vector scenarios``(output) as this =
     inherit SingleUseOneTimeDirectory(output)
 
     let createManyFilesCommand = 
@@ -51,6 +51,12 @@ type ``Vector scenarios``(output) =
     let assertFileContent path content =
         let actualContent = File.ReadAllText path
         actualContent.Should().Be(content, sprintf "it is a content of the file %s" path) |> ignore
+
+    let concatStrings (strings: string seq) =
+        match this.Platform with
+        | TargetPlatform.Windows -> strings |> Seq.map(fun s -> s + " \r\n") |> String.concat ""
+        | TargetPlatform.Linux -> strings |> String.concat "\n"
+        | _ -> failwith "Unknown platform"
 
 
     [<Fact>]
@@ -129,9 +135,9 @@ type ``Vector scenarios``(output) =
             let res = API.compute (root, Path "samples/*.txt")
             assertResultOk res
 
-            "sample1 \r\n" |> assertFileContent (Path.Combine(root, "samples", "sample1.txt"))
-            "sample2 \r\n" |> assertFileContent (Path.Combine(root, "samples", "sample2.txt"))
-            "sample3 \r\n" |> assertFileContent (Path.Combine(root, "samples", "sample3.txt"))
+            ["sample1"] |> concatStrings |> assertFileContent (Path.Combine(root, "samples", "sample1.txt"))
+            ["sample2"] |> concatStrings |> assertFileContent (Path.Combine(root, "samples", "sample2.txt"))
+            ["sample3"] |> concatStrings |> assertFileContent (Path.Combine(root, "samples", "sample3.txt"))
         }
 
     [<Fact>]
@@ -170,7 +176,7 @@ type ``Vector scenarios``(output) =
             let res = API.compute (root, summaryId)
             assertResultOk res
                         
-            "Base filesample1 \r\nBase filesample2 \r\nBase filesample3 \r\n" |> assertFileContent (Path.Combine(root, "summary.txt"))
+            ["Base filesample1"; "Base filesample2"; "Base filesample3"] |> concatStrings |> assertFileContent (Path.Combine(root, "summary.txt"))
         }
 
     [<Fact>]
@@ -192,7 +198,7 @@ type ``Vector scenarios``(output) =
             let res = API.compute (root, summaryId)
             assertResultOk res
                         
-            "sample1 \r\nBase filesample1 \r\nsample2 \r\nBase filesample2 \r\nsample3 \r\nBase filesample3 \r\n" |> assertFileContent (Path.Combine(root, "summary.txt"))
+            ["sample1"; "Base filesample1"; "sample2"; "Base filesample2"; "sample3"; "Base filesample3"] |> concatStrings |> assertFileContent (Path.Combine(root, "summary.txt"))
         }
 
    
