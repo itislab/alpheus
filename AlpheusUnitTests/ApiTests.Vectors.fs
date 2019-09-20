@@ -34,7 +34,7 @@ type ``Vector scenarios``(output) as this =
         if isTestRuntimeWindows then
             "cmd /C \"FOR %i IN (1,2,3) DO (mkdir sample%i)\""
         else
-            "todo"
+            "/bin/sh -c \"for i in $(seq 1 3); do mkdir sample$i; done\""
 
     let concatCommand = 
         if isTestRuntimeWindows then
@@ -52,7 +52,7 @@ type ``Vector scenarios``(output) as this =
         if isTestRuntimeWindows then
             "cmd /C \"type NUL > $out1 && for /D %d in (*) DO copy \"$out1\" + \"%d\summary.txt\" \"$out1\" /b\""
         else
-            "todo"
+            "/bin/sh -c \"for file in $in1; do echo $file; cat $file >> $out1; done;\""
 
     let prepareSources(path) =
         async {
