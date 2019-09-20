@@ -85,7 +85,7 @@ type DepGraphConstruction(output) =
             let inputIDs = testCase.inputsIndices |> Array.map (fun idx -> s.ArtefactIds.[idx].ToString()) |> List.ofArray
             let inputPaths = inputIDs |> List.map (fun x -> Path.Combine(s.RelativeExperimentRoot,x))
             let outputPaths = testCase.OutputIDs |> Array.map (fun x -> Path.Combine(s.RelativeExperimentRoot,x)) |> List.ofArray
-            let! buildResult = buildAsync s.ExperimentRoot s.ExperimentRoot inputPaths outputPaths "../copy_prog $in1 $out1" DependencyGraph.DefaultExecutionSettings
+            let! buildResult = buildAsync s.ExperimentRoot s.ExperimentRoot inputPaths outputPaths "../copy_prog $in1 $out1" DependencyGraph.CommandExecutionSettings.Default
             assertResultOk buildResult
         }
 
@@ -98,7 +98,7 @@ type DepGraphConstruction(output) =
             let inputIDs = testCase.inputsIndices |> Array.map (fun idx -> s.ArtefactIds.[idx].ToString()) |> List.ofArray
             let inputPaths = inputIDs |> List.map (fun x -> Path.Combine(s.RelativeExperimentRoot,x))
             let outputPaths = testCase.OutputIDs |> Array.map (fun x -> Path.Combine(s.RelativeExperimentRoot,x)) |> List.ofArray
-            let! buildResult = buildAsync s.ExperimentRoot Environment.CurrentDirectory inputPaths outputPaths "../copy_prog $in1 $out1" DependencyGraph.DefaultExecutionSettings
+            let! buildResult = buildAsync s.ExperimentRoot Environment.CurrentDirectory inputPaths outputPaths "../copy_prog $in1 $out1" DependencyGraph.CommandExecutionSettings.Default
             assertResultOk buildResult
 
             //let alphFiles = List.map artefactPathToAlphFilePath outputPaths
@@ -123,7 +123,7 @@ type DepGraphConstruction(output) =
             let inputIDs = testCase.inputsIndices |> Array.map (fun idx -> s.ArtefactIds.[idx]) |> List.ofArray
             let inputPaths = inputIDs |> List.map (fun x -> Path.Combine(s.RelativeExperimentRoot,x.ToString()))
             let outputPaths = testCase.OutputIDs |> Array.map (fun x -> Path.Combine(s.RelativeExperimentRoot,x)) |> List.ofArray
-            let! buildResult = buildAsync s.ExperimentRoot Environment.CurrentDirectory inputPaths outputPaths "../copy_prog $in1 $out1" DependencyGraph.DefaultExecutionSettings
+            let! buildResult = buildAsync s.ExperimentRoot Environment.CurrentDirectory inputPaths outputPaths "../copy_prog $in1 $out1" DependencyGraph.CommandExecutionSettings.Default
             assertResultOk buildResult
             Logger.logInfo Logger.Test "Graph is build via API call successfuly"
 
@@ -162,7 +162,7 @@ type DepGraphLocalComputation(output) =
                 "cmd /C \"cat.cmd $out1 $in1 $in2\""
             else
                 "/bin/sh -c \"cat $in1 > $out1; cat $in2 >> $out1\""
-        let buildResult = API.buildAsync expRoot expRoot ["1.txt"; "2.txt"] ["cat_test.txt"] concatCommand DependencyGraph.DefaultExecutionSettings |> Async.RunSynchronously
+        let buildResult = API.buildAsync expRoot expRoot ["1.txt"; "2.txt"] ["cat_test.txt"] concatCommand DependencyGraph.CommandExecutionSettings.Default |> Async.RunSynchronously
         assertResultOk buildResult
 
         // graph is constructed. Now executing
@@ -347,9 +347,9 @@ type ScalarScenarios(output) =
             do! File.WriteAllTextAsync(Path.Combine(path,"2.txt"),"File 2\\r\\n") |> Async.AwaitTask
             do! File.WriteAllTextAsync(Path.Combine(path,"3.txt"),"File 3\\r\\n") |> Async.AwaitTask
 
-            let! res1 =  API.buildAsync path path ["1.txt";"2.txt"] ["1_2.txt"] concatCommand DefaultExecutionSettings
+            let! res1 =  API.buildAsync path path ["1.txt";"2.txt"] ["1_2.txt"] concatCommand DependencyGraph.CommandExecutionSettings.Default
             assertResultOk res1
-            let! res2 =  API.buildAsync path path ["1_2.txt";"3.txt"] ["1_2_3.txt"] concatCommand DefaultExecutionSettings
+            let! res2 =  API.buildAsync path path ["1_2.txt";"3.txt"] ["1_2_3.txt"] concatCommand DependencyGraph.CommandExecutionSettings.Default
             assertResultOk res2
 
             Directory.CreateDirectory(Path.Combine(path,"dir1")) |> ignore
@@ -358,7 +358,7 @@ type ScalarScenarios(output) =
 
             let xcopySettings =
                 {
-                    DefaultExecutionSettings with
+                    DependencyGraph.CommandExecutionSettings.Default with
                         SuccessfulExitCodes = if isTestRuntimeWindows then [1] else [0]
                 }
 
@@ -631,7 +631,7 @@ type ScalarScenarios(output) =
             let! content1 = File.ReadAllTextAsync(Path.Combine(path,"1_2_3.txt")) |> Async.AwaitTask
 
             // now changing 1_2_3.txt producing command
-            let! res2 =  API.buildAsync path path ["1_2.txt";"3.txt"] ["1_2_3.txt"] concatCommand2 DependencyGraph.DefaultExecutionSettings
+            let! res2 =  API.buildAsync path path ["1_2.txt";"3.txt"] ["1_2_3.txt"] concatCommand2 DependencyGraph.CommandExecutionSettings.Default
             assertResultOk res2
 
             // this should change 1_2_3.txt
@@ -658,7 +658,7 @@ type ScalarScenarios(output) =
 
                 
             // now changing 1_2_3.txt producing command
-            let! res2 =  API.buildAsync path path ["1_2.txt";"3.txt"] ["1_2_3.txt"] concatCommand2 DependencyGraph.DefaultExecutionSettings
+            let! res2 =  API.buildAsync path path ["1_2.txt";"3.txt"] ["1_2_3.txt"] concatCommand2 DependencyGraph.CommandExecutionSettings.Default
             assertResultOk res2
 
             let res = API.status(path, ArtefactId.Path "1_2_3.txt")
@@ -693,7 +693,7 @@ type ScalarScenarios(output) =
             let! content1 = File.ReadAllTextAsync(Path.Combine(path,"1_2_3.txt")) |> Async.AwaitTask
 
             // now changing inputs order 
-            let! res2 =  API.buildAsync path path ["3.txt";"1_2.txt"] ["1_2_3.txt"] concatCommand DependencyGraph.DefaultExecutionSettings
+            let! res2 =  API.buildAsync path path ["3.txt";"1_2.txt"] ["1_2_3.txt"] concatCommand DependencyGraph.CommandExecutionSettings.Default
             assertResultOk res2
 
             // this should change 1_2_3.txt
@@ -722,7 +722,7 @@ type ScalarScenarios(output) =
             let! content1 = File.ReadAllTextAsync(Path.Combine(path,"1_2_3.txt")) |> Async.AwaitTask
 
             // now changing inputs order 
-            let! res2 =  API.buildAsync path path ["3.txt";"1_2.txt"] ["1_2_3.txt"] concatCommand DependencyGraph.DefaultExecutionSettings
+            let! res2 =  API.buildAsync path path ["3.txt";"1_2.txt"] ["1_2_3.txt"] concatCommand DependencyGraph.CommandExecutionSettings.Default
             assertResultOk res2
 
             let res = API.status(path, ArtefactId.Path "1_2_3.txt")
@@ -1004,7 +1004,7 @@ type ScalarScenarios(output) =
             do! buildExperiment(path)
 
                 
-            let! buildRes = API.buildAsync path path ["1.txt"; "2.txt"] ["1_copy.txt";"2_copy.txt"] twoOutputsCommand DependencyGraph.DefaultExecutionSettings
+            let! buildRes = API.buildAsync path path ["1.txt"; "2.txt"] ["1_copy.txt";"2_copy.txt"] twoOutputsCommand DependencyGraph.CommandExecutionSettings.Default
 
             assertResultOk buildRes
 
@@ -1033,7 +1033,7 @@ type ScalarScenarios(output) =
             do! buildExperiment(path)
 
                 
-            let! buildRes = API.buildAsync path path ["1.txt"; "2.txt"] ["1_copy.txt";"2_copy.txt"] twoOutputsCommand DependencyGraph.DefaultExecutionSettings
+            let! buildRes = API.buildAsync path path ["1.txt"; "2.txt"] ["1_copy.txt";"2_copy.txt"] twoOutputsCommand DependencyGraph.CommandExecutionSettings.Default
 
             assertResultOk buildRes
 
@@ -1063,7 +1063,7 @@ type ScalarScenarios(output) =
             do! buildExperiment(path)
 
                 
-            let! buildRes = API.buildAsync path path ["1.txt"; "2.txt"] ["1_copy.txt";"2_copy.txt"] twoOutputsCommand DependencyGraph.DefaultExecutionSettings
+            let! buildRes = API.buildAsync path path ["1.txt"; "2.txt"] ["1_copy.txt";"2_copy.txt"] twoOutputsCommand DependencyGraph.CommandExecutionSettings.Default
 
             assertResultOk buildRes
 
@@ -1099,7 +1099,7 @@ type ScalarScenarios(output) =
             do! buildExperiment(path)
 
                 
-            let! buildRes = API.buildAsync path path ["1.txt"; "2.txt"] ["1_copy.txt";"2_copy.txt"] twoOutputsCommand DependencyGraph.DefaultExecutionSettings
+            let! buildRes = API.buildAsync path path ["1.txt"; "2.txt"] ["1_copy.txt";"2_copy.txt"] twoOutputsCommand DependencyGraph.CommandExecutionSettings.Default
 
             assertResultOk buildRes
 

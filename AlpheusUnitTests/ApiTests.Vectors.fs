@@ -21,7 +21,7 @@ type ``Vector scenarios``(output) =
         if isTestRuntimeWindows then
             "cmd /C \"FOR %i IN (1,2,3) DO (echo sample%i > sample%i.txt)\""
         else
-            "todo"
+            "/bin/sh -c \"for i in $(seq 1 3); do echo sample$i > sample$i.txt; done\""
 
     let concatCommand = 
         if isTestRuntimeWindows then
@@ -33,7 +33,7 @@ type ``Vector scenarios``(output) =
         if isTestRuntimeWindows then
             "cmd /C \"copy $in1 $out1 /b\""
         else
-            "todo"
+            "/bin/sh -c \"for file in $in1; do echo $file; cat $file >> $out1; done;\""
 
     let prepareSources(path) =
         async {
@@ -59,7 +59,7 @@ type ``Vector scenarios``(output) =
             let root = s.ExperimentRoot 
             do! prepareSources(root)
 
-            let! res = API.buildAsync root root ["base.txt"; "data/*.txt"] ["output/out*.txt"] concatCommand DependencyGraph.DefaultExecutionSettings
+            let! res = API.buildAsync root root ["base.txt"; "data/*.txt"] ["output/out*.txt"] concatCommand DependencyGraph.CommandExecutionSettings.Default
             assertResultOk res
 
             let outputId = ArtefactId.Path "output/out*.txt"
@@ -86,10 +86,10 @@ type ``Vector scenarios``(output) =
             let root = s.ExperimentRoot
             do! prepareSources(root)
 
-            let! res = API.buildAsync root root ["base.txt"; "data/*.txt"] ["output/*.txt"] concatCommand false
+            let! res = API.buildAsync root root ["base.txt"; "data/*.txt"] ["output/*.txt"] concatCommand DependencyGraph.CommandExecutionSettings.Default
             assertResultOk res
 
-            let! res = API.buildAsync root root ["base.txt"; "output/*.txt"] ["output2/*.txt"] concatCommand false
+            let! res = API.buildAsync root root ["base.txt"; "output/*.txt"] ["output2/*.txt"] concatCommand DependencyGraph.CommandExecutionSettings.Default
             assertResultOk res
 
             let outputId = ArtefactId.Path "output/*.txt"
@@ -123,7 +123,7 @@ type ``Vector scenarios``(output) =
     member s.``Scatter: Creates many files and the processes them as a vector``() =
         async {
             let root = s.ExperimentRoot
-            let! res = API.buildAsync root (Path.Combine(root, "samples")) [] ["*.txt"] createManyFilesCommand false
+            let! res = API.buildAsync root (Path.Combine(root, "samples")) [] ["*.txt"] createManyFilesCommand DependencyGraph.CommandExecutionSettings.Default
             assertResultOk res
 
             let res = API.compute (root, Path "samples/*.txt")
@@ -140,10 +140,10 @@ type ``Vector scenarios``(output) =
             let root = s.ExperimentRoot
             do! prepareSources(root)
 
-            let! res = API.buildAsync root root ["base.txt"; "data/*.txt"] ["output/*.txt"] concatCommand false
+            let! res = API.buildAsync root root ["base.txt"; "data/*.txt"] ["output/*.txt"] concatCommand DependencyGraph.CommandExecutionSettings.Default
             assertResultOk res
 
-            let! res = API.buildAsync root root ["output/*.txt"] ["summary.txt"] concatVectorCommand false
+            let! res = API.buildAsync root root ["output/*.txt"] ["summary.txt"] concatVectorCommand DependencyGraph.CommandExecutionSettings.Default
             assertResultOk res
 
             let summaryId = ArtefactId.Path "summary.txt"
@@ -159,11 +159,11 @@ type ``Vector scenarios``(output) =
             let root = s.ExperimentRoot
             do! prepareSources(root)
 
-            let! res = API.buildAsync root (Path.Combine(root, "samples")) [] ["*.txt"] createManyFilesCommand false
+            let! res = API.buildAsync root (Path.Combine(root, "samples")) [] ["*.txt"] createManyFilesCommand DependencyGraph.CommandExecutionSettings.Default
             assertResultOk res
-            let! res = API.buildAsync root root ["base.txt"; "samples/*.txt"] ["output/*.txt"] concatCommand false
+            let! res = API.buildAsync root root ["base.txt"; "samples/*.txt"] ["output/*.txt"] concatCommand DependencyGraph.CommandExecutionSettings.Default
             assertResultOk res
-            let! res = API.buildAsync root root ["output/*.txt"] ["summary.txt"] concatVectorCommand false
+            let! res = API.buildAsync root root ["output/*.txt"] ["summary.txt"] concatVectorCommand DependencyGraph.CommandExecutionSettings.Default
             assertResultOk res
 
             let summaryId = ArtefactId.Path "summary.txt"
@@ -179,13 +179,13 @@ type ``Vector scenarios``(output) =
             let root = s.ExperimentRoot
             do! prepareSources(root)
 
-            let! res = API.buildAsync root (Path.Combine(root, "samples")) [] ["*.txt"] createManyFilesCommand false
+            let! res = API.buildAsync root (Path.Combine(root, "samples")) [] ["*.txt"] createManyFilesCommand DependencyGraph.CommandExecutionSettings.Default
             assertResultOk res
-            let! res = API.buildAsync root root ["base.txt"; "samples/*.txt"] ["output/*.txt"] concatCommand false
+            let! res = API.buildAsync root root ["base.txt"; "samples/*.txt"] ["output/*.txt"] concatCommand DependencyGraph.CommandExecutionSettings.Default
             assertResultOk res
-            let! res = API.buildAsync root root ["samples/*.txt"; "output/*.txt"] ["output2/*.txt"] concatCommand false
+            let! res = API.buildAsync root root ["samples/*.txt"; "output/*.txt"] ["output2/*.txt"] concatCommand DependencyGraph.CommandExecutionSettings.Default
             assertResultOk res
-            let! res = API.buildAsync root root ["output2/*.txt"] ["summary.txt"] concatVectorCommand false
+            let! res = API.buildAsync root root ["output2/*.txt"] ["summary.txt"] concatVectorCommand DependencyGraph.CommandExecutionSettings.Default
             assertResultOk res
 
             let summaryId = ArtefactId.Path "summary.txt"

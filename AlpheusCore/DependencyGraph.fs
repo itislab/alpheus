@@ -101,11 +101,10 @@ type CommandExecutionSettings = {
     /// Exit codes that are considered to be successful computation
     SuccessfulExitCodes: int list
 }
-
-let DefaultExecutionSettings = {
-    DoNotCleanOutputs = false
-    SuccessfulExitCodes = [ 0 ]
-}
+with 
+    static member Default = 
+        { DoNotCleanOutputs = false
+          SuccessfulExitCodes = [ 0 ] }
 
 type ArtefactVertex(id:ArtefactId, experimentRoot:string) =    
     // expereiment root is needed to calc actual data versions (via path to the actual data)
