@@ -102,16 +102,15 @@ type CommandMethod(command: CommandLineVertex,
 
                 // 1) Deleting outputs
                 let recreatePath path =                    
-                    deletePath path
-                    if PathUtils.isDirectory path then
-                         ensureDirectories path
-                        
-                if not command.DoNotCleanOutputs then
-                    outputPaths |> List.iter (fun path -> 
-                        if path.Contains '*' then 
-                            enumeratePath path |> MdMap.toSeq |> Seq.iter(fun (i,fullPath) -> recreatePath fullPath)
-                        else 
-                            recreatePath path)
+                    if not command.DoNotCleanOutputs then
+                        deletePath path
+                    ensureDirectories path
+                
+                outputPaths |> List.iter (fun path -> 
+                    if path.Contains '*' then 
+                        enumeratePath path |> MdMap.toSeq |> Seq.iter(fun (i,fullPath) -> recreatePath fullPath)
+                    else 
+                        recreatePath path)
 
                 // 2) restoring inputs from storage if it is needed
                 let! hashesToRestorePerInput = 

@@ -233,4 +233,30 @@ type ``Vector scenarios``(output) as this =
                 ["sample3"] |> concatStrings |> assertFileContent (Path.Combine(root, "samples", sprintf "sample%d" i, "sample3.txt"))
         }
 
+    [<Fact>]
+    member s.``Scatter-scatter-vector``() =
+        async {
+            let root = s.ExperimentRoot
+            do! prepareSources(root)
+
+            let root = s.ExperimentRoot
+            let! res = API.buildAsync root (Path.Combine(root, "samples")) [] ["*/"] createManyFoldersCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res
+            let! res = API.buildAsync root (Path.Combine(root, "samples")) ["*/"] ["*/*.txt"] createManyFilesWithInputCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res
+            let! res = API.buildAsync root root ["base.txt"; "samples/*/*.txt"] ["output/*/*.txt"] concatCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res
+
+            let summaryId = ArtefactId.Path "output/*/*.txt"
+            let res = API.compute (root, summaryId)
+            assertResultOk res
+
+            for i in 1..3 do            
+                ["Base filesample1"] |> concatStrings |> assertFileContent (Path.Combine(root, "output", sprintf "sample%d" i, "sample1.txt"))
+                ["Base filesample2"] |> concatStrings |> assertFileContent (Path.Combine(root, "output", sprintf "sample%d" i, "sample2.txt"))
+                ["Base filesample3"] |> concatStrings |> assertFileContent (Path.Combine(root, "output", sprintf "sample%d" i, "sample3.txt"))
+        }
+                           
+             
+
    
