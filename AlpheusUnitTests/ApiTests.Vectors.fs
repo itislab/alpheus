@@ -256,6 +256,32 @@ type ``Vector scenarios``(output) as this =
                 ["Base filesample2"] |> concatStrings |> assertFileContent (Path.Combine(root, "output", sprintf "sample%d" i, "sample2.txt"))
                 ["Base filesample3"] |> concatStrings |> assertFileContent (Path.Combine(root, "output", sprintf "sample%d" i, "sample3.txt"))
         }
+
+    [<Fact>]
+    member s.``Scatter-scatter-vector-reduce``() =
+        async {
+            let root = s.ExperimentRoot
+            do! prepareSources(root)
+
+            let root = s.ExperimentRoot
+            let! res = API.buildAsync root (Path.Combine(root, "samples")) [] ["*/"] createManyFoldersCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res
+            let! res = API.buildAsync root (Path.Combine(root, "samples")) ["*/"] ["*/*.txt"] createManyFilesWithInputCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res
+            let! res = API.buildAsync root root ["base.txt"; "samples/*/*.txt"] ["output/*/*.txt"] concatCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res
+
+            let! res = API.buildAsync root root ["output/*/*.txt"] ["summaries/*/summary.txt"] concatVectorCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res
+
+            let summaryId = ArtefactId.Path "summaries/*/summary.txt"
+            let res = API.compute (root, summaryId)
+            assertResultOk res
+                        
+            for i in 1..3 do   
+                ["Base filesample1"; "Base filesample2"; "Base filesample3"] 
+                |> concatStrings |> assertFileContent (Path.Combine(root, "summaries", sprintf "sample%d" i, "summary.txt"))
+        }
                            
              
 

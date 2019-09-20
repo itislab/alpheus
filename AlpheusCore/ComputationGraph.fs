@@ -49,10 +49,13 @@ type CommandMethod(command: CommandLineVertex,
                     restoreFromStorage: (HashString*string) array -> Async<unit>) = // version*filename
     inherit AngaraGraphNode<ArtefactItem>(DependencyGraph.Command command)  
 
-    let reduceArtefactItem (inputIdx: int) (vector: ArtefactItem[]) : ArtefactItem =
-        // todo: this won't work for rank > 1
-        let path = command.Inputs.[inputIdx].Artefact.Id |> PathUtils.idToFullPath experimentRoot
-        { FullPath = path; Index = [] }
+    let reduceArtefactItem inputN (vector: ArtefactItem[]) : ArtefactItem =
+        if vector.Length > 0 then
+            let fullIndex = vector.[0].Index
+            let reducedIndex = fullIndex |> List.truncate (fullIndex.Length-1)
+            let path = command.Inputs.[inputN].Artefact.Id |> PathUtils.idToFullPath experimentRoot |> PathUtils.applyIndex reducedIndex
+            { FullPath = path; Index = reducedIndex }
+        else failwith "Input is empty (no artefacts to reduce)"
 
 
     override s.Execute(inputs, _) = // ignoring checkpoints
