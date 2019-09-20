@@ -23,6 +23,19 @@ type ``Vector scenarios``(output) as this =
         else
             "/bin/sh -c \"for i in $(seq 1 3); do echo sample$i > sample$i.txt; done\""
 
+            
+    let createManyFilesWithInputCommand = 
+        if isTestRuntimeWindows then
+            "cmd /C \"CD $in1 & FOR %i IN (1,2,3) DO (echo sample%i > sample%i.txt)\""
+        else
+            "/bin/sh -c \"cd $in1; for i in $(seq 1 3); do echo sample$i > sample$i.txt; done\""
+
+    let createManyFoldersCommand = 
+        if isTestRuntimeWindows then
+            "cmd /C \"FOR %i IN (1,2,3) DO (mkdir sample%i)\""
+        else
+            "todo"
+
     let concatCommand = 
         if isTestRuntimeWindows then
             "cmd /C \"copy $in1 + $in2 $out1 /b\""
@@ -199,6 +212,25 @@ type ``Vector scenarios``(output) as this =
             assertResultOk res
                         
             ["sample1"; "Base filesample1"; "sample2"; "Base filesample2"; "sample3"; "Base filesample3"] |> concatStrings |> assertFileContent (Path.Combine(root, "summary.txt"))
+        }
+
+    [<Fact>]
+    member s.``Scatter 2d``() =
+        async {
+            let root = s.ExperimentRoot
+            let! res = API.buildAsync root (Path.Combine(root, "samples")) [] ["*/"] createManyFoldersCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res
+            let! res = API.buildAsync root (Path.Combine(root, "samples")) ["*/"] ["*/*.txt"] createManyFilesWithInputCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res
+
+            let res = API.compute (root, Path "samples/*/*.txt")
+            assertResultOk res
+
+
+            for i in 1..3 do            
+                ["sample1"] |> concatStrings |> assertFileContent (Path.Combine(root, "samples", sprintf "sample%d" i, "sample1.txt"))
+                ["sample2"] |> concatStrings |> assertFileContent (Path.Combine(root, "samples", sprintf "sample%d" i, "sample2.txt"))
+                ["sample3"] |> concatStrings |> assertFileContent (Path.Combine(root, "samples", sprintf "sample%d" i, "sample3.txt"))
         }
 
    

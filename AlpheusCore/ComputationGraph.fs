@@ -82,7 +82,8 @@ type CommandMethod(command: CommandLineVertex,
             let logInfo str = Logger.logVerbose Logger.Execution (sprintf "%s%A: %s" methodItemId index str)
             logInfo "Started"
 
-            // Build the output paths by applying the index of this method.
+            // Build the full output paths by applying the index of this method.
+            // Note that in case of scatter, these still might contain '*'
             let outputPaths = 
                 command.Outputs // the order is important here
                 |> List.map(fun out -> out.Artefact.Id |> PathUtils.idToFullPath experimentRoot |> applyIndex index)
@@ -100,13 +101,17 @@ type CommandMethod(command: CommandLineVertex,
                 // 6) write alph files for outputs
 
                 // 1) Deleting outputs
-                let recreatePath path =
+                let recreatePath path =                    
                     deletePath path
                     if PathUtils.isDirectory path then
                          ensureDirectories path
                         
                 if not command.DoNotCleanOutputs then
-                    outputPaths |> List.iter recreatePath
+                    outputPaths |> List.iter (fun path -> 
+                        if path.Contains '*' then 
+                            enumeratePath path |> MdMap.toSeq |> Seq.iter(fun (i,fullPath) -> recreatePath fullPath)
+                        else 
+                            recreatePath path)
 
                 // 2) restoring inputs from storage if it is needed
                 let! hashesToRestorePerInput = 
