@@ -18,7 +18,7 @@ let hashByteArrayAsync chunkSize toHash =
     async {
         let localCopy = Array.copy toHash
         use memStream = new MemoryStream(localCopy)
-        return! ItisLab.Alpheus.Hash.hashStreamAsync chunkSize memStream
+        return! ItisLab.Alpheus.Hash.hashStream chunkSize memStream
     }
 
 let testRandomMemHashingAsync seed chunkSize testSize =
@@ -74,8 +74,8 @@ let ``Different data produces different hashes`` ()=
 [<Fact>]
 let ``The same file gives the same hash`` () =
     async {
-    let! hash1 = ItisLab.Alpheus.Hash.hashFileAsync @"data/texturalData.txt"
-    let! hash2 = ItisLab.Alpheus.Hash.hashFileAsync @"data/texturalData.txt"
+    let! hash1 = ItisLab.Alpheus.Hash.hashFile @"data/texturalData.txt"
+    let! hash2 = ItisLab.Alpheus.Hash.hashFile @"data/texturalData.txt"
 
     assertByteArraysEqual hash1 hash2
 
@@ -84,7 +84,7 @@ let ``The same file gives the same hash`` () =
 [<Fact>]
 let ``Consistency across alpheus versions and platforms`` () =
     async {
-    let! hash1 = ItisLab.Alpheus.Hash.hashFileAsync @"data/texturalData.txt"
+    let! hash1 = ItisLab.Alpheus.Hash.hashFile @"data/texturalData.txt"
 
     let str = ItisLab.Alpheus.Hash.hashToString hash1
 
@@ -97,8 +97,8 @@ let ``Consistency across alpheus versions and platforms`` () =
 [<Fact>]
 let ``Different files result in different hashes`` () =
     async {
-    let! hash1 = ItisLab.Alpheus.Hash.hashFileAsync @"data/texturalData.txt"
-    let! hash2 = ItisLab.Alpheus.Hash.hashFileAsync @"data/folder_with_files/TextFile3.txt"
+    let! hash1 = ItisLab.Alpheus.Hash.hashFile @"data/texturalData.txt"
+    let! hash2 = ItisLab.Alpheus.Hash.hashFile @"data/folder_with_files/TextFile3.txt"
 
     assertByteArrayContentsDiffer hash1 hash2
 
@@ -107,8 +107,8 @@ let ``Different files result in different hashes`` () =
 [<Fact>]
 let ``The same directory gives the same hash`` () =
     async {
-    let! hash1 = ItisLab.Alpheus.Hash.hashDirectoryAsync @"data/folder_with_files"
-    let! hash2 = ItisLab.Alpheus.Hash.hashDirectoryAsync @"data/folder_with_files"
+    let! hash1 = ItisLab.Alpheus.Hash.hashDirectory @"data/folder_with_files"
+    let! hash2 = ItisLab.Alpheus.Hash.hashDirectory @"data/folder_with_files"
 
     assertByteArraysEqual hash1 hash2
 
@@ -117,8 +117,8 @@ let ``The same directory gives the same hash`` () =
 [<Fact>]
 let ``Different directories result in different hashes`` () =
     async {
-    let! hash1 = ItisLab.Alpheus.Hash.hashDirectoryAsync @"data/folder_with_files"
-    let! hash2 = ItisLab.Alpheus.Hash.hashDirectoryAsync @"data/folder_with_files/subfolder"
+    let! hash1 = ItisLab.Alpheus.Hash.hashDirectory @"data/folder_with_files"
+    let! hash2 = ItisLab.Alpheus.Hash.hashDirectory @"data/folder_with_files/subfolder"
 
     assertByteArrayContentsDiffer hash1 hash2
 
@@ -158,7 +158,7 @@ type FastHashTests(output)=
     [<Fact>]
     member s. ``Hidden files are excluded from hash calculation`` () =
         async {
-            let! hash1 = ItisLab.Alpheus.Hash.hashDirectoryAsync s.RelativeExperimentRoot
+            let! hash1 = ItisLab.Alpheus.Hash.hashDirectory s.RelativeExperimentRoot
     
             let hidFileName = System.IO.Path.Combine(s.RelativeExperimentRoot,".gitfile1")
     
@@ -166,7 +166,7 @@ type FastHashTests(output)=
             let initialAttrs = File.GetAttributes(hidFileName)
             File.SetAttributes(hidFileName, initialAttrs ||| FileAttributes.Hidden)
     
-            let! hash2 = ItisLab.Alpheus.Hash.hashDirectoryAsync s.RelativeExperimentRoot
+            let! hash2 = ItisLab.Alpheus.Hash.hashDirectory s.RelativeExperimentRoot
     
             assertByteArraysEqual hash1 hash2
     

@@ -21,7 +21,7 @@ type ActualArtefactVersion(id: ArtefactId, experimentRoot: string) =
         async {
             let fullPath = id |> idToFullPath experimentRoot |> applyIndex index
             Logger.logVerbose Logger.LogCategory.DependencyGraph (sprintf "Calculating hash of %s..." fullPath)
-            return! Hash.hashPathAsync fullPath
+            return! Hash.hashPathAndSave fullPath
         }
 
     let lazyReadVersion (index: string list) =

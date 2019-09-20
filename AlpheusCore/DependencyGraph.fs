@@ -60,9 +60,9 @@ let findExpectedArtefacts checkStoragePresence expectedVersionHashes actualVersi
         else
             /// Chooses the pairs that are not valid on disk (filtering out versions match)
             let invalidOnDiskChooser hash1 hash2 =
-                match hash1,hash2 with
-                |   Some(h1),Some(h2) ->  if h1 = h2 then None else Some(hash1,hash2)
-                |   _ -> Some(hash1,hash2)
+                match hash1, hash2 with
+                | Some h1, Some h2 when h1 = h2 -> None 
+                | _ -> Some (hash1, hash2)
             let localInvalid = Seq.map2 invalidOnDiskChooser expectedVersionHashesArr actualVersionsHashes |> Seq.choose id |> Array.ofSeq
             if Array.length localInvalid = 0 then
                 // valid as actual disk version match expected version. No need to check the storage
@@ -101,11 +101,10 @@ type CommandExecutionSettings = {
     /// Exit codes that are considered to be successful computation
     SuccessfulExitCodes: int list
 }
-
-let DefaultExecutionSettings = {
-    DoNotCleanOutputs = false
-    SuccessfulExitCodes = [ 0 ]
-}
+with 
+    static member Default = 
+        { DoNotCleanOutputs = false
+          SuccessfulExitCodes = [ 0 ] }
 
 type ArtefactVertex(id:ArtefactId, experimentRoot:string) =    
     // expereiment root is needed to calc actual data versions (via path to the actual data)
@@ -139,6 +138,8 @@ type ArtefactVertex(id:ArtefactId, experimentRoot:string) =
     member s.ActualVersion = actualVersion
 
     member s.Rank = rank.Value
+
+    member s.ExperimentRoot = experimentRoot
 
     member s.AddUsedIn method = usedIn <- usedIn |> Set.add method 
 
@@ -190,9 +191,11 @@ type ArtefactVertex(id:ArtefactId, experimentRoot:string) =
                     Origin = DataOrigin.CommandOrigin { computeSection with Signature = Hash.getSignature computeSection}
                     IsTracked = s.IsTracked
                 }
-        lock saveLock (fun() -> 
+        lock saveLock (fun() ->
+            logVerbose DependencyGraph (sprintf "Saving alph file for artefact %A" s.Id)
             PathUtils.ensureDirectories alphFileFullPath
-            AlphFiles.save content alphFileFullPath)
+            AlphFiles.save content alphFileFullPath
+            logVerbose DependencyGraph (sprintf "Saved alph file for artefact %A" s.Id))
         
     interface System.IComparable with
         member s.CompareTo(other) =
@@ -291,6 +294,8 @@ and SourceVertex(methodId: MethodId, output: LinkToArtefact, experimentRoot: str
     member s.MethodId : MethodId = methodId
     member s.ExperimentRoot : string = experimentRoot
 
+    override s.ToString() = sprintf "id = %s" methodId
+
 
 /// Represents a method defined as a command line.
 and CommandLineVertex(methodId : MethodId, experimentRoot: string, inputs: LinkToArtefact list, outputs: LinkToArtefact list, command: string, workingDir:ExperimentRelativePath, executionSettings: CommandExecutionSettings) =
@@ -343,23 +348,37 @@ and CommandLineVertex(methodId : MethodId, experimentRoot: string, inputs: LinkT
     /// updates the expected versions for the input and output artefacts,
     /// and updates the *.alph file.
     member s.OnSucceeded(index: string list) : Async<unit> =
+        let expectActualStrict index invalidate (link:LinkToArtefact) =
+            async {
+                if invalidate then link.Artefact.ActualVersion.Invalidate index
+                do! link.ExpectActualVersionAsync index   
+            }
+
+        let expectActual index invalidate (link:LinkToArtefact) =
+            if List.length index < link.Artefact.Rank then // scatter
+                let partialPath = link.Artefact.Id |> PathUtils.idToFullPath experimentRoot |> PathUtils.applyIndex index
+                PathUtils.enumeratePath partialPath 
+                |> MdMap.toSeq
+                |> Seq.map(fun (extraIndex, _) -> 
+                    let fullIndex = index @ extraIndex
+                    link |> expectActualStrict fullIndex invalidate)
+                |> Async.Parallel
+                |> Async.Ignore
+            else // reduce or one2one
+                let strictIndex = index |> List.truncate link.Artefact.Rank 
+                link |> expectActualStrict strictIndex invalidate
+
         async {
             logVerbose DependencyGraph (sprintf "Method %A[%A] succeeded" methodId index)
             let outLinksUpdates =
                 s.Outputs 
-                |> Seq.map(fun out -> async { 
-                        out.Artefact.ActualVersion.Invalidate index
-                        do! out.ExpectActualVersionAsync index                        
-                    }) 
+                |> Seq.map (expectActual index true) 
             let inputLinksUpdates =
                 s.Inputs 
-                |> Seq.map(fun input -> async { 
-                        let inputIndex = index |> List.truncate input.Artefact.Rank
-                        do! input.ExpectActualVersionAsync inputIndex
-                    })
-            do! Seq.append outLinksUpdates inputLinksUpdates |> Async.Parallel |> Async.Ignore
+                |> Seq.map (expectActual index false) 
+            do! Seq.append outLinksUpdates inputLinksUpdates |> Async.Parallel |> Async.Ignore            
 
-            logVerbose DependencyGraph (sprintf "Saving alph files for outputs of %A[%A]" methodId index)
+            logVerbose DependencyGraph (sprintf "Saving alph files for outputs of %A%A" methodId index)
             s.Outputs |> Seq.iter(fun out -> out.Artefact.SaveAlphFile())
         }
 
@@ -371,12 +390,36 @@ and CommandLineVertex(methodId : MethodId, experimentRoot: string, inputs: LinkT
     override s.Equals(obj1:obj) =
         Object.ReferenceEquals(s,obj1)
 
+    override s.ToString() = sprintf "id = %s, command = %s" methodId command
+
+
+and internal Edge<'v>(src: 'v, trg: 'v) =
+    interface Angara.Graph.IEdge<'v> with
+        member s.Source = src
+        member s.Target = trg
 
 /// Alpheus dependencies graph
 and Graph (experimentRoot:string) = 
-    // todo: these collections are populated non-atomically and cause misleading
     let mutable methodVertices : Map<MethodId,MethodVertex> = Map.empty
     let mutable artefactVertices: Map<ArtefactId,ArtefactVertex> = Map.empty 
+
+    let topoSortArtefacts() =
+        let dag = Angara.Graph.DirectedAcyclicGraph<ArtefactVertex, Edge<ArtefactVertex>>()
+        let dagWithVertices = artefactVertices |> Map.fold (fun (g:Angara.Graph.DirectedAcyclicGraph<ArtefactVertex, Edge<ArtefactVertex>>) _ (a:ArtefactVertex) -> g.AddVertex a) dag
+        let dagWithEdges = 
+            artefactVertices 
+            |> Map.fold (fun dag _ (a:ArtefactVertex) -> 
+                a.UsedIn 
+                |> Set.toSeq 
+                |> Seq.map(fun (m:CommandLineVertex) -> m.Outputs) 
+                |> Seq.collect id
+                |> Seq.map(fun link -> Edge<ArtefactVertex>(a, link.Artefact))
+                |> Seq.fold(fun (g:Angara.Graph.DirectedAcyclicGraph<ArtefactVertex, Edge<ArtefactVertex>>) e -> g.AddEdge e) dag
+                ) dagWithVertices
+        let sorted = dagWithEdges |> Angara.Graph.toSeqSorted 
+        sorted
+    let mutable sortedArtefacts = Lazy<ArtefactVertex list>(topoSortArtefacts)
+    let invalidateSortedArtefacts() = sortedArtefacts <- Lazy<ArtefactVertex list>(topoSortArtefacts)
     
     let getMethodId (outputs: ArtefactId seq) : MethodId = 
         outputs
@@ -384,8 +427,7 @@ and Graph (experimentRoot:string) =
         |> Seq.sort
         |> Seq.head
 
-    member s.Artefacts =
-        Map.toSeq artefactVertices |> Seq.map snd |> Array.ofSeq
+    member s.Artefacts = sortedArtefacts.Value
 
     member s.Methods =
         Map.toSeq methodVertices |> Seq.map snd |> Array.ofSeq
@@ -481,6 +523,7 @@ and Graph (experimentRoot:string) =
         | None ->
             let vertex = ArtefactVertex(artefactId,experimentRoot)
             artefactVertices <- artefactVertices |> Map.add artefactId vertex 
+            invalidateSortedArtefacts()
             vertex
     
     member s.GetArtefact artefactId =

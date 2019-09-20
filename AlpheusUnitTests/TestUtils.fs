@@ -93,3 +93,6 @@ let assertResultOk result =
     match result with
     |   Ok(_) -> () // expected successful operation
     |   Error(e) -> Assert.True(false, sprintf "Expected successful operation, but got error: %A" e)
+
+type Microsoft.FSharp.Collections.List<'T> with 
+    member this.ToArray() = this |> Array.ofList

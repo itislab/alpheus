@@ -15,7 +15,7 @@ let createHashAlgorithm() : System.Security.Cryptography.HashAlgorithm =
 
 /// Hashes the content of the stream by reading it by chunks of supplied size till the end of the stream.
 /// Stream must have readable Length property
-let hashStreamAsync chunkSizeBytes (stream:Stream) =    
+let hashStream chunkSizeBytes (stream:Stream) =    
     async {
         use hashAlg = createHashAlgorithm()
         
@@ -43,11 +43,11 @@ let hashStreamAsync chunkSizeBytes (stream:Stream) =
 
 /// Hashes the content of the file supplied
 /// Filename as well as attributes are ignored
-let hashFileAsync fullPath =
+let hashFile fullPath =
     async {
         let readChunkSize = 100 * 1024 * 1024 //in Bytes
         use f_stream = File.OpenRead fullPath
-        let! hash = hashStreamAsync readChunkSize f_stream
+        let! hash = hashStream readChunkSize f_stream
         f_stream.Dispose()
         return hash
     }
@@ -71,7 +71,7 @@ let filterOutHidden filenames fileAttributes =
 
     Array.choose regularChooser zippedFile // omitting hidden files
 
-let rec hashDirectoryAsync (fullPath:string) =
+let rec hashDirectory (fullPath:string) =
     async {
         let fullPath =
             if (fullPath.EndsWith(Path.DirectorySeparatorChar)) || (fullPath.EndsWith(Path.AltDirectorySeparatorChar)) then
@@ -90,7 +90,7 @@ let rec hashDirectoryAsync (fullPath:string) =
         let fileNamesRel =
             fileNamesAbs
             |> Array.map (fun path -> path.Remove(0,fullPath.Length)) // removing abs path part
-        let fileHashComputation = Seq.map (fun filename -> hashFileAsync filename) fileNamesAbs //full paths here   
+        let fileHashComputation = Seq.map (fun filename -> hashFile filename) fileNamesAbs //full paths here   
         let fileNameBytes = fileNamesRel |> Array.collect (fun x -> Encoding.UTF8.GetBytes(x)) //but relative paths in names
 
         let dirNamesAbs =
@@ -99,7 +99,7 @@ let rec hashDirectoryAsync (fullPath:string) =
         let dirNames = //relative names
             dirNamesAbs 
             |> Array.map (fun x -> x.Remove(0,fullPath.Length))
-        let dirHashComputations = Seq.map (fun dirname -> hashDirectoryAsync dirname) dirNamesAbs //full paths are passed here
+        let dirHashComputations = Seq.map (fun dirname -> hashDirectory dirname) dirNamesAbs //full paths are passed here
         let dirNameBytes = dirNames |> Array.collect (fun x -> Encoding.UTF8.GetBytes(x)) // but the relative names are hashed
 
         let! allHashes = Seq.concat [fileHashComputation; dirHashComputations ] |> Array.ofSeq |> Async.Parallel
@@ -116,15 +116,15 @@ let rec hashDirectoryAsync (fullPath:string) =
 
 /// Builds hash for the given path which can be either a file or a directory 
 /// (depends on what exists). If neither exists, returns None.
-let hashPathAsync fullPath =
+let hashPath fullPath =
     async {
             // Logger.logVerbose Logger.Hash (sprintf "Hashing %s ..." fullPath)
             // todo: let items = PathUtils.enumeratePath fullPath
             if File.Exists fullPath then
-                let! hash = hashFileAsync fullPath
+                let! hash = hashFile fullPath
                 return Some(hashToString hash)
             elif Directory.Exists fullPath then
-                let! hash = hashDirectoryAsync fullPath
+                let! hash = hashDirectory fullPath
                 return Some(hashToString hash)
             else
                 return None
@@ -135,7 +135,7 @@ let hashPathAndSave (fullPath:string) =
     let hashFilePath = PathUtils.pathToHashFile fullPath
     let hashAndSave() =            
         async {
-            let! hashStr = hashPathAsync fullPath
+            let! hashStr = hashPath fullPath
             match hashStr with
             |   None -> return None
             |   Some(hashStr) ->

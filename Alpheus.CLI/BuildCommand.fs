@@ -21,7 +21,7 @@ let run workingDir (buildArgs:ParseResults<BuildArgs>) =
 
         let settings = 
             { 
-                DependencyGraph.DefaultExecutionSettings with
+                DependencyGraph.CommandExecutionSettings.Default with
                     DoNotCleanOutputs = buildArgs.Contains Disable_Outputs_Clean
             }
 

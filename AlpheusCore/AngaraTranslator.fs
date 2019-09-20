@@ -50,8 +50,8 @@ let translate<'Node,'Artefact,'Method when 'Node:>IVertex and 'Node:comparison a
             // We know the producer node rank. Hence we might need to add scatter nodes to equal ranks. 
 
             let consumerNode, graph, methodNodeMap = consumer |> addOrGetNode graph methodNodeMap nodeFactory
-            let graph = graph |> FlowGraph.connect (producerNode,outputPortIndex) (consumerNode,consumerInputPort) 
-            (graph, methodNodeMap)
+            let graph2 = graph |> FlowGraph.connect (producerNode,outputPortIndex) (consumerNode,consumerInputPort) 
+            (graph2, methodNodeMap)
 
         artefact
             |> dependencyGraph.UsedIn 
