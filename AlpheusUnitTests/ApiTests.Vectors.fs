@@ -48,6 +48,12 @@ type ``Vector scenarios``(output) as this =
         else
             "/bin/sh -c \"for file in $in1; do echo $file; cat $file >> $out1; done;\""
 
+    let concatVectorForSummariesVectorCommand = 
+        if isTestRuntimeWindows then
+            "cmd /C \"type NUL > $out1 && for /D %d in (*) DO copy \"$out1\" + \"%d\summary.txt\" \"$out1\" /b\""
+        else
+            "todo"
+
     let prepareSources(path) =
         async {
             let path = Path.GetFullPath path
@@ -234,7 +240,7 @@ type ``Vector scenarios``(output) as this =
         }
 
     [<Fact>]
-    member s.``Scatter-scatter-vector``() =
+    member s.``Scatter-scatter``() =
         async {
             let root = s.ExperimentRoot
             do! prepareSources(root)
@@ -258,7 +264,7 @@ type ``Vector scenarios``(output) as this =
         }
 
     [<Fact>]
-    member s.``Scatter-scatter-vector-reduce``() =
+    member s.``Scatter-scatter-reduce``() =
         async {
             let root = s.ExperimentRoot
             do! prepareSources(root)
@@ -281,6 +287,38 @@ type ``Vector scenarios``(output) as this =
             for i in 1..3 do   
                 ["Base filesample1"; "Base filesample2"; "Base filesample3"] 
                 |> concatStrings |> assertFileContent (Path.Combine(root, "summaries", sprintf "sample%d" i, "summary.txt"))
+        }
+
+    [<Fact>]
+    member s.``Scatter-scatter-vector-reduce-reduce``() =
+        async {
+            let root = s.ExperimentRoot
+            do! prepareSources(root)
+
+            let root = s.ExperimentRoot
+            let! res = API.buildAsync root (Path.Combine(root, "samples")) [] ["*/"] createManyFoldersCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res
+            let! res = API.buildAsync root (Path.Combine(root, "samples")) ["*/"] ["*/*.txt"] createManyFilesWithInputCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res
+            let! res = API.buildAsync root root ["base.txt"; "samples/*/*.txt"] ["output/*/*.txt"] concatCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res
+            let! res = API.buildAsync root root ["samples/*/*.txt"; "output/*/*.txt"] ["output2/*/*.txt"] concatCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res
+            let! res = API.buildAsync root root ["output2/*/*.txt"] ["summaries/*/summary.txt"] concatVectorCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res
+            let! res = API.buildAsync root (Path.Combine(root, "summaries")) ["*/summary.txt"] ["../summary.txt"] concatVectorForSummariesVectorCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res
+
+
+            let summaryId = ArtefactId.Path "summary.txt"
+            let res = API.compute (root, summaryId)
+            assertResultOk res
+                        
+            ["sample1"; "Base filesample1"; "sample2"; "Base filesample2"; "sample3"; "Base filesample3"] 
+            |> List.replicate 3
+            |> List.collect id
+            |> concatStrings 
+            |> assertFileContent (Path.Combine(root, "summary.txt"))
         }
                            
              
