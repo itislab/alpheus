@@ -1,6 +1,7 @@
 ﻿module ItisLab.Alpheus.Versioning
 
 open Newtonsoft.Json.Linq
+open System.IO
 
 [<Literal>]
 /// The format version of the alph files that the most resent
@@ -14,5 +15,7 @@ let ExperimentConfigFileCurrentVersion = 1
 let getVersion jsonText =
     let root = JObject.Parse(jsonText)
     let versionToken = root.GetValue("FileFormatVersion")
+    if versionToken = null then
+        raise (InvalidDataException "Alph file must contain FileFormatVersion field")
     let version = versionToken.ToObject<int>()
     version

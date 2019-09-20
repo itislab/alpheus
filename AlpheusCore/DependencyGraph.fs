@@ -432,41 +432,46 @@ and Graph (experimentRoot:string) =
             // to process a vertex A means 1) to allocate verteces for direct A's producer method and it's direct inputs; 2) connect them 3) Enqueue them to be processed
             let dequeuedArtefact = queue.Dequeue()
             let alphFileFullPath = dequeuedArtefact.Id |> idToAlphFileFullPath experimentRoot
-            match tryLoad alphFileFullPath with
-            | None -> 
-                // Absence of .alph file means that the artefact is initial (not produced)
-                // Thus it corresponds to a source vertex (no inputs)
-                // We must create it now
-                s.AddOrGetSource (LinkToArtefact(dequeuedArtefact, MdMap.scalar None)) |> ignore
+            try
+                match tryLoad alphFileFullPath with
+                | None -> 
+                    // Absence of .alph file means that the artefact is initial (not produced)
+                    // Thus it corresponds to a source vertex (no inputs)
+                    // We must create it now
+                    s.AddOrGetSource (LinkToArtefact(dequeuedArtefact, MdMap.scalar None)) |> ignore
 
-            | Some(alphFile) ->
-                // Alph file exists
-                dequeuedArtefact.IsTracked <- alphFile.IsTracked
-                match alphFile.Origin with
-                | SourceOrigin(alphSource) -> // Snapshot in .alph file means that is was snapshoted, thus Tracked
-                    s.AddOrGetSource (LinkToArtefact(dequeuedArtefact, alphSource.Hash)) |> ignore
-                | CommandOrigin(alphCommand) -> // produced by some method.
-                    // checking weather the internals were modified (weather the output hashes mentioned are valid)
-                    let alphCommand = Hash.validateSignature(alphCommand)
+                | Some(alphFile) ->
+                    // Alph file exists
+                    dequeuedArtefact.IsTracked <- alphFile.IsTracked
+                    match alphFile.Origin with
+                    | SourceOrigin(alphSource) -> // Snapshot in .alph file means that is was snapshoted, thus Tracked
+                        s.AddOrGetSource (LinkToArtefact(dequeuedArtefact, alphSource.Hash)) |> ignore
+                    | CommandOrigin(alphCommand) -> // produced by some method.
+                        // checking weather the internals were modified (weather the output hashes mentioned are valid)
+                        let alphCommand = Hash.validateSignature(alphCommand)
 
-                    let makeLink versionArtefact =  
-                        let artefact = versionArtefact.RelativePath |> alphRelativePathToId alphFileFullPath experimentRoot |> s.GetOrAddArtefact
-                        LinkToArtefact(artefact, versionArtefact.Hash)                    
-                    let inputs = alphCommand.Inputs |> List.map makeLink                                                                                
-                    let outputs = alphCommand.Outputs |> List.map makeLink
+                        let makeLink versionArtefact =  
+                            let artefact = versionArtefact.RelativePath |> alphRelativePathToId alphFileFullPath experimentRoot |> s.GetOrAddArtefact
+                            LinkToArtefact(artefact, versionArtefact.Hash)                    
+                        let inputs = alphCommand.Inputs |> List.map makeLink                                                                                
+                        let outputs = alphCommand.Outputs |> List.map makeLink
 
-                    let expRootRelatedWorkingDir : ExperimentRelativePath = 
-                        let alphFileDir = Path.GetDirectoryName(normalizePath(alphFileFullPath))
-                        let path = Path.GetRelativePath(experimentRoot, Path.GetFullPath(Path.Combine(alphFileDir, alphCommand.WorkingDirectory)))
-                        if path.EndsWith(Path.DirectorySeparatorChar) then path else path + string Path.DirectorySeparatorChar
+                        let expRootRelatedWorkingDir : ExperimentRelativePath = 
+                            let alphFileDir = Path.GetDirectoryName(normalizePath(alphFileFullPath))
+                            let path = Path.GetRelativePath(experimentRoot, Path.GetFullPath(Path.Combine(alphFileDir, alphCommand.WorkingDirectory)))
+                            if path.EndsWith(Path.DirectorySeparatorChar) then path else path + string Path.DirectorySeparatorChar
 
-                    let settings = {
-                        DoNotCleanOutputs = alphCommand.OutputsCleanDisabled
-                        SuccessfulExitCodes = alphCommand.SuccessfulExitCodes
-                    }
+                        let settings = {
+                            DoNotCleanOutputs = alphCommand.OutputsCleanDisabled
+                            SuccessfulExitCodes = alphCommand.SuccessfulExitCodes
+                        }
 
-                    let _ = s.AddOrGetCommand alphCommand.Command inputs outputs expRootRelatedWorkingDir settings
-                    inputs |> Seq.map (fun inp -> inp.Artefact) |> Seq.filter(not << processedOutputs.Contains) |> Seq.iter (fun (x:ArtefactVertex) -> queue.Enqueue x)                         
+                        let _ = s.AddOrGetCommand alphCommand.Command inputs outputs expRootRelatedWorkingDir settings
+                        inputs |> Seq.map (fun inp -> inp.Artefact) |> Seq.filter(not << processedOutputs.Contains) |> Seq.iter (fun (x:ArtefactVertex) -> queue.Enqueue x)                         
+            with
+                | :? InvalidDataException as ex ->
+                Logger.logError Logger.DependencyGraph (sprintf "Error during building dependency graph, in particular processing artefact %A" dequeuedArtefact)
+                raise ex
             processedOutputs <- Set.add dequeuedArtefact processedOutputs
 
     member private s.GetOrAddArtefact artefactId =
