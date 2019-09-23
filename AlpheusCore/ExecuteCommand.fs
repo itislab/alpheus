@@ -14,7 +14,7 @@ let mutable activeSubprocesses: Map<int,Diagnostics.Process> = Map.empty // this
 let private activeSubprocessesLockObj = obj()
 
 let private formatLine prefix message = 
-    sprintf "[%40s]:\t%s" prefix message
+    sprintf "[%s]:\t%s" prefix message
 
 /// Prepends the given line with the context information.
 let internal annotateLine (methodId:string) (channel:string) (line:string) =

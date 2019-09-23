@@ -49,10 +49,13 @@ type CommandMethod(command: CommandLineVertex,
                     restoreFromStorage: (HashString*string) array -> Async<unit>) = // version*filename
     inherit AngaraGraphNode<ArtefactItem>(DependencyGraph.Command command)  
 
-    let reduceArtefactItem (inputIdx: int) (vector: ArtefactItem[]) : ArtefactItem =
-        // todo: this won't work for rank > 1
-        let path = command.Inputs.[inputIdx].Artefact.Id |> PathUtils.idToFullPath experimentRoot
-        { FullPath = path; Index = [] }
+    let reduceArtefactItem inputN (vector: ArtefactItem[]) : ArtefactItem =
+        if vector.Length > 0 then
+            let fullIndex = vector.[0].Index
+            let reducedIndex = fullIndex |> List.truncate (fullIndex.Length-1)
+            let path = command.Inputs.[inputN].Artefact.Id |> PathUtils.idToFullPath experimentRoot |> PathUtils.applyIndex reducedIndex
+            { FullPath = path; Index = reducedIndex }
+        else failwith "Input is empty (no artefacts to reduce)"
 
 
     override s.Execute(inputs, _) = // ignoring checkpoints
@@ -82,7 +85,8 @@ type CommandMethod(command: CommandLineVertex,
             let logInfo str = Logger.logVerbose Logger.Execution (sprintf "%s%A: %s" methodItemId index str)
             logInfo "Started"
 
-            // Build the output paths by applying the index of this method.
+            // Build the full output paths by applying the index of this method.
+            // Note that in case of scatter, these still might contain '*'
             let outputPaths = 
                 command.Outputs // the order is important here
                 |> List.map(fun out -> out.Artefact.Id |> PathUtils.idToFullPath experimentRoot |> applyIndex index)
@@ -100,13 +104,16 @@ type CommandMethod(command: CommandLineVertex,
                 // 6) write alph files for outputs
 
                 // 1) Deleting outputs
-                let recreatePath path =
-                    deletePath path
-                    if PathUtils.isDirectory path then
-                         ensureDirectories path
-                        
-                if not command.DoNotCleanOutputs then
-                    outputPaths |> List.iter recreatePath
+                let recreatePath path =                    
+                    if not command.DoNotCleanOutputs then
+                        deletePath path
+                    ensureDirectories path
+                
+                outputPaths |> List.iter (fun path -> 
+                    if path.Contains '*' then 
+                        enumeratePath path |> MdMap.toSeq |> Seq.iter(fun (i,fullPath) -> recreatePath fullPath)
+                    else 
+                        recreatePath path)
 
                 // 2) restoring inputs from storage if it is needed
                 let! hashesToRestorePerInput = 
