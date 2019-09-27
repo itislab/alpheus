@@ -111,9 +111,16 @@ type ArtefactVertex(id:ArtefactId, experimentRoot:string) =
     let mutable producer : MethodVertex option = None
     let mutable usedIn : Set<CommandLineVertex> = Set.empty
     let mutable isTracked = false
+    let mutable changeTimestamp = 0
     let actualVersion = ActualArtefactVersion(id, experimentRoot)
     let saveLock = obj()
+    let changeLock = obj()
     let rank = Lazy<int>(fun() -> Artefacts.rank id)
+
+    let mutate(action: unit -> unit) = 
+        lock changeLock (fun() ->
+            changeTimestamp <- changeTimestamp + 1
+            action())
 
     member s.Id = id
 
@@ -123,14 +130,14 @@ type ArtefactVertex(id:ArtefactId, experimentRoot:string) =
             match producer with
             | Some(v) -> v
             | None -> invalidOp "The artefact vertex has no producer vertex set. Set the ProduceBy before retrieving its value"
-        and set v = producer <- Some(v)
+        and set v = mutate(fun () -> producer <- Some(v))
 
     /// Gets a set of methods using this artefact as an input.
     member s.UsedIn = usedIn
     
     member s.IsTracked
         with get() = isTracked
-        and set v = isTracked <- v
+        and set v = mutate(fun () -> isTracked <- v)
     
     /// Gets the version calculated from the data on the disk.
     /// Lazy execution. Calulated based on disk data only on the first call. 
@@ -141,7 +148,7 @@ type ArtefactVertex(id:ArtefactId, experimentRoot:string) =
 
     member s.ExperimentRoot = experimentRoot
 
-    member s.AddUsedIn method = usedIn <- usedIn |> Set.add method 
+    member s.AddUsedIn method = mutate(fun() -> usedIn <- usedIn |> Set.add method)
 
     
     /// Builds an AlphFile instance describing the artefact.
