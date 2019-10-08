@@ -21,6 +21,8 @@ _todo: complete the list_
 - Allows reproducing the data.
 - Allows using your usual tools and is based on folders/files.
 
+## Why Alpheus?
+Alpheus uses full power of .Net Core threadpool processing, asyncronous IO and asyncronous computations. You will be surprised how effective Alpheus deals with large collection of small files saving them to artefact storages and restoring them back when needed.
 
 ## Installation
 You need to have [.Net Core SDK 2.1.300 or newer](https://dotnet.microsoft.com/learn/dotnet/hello-world-tutorial) installed.
@@ -226,6 +228,9 @@ _todo_
 
 ## Guidelines
 
+### Save intermediate artefacts & delete them from disk
+To speed up the reproducibility checks even more, it is adviced to save and remove from disk any artefact that is not desired to be used directly (as inputs to newly created methods or for manual inspection). This will free Alheus from obligation to check that the disk version of the artefact has not changed since the artefact had been produced.
+
 ### File structure
 
 **Shared or exclusive code?**
@@ -236,3 +241,9 @@ The conflict is that from one side the shared code is useful since the code impr
 the other side, being modified it invalidates the computed results, which is bad.
 
 Therefore we suggest consider not sharing the code, but use copy/paste when you explicitly want to propagate changes from one experiment to another. git will help to resolve changes.
+
+## Questions and Answers
+
+#### Why not to use some build system, like make, cmake, etc.?
+Build systems usually determine that the file/folder needs to be recalulated using modification time. This will not work if you push the artefact to some storage and later pull them back to your hard drive. Alpheus uses modification timestamps along with the data checksums to verify that the actual disk version matches the expected version of the artefact.
+Alpheus gives you an ability to offload most of the experiment artefact to external storages to free your local disk drive. It would be impossible with build tools, like cmake.
