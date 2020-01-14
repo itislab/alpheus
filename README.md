@@ -160,7 +160,7 @@ There are two statuses of an artefact:
 - *Up-to-date* indicates that the correct version of the artefact is available either locally or on the artefact storage, such that this artefact is a result of the command applied to the current inputs.
   
 
-### Vector operations
+### Vector operations [Experimental - not stable]
 
 If you need to perform an identical operation with multiple artefacts, you should provide both input and output paths with an asterisk (*) when declaring a method:
 
@@ -194,7 +194,7 @@ In this case, the script gets the input pattern as an argument, e.g. a full path
 
 
 
-#### When to use vector operations
+#### When to use vector operations [Experimental - not stable]
 
 You may wonder why not to create a method that enumerates needed files itself. You may and is advised to do so in case you have lightway operation on many small files (e.g. image format conversion). 
 Use Alpheus vector operations if your vector element processing is considerably heavy.
