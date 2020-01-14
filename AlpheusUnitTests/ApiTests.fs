@@ -309,6 +309,12 @@ let equalStatuses expected actual =
 type ScalarScenarios(output) =
     inherit SingleUseOneTimeDirectory(output)
 
+    let copyFileCommand =
+        if isTestRuntimeWindows then
+            "cmd /C \"copy $in1 $out1\""
+        else
+            "/bin/sh -c \"cp $in1 $out1\""
+
     let twoOutputsCommand = 
         if isTestRuntimeWindows then
             "cmd /C \"cmd.exe /C copy $in1 $out1 & cmd.exe /C copy $in2 $out2\""
@@ -1005,12 +1011,54 @@ type ScalarScenarios(output) =
         }
 
     [<Fact>]
+    /// remote up to date source artefact version is lost after the first usage of such artefact as an input of some computation
+    member s.``Bug 57``() =
+        async {      
+            let path = Path.GetFullPath s.ExperimentRoot
+                
+            let path = Path.GetFullPath path
+            let! _ = API.createExperimentDirectory path
+            
+            let file1 = ArtefactId.Path "1.txt"
+            let file1path = Path.Combine(path,"1.txt")
+            let file2path = Path.Combine(path,"2.txt")
+
+            do! File.WriteAllTextAsync(file1path,"File 1\\r\\n") |> Async.AwaitTask
+
+            // first, saving the file to the storage
+            let! res1 = API.saveAsync (path, file1) None false
+            assertResultOk res1
+            
+            // then, building and computing derived artefact
+            let! res2 = API.buildAsync path path ["1.txt"] ["2.txt"] copyFileCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res2
+            assertResultOk <| API.compute (path, ArtefactId.Path "2.txt")
+            
+            let! loadRes = AlphFiles.tryLoadAsync (PathUtils.pathToAlphFile file1path)
+            match loadRes.Value.Origin with
+            | CommandOrigin  _ -> Assert.True(false, "expected to be source origin")
+            | SourceOrigin s -> Assert.NotNull(s.Hash.AsScalar())
+
+            output.WriteLine("TEST: first run complete")
+
+            // now deleting the files and repeat
+            File.Delete file1path
+            File.Delete file2path
+            assertResultOk <| API.compute (path, ArtefactId.Path "2.txt")
+
+            let! loadRes = AlphFiles.tryLoadAsync (PathUtils.pathToAlphFile file1path)
+            match loadRes.Value.Origin with
+            | CommandOrigin  _ -> Assert.True(false, "expected to be source origin")
+            | SourceOrigin s -> Assert.NotNull(s.Hash.AsScalar()) // <---- the hash must still persists. Thats the bug
+
+        }
+
+    [<Fact>]
     member s.``compute: 2 outputs of single command``() =
         async {      
             let path = Path.GetFullPath s.ExperimentRoot
                 
             do! buildExperiment(path)
-
                 
             let! buildRes = API.buildAsync path path ["1.txt"; "2.txt"] ["1_copy.txt";"2_copy.txt"] twoOutputsCommand DependencyGraph.CommandExecutionSettings.Default
 
