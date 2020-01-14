@@ -1044,13 +1044,62 @@ type ScalarScenarios(output) =
             // now deleting the files and repeat
             File.Delete file1path
             File.Delete file2path
-            assertResultOk <| API.compute (path, ArtefactId.Path "2.txt")
+            assertResultOk <| API.compute (path, ArtefactId.Path "2.txt") // asking to recompute the method
 
             let! loadRes = AlphFiles.tryLoadAsync (PathUtils.pathToAlphFile file1path)
             match loadRes.Value.Origin with
             | CommandOrigin  _ -> Assert.True(false, "expected to be source origin")
             | SourceOrigin s -> Assert.NotNull(s.Hash.AsScalar()) // <---- the hash must still persists. Thats the bug
 
+        }
+
+    [<Fact>]
+    member s.``remote up-to-date chain should not restore the artefacts``() =
+        async {      
+            let path = Path.GetFullPath s.ExperimentRoot
+                
+            let path = Path.GetFullPath path
+            let! _ = API.createExperimentDirectory path
+            
+            let file1 = ArtefactId.Path "1.txt"
+            let file2 = ArtefactId.Path "2.txt"
+            let file1path = Path.Combine(path,"1.txt")
+            let file2path = Path.Combine(path,"2.txt")
+
+            do! File.WriteAllTextAsync(file1path,"File 1\\r\\n") |> Async.AwaitTask
+
+            // first, saving the file to the storage
+            let! res1 = API.saveAsync (path, file1) None false
+            assertResultOk res1
+            
+            // then, building and computing derived artefact
+            let! res2 = API.buildAsync path path ["1.txt"] ["2.txt"] copyFileCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res2
+            assertResultOk <| API.compute (path, ArtefactId.Path "2.txt")
+            
+            let! loadRes = AlphFiles.tryLoadAsync (PathUtils.pathToAlphFile file1path)
+            match loadRes.Value.Origin with
+            | CommandOrigin  _ -> Assert.True(false, "expected to be source origin")
+            | SourceOrigin s -> Assert.NotNull(s.Hash.AsScalar())
+
+            output.WriteLine("TEST: first run complete")
+
+            let! res3 = API.saveAsync (path, file2) None false
+            assertResultOk res3
+
+            output.WriteLine("TEST: result saved")
+            
+            // now deleting the files and repeat
+            File.Delete file1path
+            File.Delete file2path
+            output.WriteLine("TEST: deleted artefacts")
+            assertResultOk <| API.compute (path, ArtefactId.Path "2.txt")
+
+            output.WriteLine("TEST: second run complete")
+            
+
+            Assert.False(File.Exists(file1path))
+            Assert.False(File.Exists(file2path))
         }
 
     [<Fact>]
