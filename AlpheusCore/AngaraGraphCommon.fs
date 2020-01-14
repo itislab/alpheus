@@ -142,15 +142,54 @@ let versionsToRestore index (link: LinkToArtefact) =
     async {
         let! expectedAndActual = link |> getExpectedAndActualVersions index
         let artefactPathPattern = link.Artefact.Id |> PathUtils.idToFullPath link.Artefact.ExperimentRoot
-        let toRestore =
+        // if the expected is None we may still want to extract expected version from the producer of the artefact
+        // this is needed in case the user saved the artefact, deleted it, and now uses this artefact in newly created command (which does not expect particular input version yet)
+        let ensureExpectedNotNone j exp = 
+            async {
+                match exp with
+                |   Some v -> return  Some v
+                |   None ->                
+                    let artefact = link.Artefact
+                    if List.length j = artefact.Rank then
+                        let producer = artefact.ProducedBy                       
+                        let! expectedItem =
+                            async {
+                                match producer with
+                                |   Source s ->
+                                    let expectedBySource = s.Output.ExpectedVersion |> MdMap.find j
+                                    match expectedBySource with
+                                    |   Some v2 -> return Some v2
+                                    |   None ->
+                                        // that's the case when the source does not have alph file, thus expected vertion is None while actual is not
+                                        let! actual = s.Output.Artefact.ActualVersion.Get j
+                                        return actual
+                                        
+                                |   Command c ->
+                                    return (c.Outputs |> Seq.find (fun x -> x.Artefact.Id = artefact.Id)).ExpectedVersion |> MdMap.find j
+                                }
+                        match! link.Artefact.ActualVersion.Get j with
+                        |   Some act2 when act2 =(Option.get expectedItem) -> return None                
+                        |   None | Some _ -> return expectedItem                
+
+                    else
+                        // TODO: what to do here?
+                        return exp
+            }                 
+        let! restoreCandidate =
             expectedAndActual 
             |> MdMap.toSeq
-            |> Seq.choose(fun (j, (exp,act)) -> 
+            |> Seq.map(fun (j, (exp,act)) -> 
                 match act with
-                | Some _ -> None
-                | None -> exp |> Option.map(fun exp -> (artefactPathPattern |> PathUtils.applyIndex j, exp)))
-            |> Seq.toList
-        return toRestore 
+                | Some _ -> async.Return None
+                | None ->
+                    let pathToMissing = artefactPathPattern |> PathUtils.applyIndex j
+                    async {
+                        let! exp2 = ensureExpectedNotNone j exp
+                        return exp2 |> Option.map(fun exp -> (pathToMissing, exp))                
+                    })
+            |> Async.Parallel
+        let restore = restoreCandidate |> Seq.choose id |> Seq.toList        
+        return restore
     }
 
 /// Returns status of the method instance which determines whether the command method needs actual CLI tool execution.

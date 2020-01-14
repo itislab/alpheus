@@ -450,6 +450,24 @@ type ScalarScenarios(output) =
         }
 
     [<Fact>]
+    member s.``Commands that never run, restores its inputs``() =
+        async {         
+            let path = Path.GetFullPath s.RelativeExperimentRoot
+            do! buildExperiment(path)
+
+            let res = API.compute(path, ArtefactId.Path "1_2.txt")
+            assertResultOk res
+
+            let! res2 = API.saveAsync (path, ArtefactId.Path "1_2.txt") None false
+            assertResultOk res2
+
+            File.Delete(Path.Combine(s.RelativeExperimentRoot,"1_2.txt"))            
+
+            let res3 = API.compute(path, ArtefactId.Path "1_2_3.txt")
+            assertResultOk res3
+        }
+
+    [<Fact>]
     member s.``Status: Uncomputed chain``() =
         async {         
             let path = Path.GetFullPath s.RelativeExperimentRoot
@@ -788,38 +806,28 @@ type ScalarScenarios(output) =
     [<Fact>]
     member s.``Compute: creates hash file for inputs and outputs``() =
         async {
-            let savedWD = Environment.CurrentDirectory
-            try            
-                let path = Path.GetFullPath s.RelativeExperimentRoot
-                Environment.CurrentDirectory <- s.RelativeExperimentRoot
-                do! buildExperiment(path)
+            let path = Path.GetFullPath s.RelativeExperimentRoot
+            do! buildExperiment(path)
 
                 
-                let outId = ArtefactId.Path "1_2_3.txt"
-                let res = API.compute(path, outId) // first compute all
-                assertResultOk res
+            let outId = ArtefactId.Path "1_2_3.txt"
+            let res = API.compute(path, outId) // first compute all
+            assertResultOk res
 
-                for id in [ "1.txt"; "2.txt"; "3.txt"; "1_2.txt"; "1_2_3.txt" ] do
-                    let hashFile = ArtefactId.Path id |> PathUtils.idToFullPath s.ExperimentRoot |> PathUtils.pathToHashFile 
-                    do! assertNonEmptyFile hashFile
-            finally
-                Environment.CurrentDirectory <- savedWD            
+            for id in [ "1.txt"; "2.txt"; "3.txt"; "1_2.txt"; "1_2_3.txt" ] do
+                let hashFile = ArtefactId.Path id |> PathUtils.idToFullPath s.ExperimentRoot |> PathUtils.pathToHashFile 
+                do! assertNonEmptyFile hashFile
         }
 
     [<Fact>]
     member s.``Build: doesn't create hash file for inputs and outputs``() =
-        async {
-            let savedWD = Environment.CurrentDirectory
-            try            
-                let path = Path.GetFullPath s.RelativeExperimentRoot
-                Environment.CurrentDirectory <- s.RelativeExperimentRoot
-                do! buildExperiment(path)
+        async {            
+            let path = Path.GetFullPath s.RelativeExperimentRoot
+            do! buildExperiment(path)
                   
-                for id in [ "1.txt"; "2.txt"; "3.txt"; "1_2.txt"; "1_2_3.txt" ] do
-                    let hashFile = ArtefactId.Path id |> PathUtils.idToFullPath s.ExperimentRoot |> PathUtils.pathToHashFile 
-                    File.Exists(hashFile).Should().BeFalse("build shouldn't save hashes to disk to minimize duration of the command") |> ignore
-            finally
-                Environment.CurrentDirectory <- savedWD            
+            for id in [ "1.txt"; "2.txt"; "3.txt"; "1_2.txt"; "1_2_3.txt" ] do
+                let hashFile = ArtefactId.Path id |> PathUtils.idToFullPath s.ExperimentRoot |> PathUtils.pathToHashFile 
+                File.Exists(hashFile).Should().BeFalse("build shouldn't save hashes to disk to minimize duration of the command") |> ignore
         }
 
     [<Fact>]
