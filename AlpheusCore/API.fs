@@ -186,7 +186,7 @@ let compute (experimentRoot, artefactId) =
         return ComputationGraph.doComputations flowGraph
     } |> Async.RunSynchronously
 
-/// Prints to the stdout the textural statuses of the artefact and its provenance
+/// Returns the status for the requested artefact and its provenance
 let status (experimentRoot, artefactId) =
     async {
         let! g = buildDependencyGraphAsync experimentRoot [artefactId]

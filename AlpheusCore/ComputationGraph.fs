@@ -31,7 +31,15 @@ type SourceMethod(source: SourceVertex, experimentRoot,
             // if alph file exists on disk (e.g. isTracked), we need to re-save it to update the expected version
             let alphExists = source.Output.Artefact.Id |> PathUtils.idToAlphFileFullPath source.ExperimentRoot |> File.Exists
             if alphExists then
-                let expect = items |> MdMap.toSeq |> Seq.map fst |> Seq.map source.Output.ExpectActualVersionAsync 
+                let itemsIndex = items |> MdMap.toSeq |> Seq.map fst
+                let expectActualOnlyForExistent index =
+                    async {
+                        let! actualVersion = source.Output.Artefact.ActualVersion.Get index
+                        match actualVersion with
+                        |   None -> return () // we do nothing for artefacts that are not on disk. e.g. do not expect nothing for source artefact
+                        |   Some _ -> return! source.Output.ExpectActualVersionAsync index
+                    }
+                let expect = itemsIndex |> Seq.map expectActualOnlyForExistent
                 do! expect |> Async.Parallel |> Async.Ignore
                 artefact.SaveAlphFile()            
             
@@ -75,7 +83,7 @@ type CommandMethod(command: CommandLineVertex,
                 | :? (ArtefactItem[]) as vector -> reduceArtefactItem i vector
                 | _ -> failwith "Unexpected type of the input")
                     
-            let index =
+            let index = // empty list for scalar, nonempty for vector element
                 inputItems 
                 |> Seq.map(fun item -> item.Index)
                 |> Seq.fold(fun (max: string list) index -> if index.Length > max.Length then index else max) []
