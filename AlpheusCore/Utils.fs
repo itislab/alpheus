@@ -17,9 +17,12 @@ let singleExecutionGuardAsync tasksCache taskArgs taskFactory =
     // or return the task that was started earlier (by previous call with the same tasksCache and taskArgs)
     let mutable task = null
     lock(tasksCache) (fun () -> 
-        let t = match Map.tryFind taskArgs tasksCache with
+        let t = match Map.tryFind taskArgs !tasksCache with
                 |   Some(t) -> t
-                |   None -> taskFactory taskArgs |> Async.StartAsTask
+                |   None -> 
+                    let t = taskFactory taskArgs |> Async.StartAsTask
+                    tasksCache := Map.add taskArgs t (!tasksCache)
+                    t
         task <- t
     )
     Async.AwaitTask task

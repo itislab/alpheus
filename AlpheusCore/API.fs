@@ -173,7 +173,7 @@ let compute (experimentRoot, artefactId) =
         let restoreFromStorage (pairs:(HashString*string) array) =
             async {
                 let swapedPairs = pairs |> Array.map (fun p -> let x,y = p in y,x ) 
-                let restoreTasksCache = Map.empty
+                let restoreTasksCache = ref Map.empty
                 let restoreSingleItemTreadSafeAsync toRestore =
                     Utils.singleExecutionGuardAsync restoreTasksCache toRestore (restoreSingleItemAsync experimentRoot)
                 let! comp = swapedPairs |> Array.map restoreSingleItemTreadSafeAsync |> Async.Parallel
@@ -232,7 +232,7 @@ let restoreAsync (experimentRoot, artefactId : ArtefactId) =
                     |   Some v -> Some(path,v)
                     |   None -> None
                 Seq.choose chooser paths
-            let restoreTasksCache = Map.empty
+            let restoreTasksCache = ref Map.empty
             let restoreSingleItemTreadSafeAsync toRestore =
                 Utils.singleExecutionGuardAsync restoreTasksCache toRestore (restoreSingleItemAsync experimentRoot)
             let! restoreResults = pathsToRestore |> Seq.map restoreSingleItemTreadSafeAsync |> Async.Parallel
