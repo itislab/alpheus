@@ -134,7 +134,7 @@ let artefactFor workingDir (path:string) : Result<string*ArtefactId, AlpheusErro
     }
 
 /// Thread unsafe! guard it with 'singleExecutionGuardAsync' if you expect it is called from several threads
-let restoreSingleItemAsync experimentRoot (path,versionToRestore) =
+let private restoreSingleItemAsync experimentRoot (path,versionToRestore) =
     async {
         let! config = Config.openExperimentDirectoryAsync experimentRoot
         let checker = config.ConfigFile.Storage |> Map.toSeq |> StorageFactory.getPresenseChecker experimentRoot
