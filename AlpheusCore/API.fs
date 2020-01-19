@@ -9,6 +9,7 @@ open ItisLab.Alpheus.PathUtils
 open ItisLab.Alpheus
 open System.IO
 open Angara.Data
+open System.Threading.Tasks
 
 let buildDependencyGraphAsync experimentRoot artefactIds =
     async {
@@ -132,7 +133,7 @@ let artefactFor workingDir (path:string) : Result<string*ArtefactId, AlpheusErro
         return (experimentRoot, artefactId)
     }
 
-let private restoreSingleItemAsync experimentRoot (path,versionToRestore) =
+let restoreSingleItemThreadUnsafeAsync experimentRoot (path,versionToRestore) =
     async {
         let! config = Config.openExperimentDirectoryAsync experimentRoot
         let checker = config.ConfigFile.Storage |> Map.toSeq |> StorageFactory.getPresenseChecker experimentRoot
@@ -146,6 +147,20 @@ let private restoreSingleItemAsync experimentRoot (path,versionToRestore) =
             let restore = StorageFactory.getStorageRestore experimentRoot (Map.find restoreSource config.ConfigFile.Storage)
             return! restore path versionToRestore
     }
+
+let private restoreSingleItemAsync restoreTasksCache experimentRoot (path,versionToRestore) =
+    // either start the task with the current parameter set
+    // or return the task from the previous call with the same parameter set (the parameter set has already been processed earlier)
+    let mutable task:Task<Result<unit,AlpheusError>> = null
+    lock(restoreTasksCache) (fun () -> 
+        let t = match Map.tryFind (experimentRoot,path,versionToRestore) restoreTasksCache with
+                |   Some(t) -> t
+                |   None -> restoreSingleItemThreadUnsafeAsync experimentRoot (path,versionToRestore) |> Async.StartAsTask
+        task <- t
+    )
+    Async.AwaitTask task
+   
+    
 
 /// Checks whether the specified versions can be extraced from any available storages
 let internal checkStoragePresence experimentRoot (versions:HashString seq) : Async<bool array> =
@@ -166,11 +181,13 @@ let compute (experimentRoot, artefactId) =
     async {
         let! g = buildDependencyGraphAsync experimentRoot [artefactId]
 
+
         
         let restoreFromStorage (pairs:(HashString*string) array) =
             async {
                 let swapedPairs = pairs |> Array.map (fun p -> let x,y = p in y,x ) 
-                let! comp = swapedPairs |> Array.map (restoreSingleItemAsync experimentRoot) |> Async.Parallel
+                let restoreTasksCache = Map.empty
+                let! comp = swapedPairs |> Array.map (restoreSingleItemAsync restoreTasksCache experimentRoot) |> Async.Parallel
                 let checker res =
                     match res with
                     |   Ok _ -> ()
@@ -226,7 +243,8 @@ let restoreAsync (experimentRoot, artefactId : ArtefactId) =
                     |   Some v -> Some(path,v)
                     |   None -> None
                 Seq.choose chooser paths
-            let! restoreResults = pathsToRestore |> Seq.map (restoreSingleItemAsync experimentRoot) |> Array.ofSeq |> Async.Parallel
+            let restoreTasksCache = Map.empty
+            let! restoreResults = pathsToRestore |> Seq.map (restoreSingleItemAsync restoreTasksCache experimentRoot) |> Array.ofSeq |> Async.Parallel
 
             if restoreResults |> Seq.forall (fun r -> match r with Ok _ -> true | Error _ -> false)
                 then return Ok()
