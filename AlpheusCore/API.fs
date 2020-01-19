@@ -9,6 +9,7 @@ open ItisLab.Alpheus.PathUtils
 open ItisLab.Alpheus
 open System.IO
 open Angara.Data
+open System.Threading.Tasks
 
 let buildDependencyGraphAsync experimentRoot artefactIds =
     async {
@@ -132,6 +133,7 @@ let artefactFor workingDir (path:string) : Result<string*ArtefactId, AlpheusErro
         return (experimentRoot, artefactId)
     }
 
+/// Thread unsafe! guard it with 'singleExecutionGuardAsync' if you expect it is called from several threads
 let private restoreSingleItemAsync experimentRoot (path,versionToRestore) =
     async {
         let! config = Config.openExperimentDirectoryAsync experimentRoot
@@ -145,7 +147,7 @@ let private restoreSingleItemAsync experimentRoot (path,versionToRestore) =
             logVerbose LogCategory.API (sprintf "Restoring %A:%s from %s storage" path (versionToRestore.Substring(0,6)) restoreSource)
             let restore = StorageFactory.getStorageRestore experimentRoot (Map.find restoreSource config.ConfigFile.Storage)
             return! restore path versionToRestore
-    }
+    }    
 
 /// Checks whether the specified versions can be extraced from any available storages
 let internal checkStoragePresence experimentRoot (versions:HashString seq) : Async<bool array> =
@@ -166,11 +168,14 @@ let compute (experimentRoot, artefactId) =
     async {
         let! g = buildDependencyGraphAsync experimentRoot [artefactId]
 
+        let restoreTasksCache = ref Map.empty // common across all restores withing this compute run
         
         let restoreFromStorage (pairs:(HashString*string) array) =
             async {
                 let swapedPairs = pairs |> Array.map (fun p -> let x,y = p in y,x ) 
-                let! comp = swapedPairs |> Array.map (restoreSingleItemAsync experimentRoot) |> Async.Parallel
+                let restoreSingleItemTreadSafeAsync toRestore =
+                    Utils.singleExecutionGuardAsync restoreTasksCache toRestore (restoreSingleItemAsync experimentRoot)
+                let! comp = swapedPairs |> Array.map restoreSingleItemTreadSafeAsync |> Async.Parallel
                 let checker res =
                     match res with
                     |   Ok _ -> ()
@@ -226,7 +231,10 @@ let restoreAsync (experimentRoot, artefactId : ArtefactId) =
                     |   Some v -> Some(path,v)
                     |   None -> None
                 Seq.choose chooser paths
-            let! restoreResults = pathsToRestore |> Seq.map (restoreSingleItemAsync experimentRoot) |> Array.ofSeq |> Async.Parallel
+            let restoreTasksCache = ref Map.empty
+            let restoreSingleItemTreadSafeAsync toRestore =
+                Utils.singleExecutionGuardAsync restoreTasksCache toRestore (restoreSingleItemAsync experimentRoot)
+            let! restoreResults = pathsToRestore |> Seq.map restoreSingleItemTreadSafeAsync |> Async.Parallel
 
             if restoreResults |> Seq.forall (fun r -> match r with Ok _ -> true | Error _ -> false)
                 then return Ok()
