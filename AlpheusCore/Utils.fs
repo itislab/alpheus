@@ -12,7 +12,17 @@ let mapAsync (func: ('a list * 'b) -> Async<'c>) (data: MdMap<'a, 'b>) : Async<M
         return mapOfTasks |> MdMap.map (fun task -> task.Result)
     }
 
-
+let singleExecutionGuardAsync tasksCache taskArgs taskFactory =
+    // either start the task with the current taskArgs
+    // or return the task that was started earlier (by previous call with the same tasksCache and taskArgs)
+    let mutable task = null
+    lock(tasksCache) (fun () -> 
+        let t = match Map.tryFind taskArgs tasksCache with
+                |   Some(t) -> t
+                |   None -> taskFactory taskArgs |> Async.StartAsTask
+        task <- t
+    )
+    Async.AwaitTask task
 
 
 
