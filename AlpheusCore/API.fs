@@ -168,12 +168,11 @@ let compute (experimentRoot, artefactId) =
     async {
         let! g = buildDependencyGraphAsync experimentRoot [artefactId]
 
-
+        let restoreTasksCache = ref Map.empty // common across all restores withing this compute run
         
         let restoreFromStorage (pairs:(HashString*string) array) =
             async {
                 let swapedPairs = pairs |> Array.map (fun p -> let x,y = p in y,x ) 
-                let restoreTasksCache = ref Map.empty
                 let restoreSingleItemTreadSafeAsync toRestore =
                     Utils.singleExecutionGuardAsync restoreTasksCache toRestore (restoreSingleItemAsync experimentRoot)
                 let! comp = swapedPairs |> Array.map restoreSingleItemTreadSafeAsync |> Async.Parallel
