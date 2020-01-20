@@ -159,7 +159,7 @@ type ``Vector scenarios``(output) as this =
             ["sample3"] |> concatStrings |> assertFileContent (Path.Combine(root, "samples", "sample3.txt"))
         }
 
-    [<Fact>]
+    [<Fact(Skip="Triggers opened bug #49")>] // Enable this test when the issue is resolved
     member s.``Reduce: Aggregates results of a vector operation``() =
         async {
             let root = s.ExperimentRoot
