@@ -28,6 +28,8 @@ type VersionedArtefact = {
 type CommandOutput =  {
     Inputs: VersionedArtefact list
     Outputs: VersionedArtefact list
+    /// Used for limiting concurrent execution of several command vertices that require same limited resource. e.g. GPU, disk throughput, etc
+    ResourceGroups: string list
     SuccessfulExitCodes: int list
     OutputIndex: int
     WorkingDirectory: AlphRelativePath
