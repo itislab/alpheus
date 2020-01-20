@@ -54,7 +54,8 @@ type SourceMethod(source: SourceVertex, experimentRoot,
 type CommandMethod(command: CommandLineVertex,
                     experimentRoot,
                     checkStoragePresence: HashString seq -> Async<bool array>,
-                    restoreFromStorage: (HashString*string) array -> Async<unit>) = // version*filename
+                    restoreFromStorage: (HashString*string) array -> Async<unit>, // version*filename
+                    resourceSemaphores: Map<string,System.Threading.SemaphoreSlim> ref) = 
     inherit AngaraGraphNode<ArtefactItem>(DependencyGraph.Command command)  
 
     let reduceArtefactItem inputN (vector: ArtefactItem[]) : ArtefactItem =
@@ -139,11 +140,19 @@ type CommandMethod(command: CommandLineVertex,
 
 
                 // 3) executing a command
-                let print (s:string) = Logger.logInfo Logger.ExecutionOutput s
-                let input idx = command.Inputs.[idx-1].Artefact.Id |> idToFullPath experimentRoot |> applyIndex index
-                let output idx = command.Outputs.[idx-1].Artefact.Id |> idToFullPath experimentRoot |> applyIndex index
-                let context : ComputationContext = { ExperimentRoot = experimentRoot; Print = print }
-                let exitCode = command |> ExecuteCommand.runCommandLineMethodAndWait context (input, output) 
+                let mutable exitCode = 0
+                try
+                    // acquiring resource semaphores
+                    let! _ = command.ResourceGroups |> Seq.map (fun g -> Utils.enterResourceGroupMonitorAsync resourceSemaphores g) |> Async.Parallel
+                    let print (s:string) = Logger.logInfo Logger.ExecutionOutput s
+                    let input idx = command.Inputs.[idx-1].Artefact.Id |> idToFullPath experimentRoot |> applyIndex index
+                    let output idx = command.Outputs.[idx-1].Artefact.Id |> idToFullPath experimentRoot |> applyIndex index
+                    let context : ComputationContext = { ExperimentRoot = experimentRoot; Print = print }
+                    let! exitCode2 = command |> ExecuteCommand.runCommandLineMethodAndWaitAsync context (input, output) 
+                    exitCode <- exitCode2
+                finally
+                    // releasing resource semaphores
+                    command.ResourceGroups |> Seq.iter (fun g -> Utils.exitResourceGroupMonitor (!resourceSemaphores) g)
 
                 // 4) upon successful exit code hash the outputs
                 if not (Seq.exists (fun x -> exitCode = x) command.SuccessfulExitCodes) then
@@ -171,10 +180,11 @@ type CommandMethod(command: CommandLineVertex,
 
 
 let buildGraph experimentRoot (g:DependencyGraph.Graph) checkStoragePresence restoreFromStorage =    
+    let resourceSemaphores = ref Map.empty
     let factory method : AngaraGraphNode<ArtefactItem> = 
         match method with
         | DependencyGraph.Source src -> upcast SourceMethod(src, experimentRoot, checkStoragePresence) 
-        | DependencyGraph.Command cmd -> upcast CommandMethod(cmd, experimentRoot, checkStoragePresence, restoreFromStorage)
+        | DependencyGraph.Command cmd -> upcast CommandMethod(cmd, experimentRoot, checkStoragePresence, restoreFromStorage, resourceSemaphores)
 
     let flow = g |> DependencyGraphToAngaraWrapper |> AngaraTranslator.translate factory
     flow

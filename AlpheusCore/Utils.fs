@@ -4,6 +4,7 @@ open Angara.Data
 open System.Threading.Tasks
 open System.Collections.Concurrent
 open System
+open System.Threading
 
 let mapAsync (func: ('a list * 'b) -> Async<'c>) (data: MdMap<'a, 'b>) : Async<MdMap<'a, 'c>>  =
     async {
@@ -26,6 +27,23 @@ let singleExecutionGuardAsync tasksCache taskArgs taskFactory =
         task <- t
     )
     Async.AwaitTask task
+
+let enterResourceGroupMonitorAsync monitors (groupName:string) =
+    let mutable simaphore = null
+    lock(monitors) (fun () ->
+        let ss = match Map.tryFind groupName (!monitors) with
+                 |  Some(ss) -> ss
+                 |  None ->
+                    let ss = new SemaphoreSlim(1)
+                    monitors := Map.add groupName ss (!monitors)
+                    ss
+        simaphore <- ss
+    )
+    simaphore.WaitAsync() |> Async.AwaitTask
+
+let exitResourceGroupMonitor monitors (groupName:string) =
+    let simaphore: SemaphoreSlim = Map.find groupName monitors
+    simaphore.Release() |> ignore
 
 
 

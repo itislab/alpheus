@@ -85,11 +85,10 @@ let runCmdLocallyAsync print outputAnnotationId program args (workingDir:string)
 
 /// Runs the command line method and waits indefinitely until the process exits.
 /// Returns the exit code.
-let runCommandLineMethodAndWait (context: ComputationContext) (input: int -> string, output: int -> string) (computation: CommandLineVertex) =
+let runCommandLineMethodAndWaitAsync (context: ComputationContext) (input: int -> string, output: int -> string) (computation: CommandLineVertex) =
     let command = computation.Command.Trim() |> MethodCommand.substitute (input, output)
     let program,args = MethodCommand.split command                 
     let wdAbsPath = context.GetAbsolutePath(computation.WorkingDirectory)
-    let localComputation = runCmdLocallyAsync context.Print computation.MethodId program args wdAbsPath 
-    Async.RunSynchronously localComputation
+    runCmdLocallyAsync context.Print computation.MethodId program args wdAbsPath
 
     

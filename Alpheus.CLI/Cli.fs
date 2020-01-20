@@ -39,6 +39,7 @@ with
 type BuildArgs = 
     |   D of dependency:string
     |   O of output:string
+    |   [<CliPrefix(CliPrefix.DoubleDash)>][<AltCommandLine("-rg")>]Resource_Group of resourceGroups: string list
     |   [<CliPrefix(CliPrefix.DoubleDash)>]Disable_Outputs_Clean
     |   [<CliPrefix(CliPrefix.DoubleDash)>][<AltCommandLine("-ec")>]Successful_Exit_Codes of codes:int list
     | [<Last;CliPrefix(CliPrefix.None)>]Command
@@ -48,6 +49,7 @@ with
             match s with
             |   D _ -> "Dependency path (file or folder)"
             |   O _ -> "Output path (file or folder)"
+            |   Resource_Group _ -> "Include current command to some resource group (e.g. \"GPU\", \"DiskIO\", \"RAM\" etc.  any arbitrary string). Space separated strings. Command does not belong to any group by default."
             |   Disable_Outputs_Clean -> "Make the command responsible for clearing the outputs in case of re-computation. Useful for resumable computations. Default: The outputs are cleaned by alpheus"
             |   Successful_Exit_Codes _ -> "Exit codes (space separated) of the command that are considered as successful computation. Default: 0"
             |   Command _ -> "Command that generates the outputs"

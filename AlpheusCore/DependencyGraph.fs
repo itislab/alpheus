@@ -100,14 +100,18 @@ type CommandExecutionSettings = {
     DoNotCleanOutputs: bool
     /// Exit codes that are considered to be successful computation
     SuccessfulExitCodes: int list
+    /// Which of the resources the current command consumes
+    ResourceGroups: Set<string>
 }
-with 
+with
     static member Default = 
         { DoNotCleanOutputs = false
-          SuccessfulExitCodes = [ 0 ] }
+          SuccessfulExitCodes = [ 0 ]
+          ResourceGroups = Set.empty
+          }
 
 type ArtefactVertex(id:ArtefactId, experimentRoot:string) =    
-    // expereiment root is needed to calc actual data versions (via path to the actual data)
+    // experiment root is needed to calc actual data versions (via path to the actual data)
     let mutable producer : MethodVertex option = None
     let mutable usedIn : Set<CommandLineVertex> = Set.empty
     let mutable isTracked = false
@@ -133,7 +137,7 @@ type ArtefactVertex(id:ArtefactId, experimentRoot:string) =
         and set v = isTracked <- v
     
     /// Gets the version calculated from the data on the disk.
-    /// Lazy execution. Calulated based on disk data only on the first call. 
+    /// Lazy execution. Calculated based on disk data only on the first call. 
     /// Later returns the hashed results, unless ForceActualVersionCalc() is called.
     member s.ActualVersion = actualVersion
 
@@ -180,7 +184,8 @@ type ArtefactVertex(id:ArtefactId, experimentRoot:string) =
                     { Inputs = commandVertex.Inputs |> Seq.map toSection |> List.ofSeq
                       Outputs = commandVertex.Outputs |> Seq.map toSection |> List.ofSeq
                       OutputIndex = commandVertex.Outputs |> Seq.findIndex (fun output -> output.Artefact.Id = s.Id)
-                      Command = commandVertex.Command                
+                      Command = commandVertex.Command
+                      ResourceGroups = List.ofSeq commandVertex.ResourceGroups
                       WorkingDirectory = alphFileRelativeWorkingDir
                       Signature = String.Empty
                       OutputsCleanDisabled = commandVertex.DoNotCleanOutputs
@@ -298,7 +303,14 @@ and SourceVertex(methodId: MethodId, output: LinkToArtefact, experimentRoot: str
 
 
 /// Represents a method defined as a command line.
-and CommandLineVertex(methodId : MethodId, experimentRoot: string, inputs: LinkToArtefact list, outputs: LinkToArtefact list, command: string, workingDir:ExperimentRelativePath, executionSettings: CommandExecutionSettings) =
+and CommandLineVertex(
+                        methodId : MethodId,
+                        experimentRoot: string,
+                        inputs: LinkToArtefact list,
+                        outputs: LinkToArtefact list,
+                        command: string,
+                        workingDir:ExperimentRelativePath,
+                        executionSettings: CommandExecutionSettings) =
     let exitCodeLockObj = obj()
     let outputStatusesLockObj = obj()
     let mutable commandExitCode: MdMap<string,int option> = MdMap.empty
@@ -334,6 +346,10 @@ and CommandLineVertex(methodId : MethodId, experimentRoot: string, inputs: LinkT
     /// Command line exit codes that are considered successful
     member s.SuccessfulExitCodes
         with get() = executionSettings.SuccessfulExitCodes
+
+    /// Which of the resources the current command consumes
+    member s.ResourceGroups
+        with get() = executionSettings.ResourceGroups
 
     /// From where the Command must be executed.
     /// Experiment root related
@@ -506,6 +522,7 @@ and Graph (experimentRoot:string) =
                         let settings = {
                             DoNotCleanOutputs = alphCommand.OutputsCleanDisabled
                             SuccessfulExitCodes = alphCommand.SuccessfulExitCodes
+                            ResourceGroups = set alphCommand.ResourceGroups
                         }
 
                         let _ = s.AddOrGetCommand alphCommand.Command inputs outputs expRootRelatedWorkingDir settings
