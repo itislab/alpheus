@@ -1054,7 +1054,7 @@ type ScalarScenarios(output) =
         }
 
     [<Fact>]
-    member s.``remote up-to-date chain should not restore the artefacts``() =
+    member s.``remote up-to-date chain should restore the direct target of compute``() =
         async {      
             let path = Path.GetFullPath s.ExperimentRoot
                 
@@ -1099,7 +1099,7 @@ type ScalarScenarios(output) =
             
 
             Assert.False(File.Exists(file1path))
-            Assert.False(File.Exists(file2path))
+            Assert.True(File.Exists(file2path))
         }
 
     [<Fact>]
