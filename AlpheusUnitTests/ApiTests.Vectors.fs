@@ -159,7 +159,7 @@ type ``Vector scenarios``(output) as this =
             ["sample3"] |> concatStrings |> assertFileContent (Path.Combine(root, "samples", "sample3.txt"))
         }
 
-    [<Fact(Skip="Triggers opened bug #49")>] // Enable this test when the issue is resolved
+    [<Fact>]
     member s.``Reduce: Aggregates results of a vector operation``() =
         async {
             let root = s.ExperimentRoot
@@ -168,6 +168,7 @@ type ``Vector scenarios``(output) as this =
             let! res = API.buildAsync root root ["base.txt"; "data/*.txt"] ["output/*.txt"] concatCommand DependencyGraph.CommandExecutionSettings.Default
             assertResultOk res
 
+            // this one is gather
             let! res = API.buildAsync root root ["output/*.txt"] ["summary.txt"] concatVectorCommand DependencyGraph.CommandExecutionSettings.Default
             assertResultOk res
 
