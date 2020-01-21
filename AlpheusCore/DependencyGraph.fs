@@ -148,56 +148,60 @@ type ArtefactVertex(id:ArtefactId, experimentRoot:string) =
     member s.AddUsedIn method = usedIn <- usedIn |> Set.add method 
 
     
-    /// Builds an AlphFile instance describing the artefact.
+    /// Builds an AlphFile instance describing the artefact and saves it to disk
     member s.SaveAlphFile() =
         let alphFileFullPath = s.Id |> PathUtils.idToAlphFileFullPath experimentRoot
         if not (Path.IsPathRooted alphFileFullPath) then
             raise(ArgumentException(sprintf "alphFileFullPath must contain rooted full path: %s" alphFileFullPath))
-        let content = 
-            // Fills in Signature field in compute section object with correct value       
-            match s.ProducedBy with
-            | MethodVertex.Source(sourceVertex) ->
-                let experimentRoot = sourceVertex.ExperimentRoot
-                let expectedVersion = sourceVertex.Output.ExpectedVersion
-                let artefactPath = sourceVertex.Output.Artefact.Id |> idToFullPath experimentRoot
-                let snapshotSection : AlphFiles.VersionedArtefact = 
-                    { Hash = expectedVersion
-                      RelativePath = relativePath alphFileFullPath artefactPath }
-                {
-                    FileFormatVersion = Versioning.AlphFileCurrentVersion
-                    Origin = SourceOrigin snapshotSection
-                    IsTracked = sourceVertex.Output.Artefact.IsTracked
-                }            
-            | MethodVertex.Command(commandVertex) ->
-                // dependency graph contains all paths relative to project root
-                // alpheus files contains all paths relative to alph file   
-                let experimentRoot = experimentRoot                
-                let computeSection =
-                    let alphFileRelativeWorkingDir = 
-                        let workingDirFull = Path.GetFullPath(Path.Combine(experimentRoot,commandVertex.WorkingDirectory))
-                        let candidate = relativePath alphFileFullPath workingDirFull
-                        if candidate = "" then ("." + string Path.DirectorySeparatorChar) else candidate
-                    let toSection (a:LinkToArtefact) = 
-                        let relative = relativePath alphFileFullPath (a.Artefact.Id |> idToFullPath experimentRoot)
-                        { RelativePath = relative; Hash = a.ExpectedVersion}
-    
-                    { Inputs = commandVertex.Inputs |> Seq.map toSection |> List.ofSeq
-                      Outputs = commandVertex.Outputs |> Seq.map toSection |> List.ofSeq
-                      OutputIndex = commandVertex.Outputs |> Seq.findIndex (fun output -> output.Artefact.Id = s.Id)
-                      Command = commandVertex.Command
-                      ResourceGroups = List.ofSeq commandVertex.ResourceGroups
-                      WorkingDirectory = alphFileRelativeWorkingDir
-                      Signature = String.Empty
-                      OutputsCleanDisabled = commandVertex.DoNotCleanOutputs
-                      SuccessfulExitCodes = commandVertex.SuccessfulExitCodes
-                      }
-                {
-                    FileFormatVersion = Versioning.AlphFileCurrentVersion
-                    Origin = DataOrigin.CommandOrigin { computeSection with Signature = Hash.getSignature computeSection}
-                    IsTracked = s.IsTracked
-                }
         lock saveLock (fun() ->
             logVerbose DependencyGraph (sprintf "Saving alph file for artefact %A" s.Id)
+            // Constructing the "content" and dumping to the disk must be under the same lock
+            // as there is no guarantee that the if we lock only on disk dump it will be served in a FIFO manner
+            // on Linux it is not. Thus if we want the latest content dump to be written the last on disk we need to lock the content as well
+            let content = 
+                // Fills in Signature field in compute section object with correct value       
+                match s.ProducedBy with
+                | MethodVertex.Source(sourceVertex) ->
+                    let experimentRoot = sourceVertex.ExperimentRoot
+                    let expectedVersion = sourceVertex.Output.ExpectedVersion
+                    let artefactPath = sourceVertex.Output.Artefact.Id |> idToFullPath experimentRoot
+                    let snapshotSection : AlphFiles.VersionedArtefact = 
+                        { Hash = expectedVersion
+                          RelativePath = relativePath alphFileFullPath artefactPath }
+                    {
+                        FileFormatVersion = Versioning.AlphFileCurrentVersion
+                        Origin = SourceOrigin snapshotSection
+                        IsTracked = sourceVertex.Output.Artefact.IsTracked
+                    }            
+                | MethodVertex.Command(commandVertex) ->
+                    // dependency graph contains all paths relative to project root
+                    // alpheus files contains all paths relative to alph file   
+                    let experimentRoot = experimentRoot                
+                    let computeSection =
+                        let alphFileRelativeWorkingDir = 
+                            let workingDirFull = Path.GetFullPath(Path.Combine(experimentRoot,commandVertex.WorkingDirectory))
+                            let candidate = relativePath alphFileFullPath workingDirFull
+                            if candidate = "" then ("." + string Path.DirectorySeparatorChar) else candidate
+                        let toSection (a:LinkToArtefact) = 
+                            let relative = relativePath alphFileFullPath (a.Artefact.Id |> idToFullPath experimentRoot)
+                            { RelativePath = relative; Hash = a.ExpectedVersion}
+    
+                        { Inputs = commandVertex.Inputs |> Seq.map toSection |> List.ofSeq
+                          Outputs = commandVertex.Outputs |> Seq.map toSection |> List.ofSeq
+                          OutputIndex = commandVertex.Outputs |> Seq.findIndex (fun output -> output.Artefact.Id = s.Id)
+                          Command = commandVertex.Command
+                          ResourceGroups = List.ofSeq commandVertex.ResourceGroups
+                          WorkingDirectory = alphFileRelativeWorkingDir
+                          Signature = String.Empty
+                          OutputsCleanDisabled = commandVertex.DoNotCleanOutputs
+                          SuccessfulExitCodes = commandVertex.SuccessfulExitCodes
+                          }
+                    {
+                        FileFormatVersion = Versioning.AlphFileCurrentVersion
+                        Origin = DataOrigin.CommandOrigin { computeSection with Signature = Hash.getSignature computeSection}
+                        IsTracked = s.IsTracked
+                    }
+                   
             PathUtils.ensureDirectories alphFileFullPath
             AlphFiles.save content alphFileFullPath
             logVerbose DependencyGraph (sprintf "Saved alph file for artefact %A" s.Id))
@@ -210,7 +214,7 @@ type ArtefactVertex(id:ArtefactId, experimentRoot:string) =
             |  _ -> invalidArg "other" "System.IComaprable.CompareTo must be called on the object of the same types"
 
     override s.Equals(obj1:obj) =
-        // this override prevennts usage of System.IComparable for equality checks
+        // this override prevents usage of System.IComparable for equality checks
         Object.ReferenceEquals(s,obj1)
        
     override s.ToString() =        
