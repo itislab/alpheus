@@ -163,34 +163,6 @@ let internal checkStoragePresence experimentRoot (versions:HashString seq) : Asy
         return! res
     }
 
-/// (Re)Computes the artefact specified
-let compute (experimentRoot, artefactId) =
-    async {
-        let! g = buildDependencyGraphAsync experimentRoot [artefactId]
-
-        let restoreTasksCache = ref Map.empty // common across all restores withing this compute run
-        
-        let restoreFromStorage (pairs:(HashString*string) array) =
-            async {
-                let swapedPairs = pairs |> Array.map (fun p -> let x,y = p in y,x ) 
-                let restoreSingleItemTreadSafeAsync toRestore =
-                    Utils.singleExecutionGuardAsync restoreTasksCache toRestore (restoreSingleItemAsync experimentRoot)
-                let! comp = swapedPairs |> Array.map restoreSingleItemTreadSafeAsync |> Async.Parallel
-                let checker res =
-                    match res with
-                    |   Ok _ -> ()
-                    |   Error(e) -> failwith (e.ToString())
-
-                Array.iter checker comp
-                return ()
-            }
-
-        // flow graph to calculate statuses
-        let flowGraph = ComputationGraph.buildGraph experimentRoot g (checkStoragePresence experimentRoot) restoreFromStorage
-        logVerbose LogCategory.API "Running computations"
-        return ComputationGraph.doComputations flowGraph
-    } |> Async.RunSynchronously
-
 /// Returns the status for the requested artefact and its provenance
 let status (experimentRoot, artefactId) =
     async {
@@ -360,6 +332,63 @@ let saveAsync (experimentRoot, artefactId) specifiedStorageName saveAll =
             return Error(UserError error)
     }
 
+
+/// (Re)Computes the artefact specified
+let compute (experimentRoot, artefactId) =
+    async {
+        let! g = buildDependencyGraphAsync experimentRoot [artefactId]
+
+        let restoreTasksCache = ref Map.empty // common across all restores withing this compute run
+        
+        let restoreFromStorage (pairs:(HashString*string) array) =
+            async {
+                let swapedPairs = pairs |> Array.map (fun p -> let x,y = p in y,x ) 
+                let restoreSingleItemTreadSafeAsync toRestore =
+                    Utils.singleExecutionGuardAsync restoreTasksCache toRestore (restoreSingleItemAsync experimentRoot)
+                let! comp = swapedPairs |> Array.map restoreSingleItemTreadSafeAsync |> Async.Parallel
+                let checker res =
+                    match res with
+                    |   Ok _ -> ()
+                    |   Error(e) -> failwith (e.ToString())
+
+                Array.iter checker comp
+                return ()
+            }
+
+        // flow graph to calculate statuses
+        let flowGraph = ComputationGraph.buildGraph experimentRoot g (checkStoragePresence experimentRoot) restoreFromStorage
+        logVerbose LogCategory.API "Running computations"
+        let compResult = ComputationGraph.doComputations flowGraph
+        let presenceCheckResult =
+            result {
+                do! compResult
+                // we need to check the status of the requested artefact.
+                // it is up-to-date remote, we need to fetch it as user asked for it explicitly
+                // see issue #51
+                let! requestedArtefact = g.GetArtefact artefactId
+                let linkToRequested = 
+                    match requestedArtefact.ProducedBy with
+                    |   Source sv -> sv.Output
+                    |   Command cmd -> cmd.Outputs |> Seq.find (fun o -> o.Artefact.Id = artefactId)
+                let indices = MdMap.toSeq linkToRequested.ExpectedVersion |> Seq.map fst
+                let statuses = 
+                    indices
+                    |> Seq.map (fun idx -> linkToRequested.AnalyzeStatus (checkStoragePresence experimentRoot) idx)
+                    |> Async.Parallel
+                    |> Async.RunSynchronously
+                let isRemote = function
+                    | Remote -> true
+                    | _ -> false
+                if Seq.exists isRemote statuses then
+                    logVerbose LogCategory.API "Fetching the target artefact from storage"
+                    return! restoreAsync (experimentRoot,artefactId) |> Async.RunSynchronously
+                else
+                    return ()
+            }
+
+        return presenceCheckResult
+            
+    } |> Async.RunSynchronously
 
 /// Adds one more method vertex to the experiment graph
 /// deps: a list of paths to the input artefacts. outputs: a list of paths to the produced artefacts
