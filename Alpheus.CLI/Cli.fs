@@ -81,7 +81,7 @@ with
         member s.Usage =
             match s with
             |   Path _ -> "File/Directory to save in storage(s)"
-            |   AllUnsaved -> "Save all of the artefacts with status unsaved"
+            |   AllUnsaved -> "Save Path and all of the tracked artefacts (that have ever been saved explicitly) found in the provenance of the specified Path"
             |   Storage _ -> "Where to send a artefact copy. If not specified, the artefacts are sent to the default storage"
 
 type RestoreArgs =

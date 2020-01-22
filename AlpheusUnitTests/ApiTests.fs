@@ -521,6 +521,73 @@ type ScalarScenarios(output) =
         }
 
     [<Fact>]
+    member s.``Save all tracked``() =
+        async {         
+            let path = Path.GetFullPath s.RelativeExperimentRoot
+            do! buildExperiment(path)
+            output.WriteLine("TEST: experiment graph is constructed")
+                
+            assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt")
+            
+            output.WriteLine("TEST: computed the chain")
+
+            let! saveRes1 = API.saveAsync (s.ExperimentRoot,ArtefactId.Path "1_2_3.txt") None false
+            let! saveRes2 = API.saveAsync(s.ExperimentRoot,ArtefactId.Path "1_2.txt") None false
+            let! saveRes3 = API.saveAsync(s.ExperimentRoot,ArtefactId.Path "2.txt") None false
+            assertResultOk saveRes1
+            assertResultOk saveRes2
+            assertResultOk saveRes3
+            output.WriteLine("TEST: saved all individually (they are tracked now)")
+            do! File.WriteAllTextAsync(Path.Combine(s.ExperimentRoot, "2.txt"),"modified content") |> Async.AwaitTask
+            output.WriteLine("TEST: updated the content of 2.txt")
+            let res = API.status(path, ArtefactId.Path "1_2_3.txt")
+            match res with
+            |   Ok r ->
+                let expectedStatuses:Map<ArtefactId,MdMap<string,StatusGraph.ArtefactStatus>> = 
+                    [ 
+                        ArtefactId.Path "1.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                        ArtefactId.Path "2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                        ArtefactId.Path "3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                        ArtefactId.Path "1_2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.NeedsRecomputation DependencyGraph.InputsOutdated);
+                        ArtefactId.Path "1_2_3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.NeedsRecomputation DependencyGraph.InputsOutdated);
+                    ] |> Map.ofList
+                Assert.True(equalStatuses expectedStatuses r)
+            |   Error e->
+                    Assert.True(false, sprintf "Error: %A" e)
+
+            output.WriteLine("TEST: Status checked. Computing the 1_2_3.txt the second time")
+            
+            assertResultOk <| API.compute(path, ArtefactId.Path "1_2_3.txt")
+            output.WriteLine("TEST: computed the chain second time. Saving all with a single call")
+            
+            let! saveAllRes = API.saveAsync (s.ExperimentRoot,ArtefactId.Path "1_2_3.txt") None true
+            assertResultOk <| saveAllRes
+            output.WriteLine("TEST: saved all unsaved-modified")
+
+            File.Delete(Path.Combine(s.ExperimentRoot,"2.txt"))
+            File.Delete(Path.Combine(s.ExperimentRoot,"1_2.txt"))
+            File.Delete(Path.Combine(s.ExperimentRoot,"1_2_3.txt"))
+            
+            output.WriteLine("TEST: deleted 2.txt 1_2.txt 1_2_3.txt")
+
+            let res = API.status(path, ArtefactId.Path "1_2_3.txt")
+            match res with
+            |   Ok r ->
+                let expectedStatuses:Map<ArtefactId,MdMap<string,StatusGraph.ArtefactStatus>> = 
+                    [ 
+                        ArtefactId.Path "1.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                        ArtefactId.Path "2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Remote);
+                        ArtefactId.Path "3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
+                        ArtefactId.Path "1_2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Remote);
+                        ArtefactId.Path "1_2_3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Remote);
+                    ] |> Map.ofList
+                Assert.True(equalStatuses expectedStatuses r)
+            |   Error e->
+                    Assert.True(false, sprintf "Error: %A" e)
+            output.WriteLine("TEST: Final status checked")
+        }
+
+    [<Fact>]
     member s.``Status: changed input content of computed graph``() =
         async { 
             let path = Path.GetFullPath s.RelativeExperimentRoot
