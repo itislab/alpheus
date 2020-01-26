@@ -142,7 +142,7 @@ let getActualForExpectedVersionsForLinks index links =
 /// Returns a sequence of indices and hashes of missing local artefact instances to be restored.
 let getPathsToRestore index (link: LinkToArtefact) =
     // if we call this it means that the inputs are valid (local or remote)
-    let isReduce = link.Artefact.Rank > List.length index // the index is not enough to fill all "*" in the artefact path
+    let rankReduceMagnitude = link.Artefact.Rank - (List.length index) // the index is not enough to fill all "*" in the artefact path
     async {
         let! actualForExpected = link |> getActualForExpected index
         let artefactPathPattern = link.Artefact.Id |> PathUtils.idToFullPath link.Artefact.ExperimentRoot |> PathUtils.applyIndex index
@@ -164,11 +164,13 @@ let getPathsToRestore index (link: LinkToArtefact) =
                     // Now we need to check that as if something is on disk we do not need to restore                    
                     async {
                         let indiciesToCheck =
-                            if isReduce then
+                            if rankReduceMagnitude>0 then
                                 // path to missing input still contains "*" and we may need to restore it
                                 // well, we have to gather all of the disk content that matches the pattern
-                                let reducedIndicies = PathUtils.enumeratePath pathToMissing |> MdMap.toSeq |> Seq.map fst
-                                reducedIndicies |> Seq.map (fun reducedIdx -> List.append index reducedIdx)
+                                let reducedIndicies = PathUtils.enumeratePath pathToMissing |> MdMap.toSeq |> Seq.map fst |> Array.ofSeq
+                                reducedIndicies
+                                |> Seq.filter (fun idx -> List.length idx = rankReduceMagnitude)
+                                |> Seq.map (fun reducedIdx -> List.append index reducedIdx)
                             else
                                 seq { yield List.append index j |> List.truncate link.Artefact.Rank }
                         let checkIdx itemIdx =
