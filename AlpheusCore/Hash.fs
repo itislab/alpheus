@@ -118,13 +118,16 @@ let rec hashDirectory (fullPath:string) =
 /// (depends on what exists). If neither exists, returns None.
 let hashPath fullPath =
     async {
-            // Logger.logVerbose Logger.Hash (sprintf "Hashing %s ..." fullPath)
             // todo: let items = PathUtils.enumeratePath fullPath
             if File.Exists fullPath then
+                let ct = Logger.logVerboseLongRunningStart Logger.Hash (sprintf "Hashing file %s ..." fullPath)
                 let! hash = hashFile fullPath
+                Logger.logVerboseLongRunningFinish ct Logger.Hash (sprintf "Calculated file %s hash" fullPath)
                 return Some(hashToString hash)
             elif Directory.Exists fullPath then
+                let ct = Logger.logVerboseLongRunningStart Logger.Hash (sprintf "Hashing directory %s ..." fullPath)
                 let! hash = hashDirectory fullPath
+                Logger.logVerboseLongRunningFinish ct Logger.Hash (sprintf "Calculated directory %s hash" fullPath)
                 return Some(hashToString hash)
             else
                 return None
@@ -166,9 +169,10 @@ let hashPathAndSave (fullPath:string) =
         }
 
     async { 
-        Logger.logVerbose Logger.Hash (sprintf "Artefact %s - acquiring data hash..." fullPath)
+        let ct = Logger.logVerboseLongRunningStart Logger.Hash (sprintf "Artefact %s - acquiring data hash..." fullPath)
         if File.Exists hashFilePath then
             // Logger.logVerbose Logger.Hash (sprintf "%s hash file exists" hashFilePath)
+            let modTimeCt = Logger.logVerboseLongRunningStart Logger.Hash (sprintf "Artefact %s - acquiring files modification time" fullPath)
             let precomHashTime = File.GetLastWriteTimeUtc hashFilePath
             let! dataTime =
                 async {
@@ -180,10 +184,10 @@ let hashPathAndSave (fullPath:string) =
                     else
                         return None
                 }
-            // Logger.logVerbose Logger.Hash (sprintf "%s artefact modification time extracted" fullPath)
+            Logger.logVerboseLongRunningFinish modTimeCt Logger.Hash (sprintf "Artefact %s - modification time extracted" fullPath)
             match dataTime with
             |   None -> //data not exists
-                // Logger.logVerbose Logger.Hash (sprintf "deleteing %s hash file as the artefact is absent" hashFilePath)
+                Logger.logVerboseLongRunningFinish ct Logger.Hash (sprintf "The artefact is absent. Deleting stale %s hash file" hashFilePath)
                 File.Delete hashFilePath
                 // Logger.logVerbose Logger.Hash (sprintf "sucessfuly deleted %s hash file" hashFilePath)
                 return None
@@ -191,15 +195,15 @@ let hashPathAndSave (fullPath:string) =
                     if precomHashTime > dataWriteTime then // considered up to date
                         let! hashStr = File.ReadAllTextAsync(hashFilePath) |> Async.AwaitTask
                         let hashStr2 : HashString = hashStr.Trim()
-                        Logger.logVerbose Logger.Hash (sprintf "Artefact %s hash is extracted from up-to-date .hash file" fullPath)
+                        Logger.logVerboseLongRunningFinish ct Logger.Hash (sprintf "Artefact %s hash is extracted from up-to-date .hash file" fullPath)
                         return Some(hashStr2)
                     else
                         let! res =  hashAndSave()
-                        Logger.logVerbose Logger.Hash (sprintf "Artefact %s hash is recalculated due to data change since the .hash file was written" fullPath)
+                        Logger.logVerboseLongRunningFinish ct Logger.Hash (sprintf "Artefact %s hash is recalculated due to data change since the .hash file was written" fullPath)
                         return res
         else
             let! res = hashAndSave()
-            Logger.logVerbose Logger.Hash (sprintf "Artefact %s hash is calculated (didn't find precomputed .hash file)" fullPath)
+            Logger.logVerboseLongRunningFinish ct Logger.Hash (sprintf "Artefact %s hash is calculated (didn't find precomputed .hash file)" fullPath)
             return res
     }
 

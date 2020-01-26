@@ -47,12 +47,12 @@ let mutable LogFunction = fun (category: LogCategory) (message:string) ->
 
 let logVerbose (category: LogCategory) (message:string) =
     if LogLevel >= VerboseLevel then
-        LogFunction category message
+        LogFunction category message            
 
 let logInfo (category: LogCategory) (message:string) =
     if LogLevel >= InfoLevel then
         LogFunction category message
-    
+
 let logWarning (category: LogCategory) (message:string) =
     if LogLevel >= WarningLevel then
         LogFunction category message
@@ -65,6 +65,46 @@ let logException (category: LogCategory) (e:exn) =
     if LogLevel >= ErrorLevel then
         LogFunction category (e.ToString())
 
+let logVerboseLongRunningStart (category: LogCategory) (message:string) =
+    let ct = new System.Threading.CancellationTokenSource()
+    // if log level is verbose, equivalent to verbose
+    if LogLevel >= VerboseLevel then
+        logVerbose category message
+    else
+        if LogLevel >= InfoLevel then
+            // schedules the timer to output the message as INFO level, if not canceled via cancellation token
+            // useful to indicate start of potentially long operation
+            // if it is indeed long running (is not canceled) the user is notified of it, thus aware what long operation is running
+            let delayedPrint =
+                async {
+                    do! Async.SwitchToThreadPool()
+                    do! Async.Sleep 5000 // 5 sec is considered long enough for now
+                    lock(ct) (fun () ->
+                        if ct.IsCancellationRequested then
+                            ct.Dispose()
+                        else
+                            ct.Cancel()
+                            logInfo category message
+                    )
+                }
+            Async.Start delayedPrint
+    ct
+
+let logVerboseLongRunningFinish (ct:System.Threading.CancellationTokenSource) (category: LogCategory) (message:string) =
+    if LogLevel >= VerboseLevel then
+        logVerbose category message
+        ct.Dispose()
+    else
+        if LogLevel >= InfoLevel then
+            lock(ct) (fun () ->
+                if ct.IsCancellationRequested then
+                    // the start was printed, thus we need to print finish
+                    logInfo category message
+                    ct.Dispose()
+                else
+                    ct.Cancel()
+                )
+            
 
 let doAndLogElapsedTime (log: string -> unit) (message: string) (func: unit -> Async<unit>) = 
     async {

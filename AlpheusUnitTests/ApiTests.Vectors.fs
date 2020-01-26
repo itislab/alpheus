@@ -41,10 +41,11 @@ type ``Vector scenarios``(output) as this =
             "cmd /C \"copy $in1 + $in2 $out1 /b\""
         else
             "/bin/sh -c \"cat $in1 > $out1; cat $in2 >> $out1\""
-
+    
+    /// enumerate all files in $in1 dir and concat them into single file $out1
     let concatVectorCommand = 
         if isTestRuntimeWindows then
-            "cmd /C \"copy $in1 $out1 /b\""
+            "cmd /C \"copy $in1 $out1 /b\"" // this one looks like invalid, but id does the correct thing!
         else
             "/bin/sh -c \"for file in $in1; do echo $file; cat $file >> $out1; done;\""
 
