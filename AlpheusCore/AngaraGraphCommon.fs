@@ -167,8 +167,10 @@ let getPathsToRestore index (link: LinkToArtefact) =
                             if isReduce then
                                 // path to missing input still contains "*" and we may need to restore it
                                 // well, we have to gather all of the disk content that matches the pattern
-                                let reducedIndicies = PathUtils.enumeratePath pathToMissing |> MdMap.toSeq |> Seq.map fst
-                                reducedIndicies |> Seq.map (fun reducedIdx -> List.append index reducedIdx)
+                                let reducedIndicies = PathUtils.enumeratePath pathToMissing |> MdMap.toSeq |> Seq.map fst |> Array.ofSeq
+                                reducedIndicies
+                                |> Seq.filter (fun idx -> List.length idx = 1)
+                                |> Seq.map (fun reducedIdx -> List.append index reducedIdx)
                             else
                                 seq { yield List.append index j |> List.truncate link.Artefact.Rank }
                         let checkIdx itemIdx =
