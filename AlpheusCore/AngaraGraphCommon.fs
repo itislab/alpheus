@@ -100,95 +100,128 @@ let internal resolveIndex (index:string list) (map: MdMap<string, 'a>) =
     | Some(MdMapTree.Map _) -> Some (MdMap.get index map)
     | None -> None
 
-let getExpectedAndActualVersions index (link: LinkToArtefact) =
+/// Returns a submap (by index applied) of link expected expectations supplied with the actual version
+let getActualForExpected index (link: LinkToArtefact) =
     async {
-        match link.ExpectedVersion |> resolveIndex index with
+        match link.ExpectedVersion |> resolveIndex index with // this guards against overspecified index
         | None -> // no expectations for this instance
-            return MdMap.empty |> MdMap.add index (None, None)
+            return MdMap.empty |> MdMap.add index NoVersionExpected
         | Some expected ->
-            let! actualSeq = 
+            let! index_expected_actual_seq = 
                 expected
                 |> MdMap.toSeq
                 |> Seq.map(fun (j, e) ->                     
                     async {
                         let! a = 
                             match e with 
-                            | Some _ -> link.Artefact.ActualVersion.Get j
-                            | None -> async.Return None
-                        return (j,e,a)
+                            | Some e2 -> // expecting particular version? time to check what version is on disk
+                                async {
+                                    let! a2 = link.Artefact.ActualVersion.Get j
+                                    return ExpectedAndActual(e2,a2)
+                                }
+                            | None -> async.Return NoVersionExpected
+                        return (j,a)
                     })
                 |> Async.Parallel
-            let expectedAndActual = actualSeq |> Seq.fold (fun actual (j,e,a) -> actual |> MdMap.add j (e,a)) MdMap.empty
-            return expectedAndActual
+            let result = index_expected_actual_seq |> Seq.fold (fun actual (j,a) -> actual |> MdMap.add j a) MdMap.empty
+            return result
     }
 
-let getExpectedAndActualVersionsForLinks index links =
+let getActualForExpectedVersionsForLinks index links =
     async {
-        let! expectedAndActual = 
+        let! actualForExpected = 
             links
-            |> List.map (getExpectedAndActualVersions index)
+            |> List.map (getActualForExpected index)
             |> Async.Parallel
-        let expPerInput, actualPerInput = 
-            expectedAndActual 
-            |> Array.map(fun map -> map |> MdMap.toSeq |> Seq.map snd |> Seq.toArray |> Array.unzip) 
-            |> Array.unzip
-        let expected = expPerInput |> Array.collect id
-        let actual = actualPerInput |> Array.collect id
-        return expected, actual
+        let expectations = 
+            actualForExpected 
+            |> Seq.collect(fun map -> map |> MdMap.toSeq |> Seq.map snd) 
+        return expectations
     }
 
 /// Returns a sequence of indices and hashes of missing local artefact instances to be restored.
-let versionsToRestore index (link: LinkToArtefact) =
+let getPathsToRestore index (link: LinkToArtefact) =
+    // if we call this it means that the inputs are valid (local or remote)
+    let isReduce = link.Artefact.Rank > List.length index // the index is not enough to fill all "*" in the artefact path
     async {
-        let! expectedAndActual = link |> getExpectedAndActualVersions index
-        let artefactPathPattern = link.Artefact.Id |> PathUtils.idToFullPath link.Artefact.ExperimentRoot
-        // if the expected is None we may still want to extract expected version from the producer of the artefact
-        // this is needed in case the user saved the artefact, deleted it, and now uses this artefact in newly created command (which does not expect particular input version yet)
-        let ensureExpectedNotNone j exp = 
-            async {
-                match exp with
-                |   Some v -> return  Some v
-                |   None ->                
-                    let artefact = link.Artefact
-                    if List.length j = artefact.Rank then
-                        let producer = artefact.ProducedBy                       
-                        let! expectedItem =
-                            async {
-                                match producer with
-                                |   Source s ->
-                                    let expectedBySource = s.Output.ExpectedVersion |> MdMap.find j
-                                    match expectedBySource with
-                                    |   Some v2 -> return Some v2
-                                    |   None ->
-                                        // that's the case when the source does not have alph file, thus expected vertion is None while actual is not
-                                        let! actual = s.Output.Artefact.ActualVersion.Get j
-                                        return actual
-                                        
-                                |   Command c ->
-                                    return (c.Outputs |> Seq.find (fun x -> x.Artefact.Id = artefact.Id)).ExpectedVersion |> MdMap.find j
-                                }
-                        match! link.Artefact.ActualVersion.Get j with
-                        |   Some act2 when act2 =(Option.get expectedItem) -> return None                
-                        |   None | Some _ -> return expectedItem                
-
-                    else
-                        // TODO: what to do here?
-                        return exp
-            }                 
+        let! actualForExpected = link |> getActualForExpected index
+        let artefactPathPattern = link.Artefact.Id |> PathUtils.idToFullPath link.Artefact.ExperimentRoot |> PathUtils.applyIndex index
         let! restoreCandidate =
-            expectedAndActual 
+            actualForExpected 
             |> MdMap.toSeq
-            |> Seq.map(fun (j, (exp,act)) -> 
-                match act with
-                | Some _ -> async.Return None
-                | None ->
-                    let pathToMissing = artefactPathPattern |> PathUtils.applyIndex j
+            |> Seq.map(fun (j, linkExpectation) -> // j are free indices not fixed by "index" in case of gather
+                let pathToMissing = artefactPathPattern |> PathUtils.applyIndex j
+                match linkExpectation with
+                | ExpectedAndActual(expected,None) ->
+                    // we want to consider for restore only those which absent now on disk AND we expect some version of them!
+                    async.Return([|Some(pathToMissing, expected)|])
+                | ExpectedAndActual(_,Some(act)) ->
+                    // input is on disk. We don't care whether the versions match
+                    // in any case we do not need to restore
+                    async.Return [| None |]
+                | NoVersionExpected ->
+                    // this means that disk presence was not checked
+                    // Now we need to check that as if something is on disk we do not need to restore                    
                     async {
-                        let! exp2 = ensureExpectedNotNone j exp
-                        return exp2 |> Option.map(fun exp -> (pathToMissing, exp))                
-                    })
+                        let indiciesToCheck =
+                            if isReduce then
+                                // path to missing input still contains "*" and we may need to restore it
+                                // well, we have to gather all of the disk content that matches the pattern
+                                let reducedIndicies = PathUtils.enumeratePath pathToMissing |> MdMap.toSeq |> Seq.map fst
+                                reducedIndicies |> Seq.map (fun reducedIdx -> List.append index reducedIdx)
+                            else
+                                seq { yield List.append index j |> List.truncate link.Artefact.Rank }
+                        let checkIdx itemIdx =
+                            async {
+                                match! link.Artefact.ActualVersion.Get itemIdx with
+                                |   Some(_) ->
+                                    // there is something on disk. No need to restore
+                                    return None
+                                |   None ->
+                                    // input version not expected, no data on disk.
+                                    // tricky part here!!!
+                                    // 
+                                    // we may still want to extract expected version from the producer of the artefact
+                                    // this is needed in case the user saved the artefact, deleted it, and now uses this artefact as input in newly created command (which does not expect particular input version yet)
+                                    // it's tricky as producer may have different rank (in case of scatter/reduce)
+                                    let artefact = link.Artefact
+                                    let producer = artefact.ProducedBy                       
+                                    let! expectedItem =
+                                        async {
+                                            match producer with
+                                            |   Source s ->
+                                                let expectedBySource = resolveIndex itemIdx s.Output.ExpectedVersion
+                                                match expectedBySource with
+                                                |   Some expectedVerBySource ->
+                                                    if expectedVerBySource.IsScalar then
+                                                        return expectedVerBySource.AsScalar()
+                                                    else
+                                                        failwith "not supported: we used most extended index (actualVersionLookupIdx) but it was not enough"
+                                                        return None
+                                                |   None ->
+                                                    failwith "can't happen. Sourcing the artefact without alph file means that it is on disk. But we checked that it is not"
+                                                    return None
+                                            |   Command c ->
+                                                let output = c.Outputs |> Seq.find (fun x -> x.Artefact.Id = artefact.Id)
+                                                let expectedByCommand = resolveIndex itemIdx output.ExpectedVersion
+                                                match expectedByCommand with
+                                                |   Some expectedVerByCommand ->
+                                                    if expectedVerByCommand.IsScalar then
+                                                        return expectedVerByCommand.AsScalar()
+                                                    else
+                                                        failwith "not supported: we used most extended index (actualVersionLookupIdx) but it was not enough"
+                                                        return None
+                                                |   None ->
+                                                    // the producer command does not expect any output version. It was not successful complete.
+                                                    return None
+                                            }
+                                    return expectedItem |> Option.map (fun sh -> pathToMissing,sh)
+                                }
+                        return! indiciesToCheck |> Seq.map checkIdx |> Async.Parallel
+                        }
+                    )
             |> Async.Parallel
-        let restore = restoreCandidate |> Seq.choose id |> Seq.toList        
+        let restore = restoreCandidate |> Seq.concat |> Seq.choose id |> Seq.toList        
         return restore
     }
 
@@ -199,8 +232,8 @@ let getCommandVertexStatus checkStoragePresence (command:CommandLineVertex) inde
     let logVerbose str = Logger.logVerbose Logger.Execution (sprintf "%s: %s" methodItemId str)
 
     async {
-        let! expectedInputs, actualInputs = command.Inputs |> getExpectedAndActualVersionsForLinks index
-        let! inputsStatus = findExpectedArtefacts checkStoragePresence expectedInputs actualInputs
+        let! inputExpectations = command.Inputs |> getActualForExpectedVersionsForLinks index
+        let! inputsStatus = findExpectedArtefacts checkStoragePresence inputExpectations
         match inputsStatus with
         // we can avoid checking outputs to speed up the work            
         |   SomeAreNotFound ->
@@ -211,8 +244,8 @@ let getCommandVertexStatus checkStoragePresence (command:CommandLineVertex) inde
             return Outdated InputsOutdated                 
         |   AllExist _ ->
             // checking outputs
-            let! expectedOutputs, actualOutputs = command.Outputs |> getExpectedAndActualVersionsForLinks index
-            let! outputsStatus = findExpectedArtefacts checkStoragePresence expectedOutputs actualOutputs
+            let! outputExpectations = command.Outputs |> getActualForExpectedVersionsForLinks index
+            let! outputsStatus = findExpectedArtefacts checkStoragePresence outputExpectations
             match outputsStatus with
             |   SomeAreNotFound ->
                 logVerbose "Needs recomputation as some of the outputs not found" 

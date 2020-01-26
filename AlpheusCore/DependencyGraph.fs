@@ -49,31 +49,38 @@ type ExpectedArtefactSearchResult =
     /// All group has expected versions
     |   AllExist of location:ArtefactLocation list
 
+
+type LinkElementExpectationStatus =
+|   NoVersionExpected
+|   ExpectedAndActual of HashString * (HashString option)
+
 /// Checks location of the expected version of the given collection of artefacts and either returns locations of all given artefacts, if they are found; or, otherwise, returns issues.
-let findExpectedArtefacts checkStoragePresence expectedVersionHashes actualVersionsHashes =
+let findExpectedArtefacts checkStoragePresence (expectations:LinkElementExpectationStatus seq) =
     async {
-        let expectedVersionHashesArr = Array.ofSeq expectedVersionHashes
-        let N = Array.length expectedVersionHashesArr
-        if Seq.exists Option.isNone expectedVersionHashesArr then
+        let expectationsArr = Array.ofSeq expectations
+        let N = Array.length expectationsArr
+        let isNoExpectation = function
+            |   NoVersionExpected -> true
+            |   _ -> false
+        if Seq.exists isNoExpectation expectationsArr then
             // some of the artefact element was not ever produced, this is invalid            
             return SomeAreLocalUnexpected
         else
             /// Chooses the pairs that are not valid on disk (filtering out versions match)
-            let invalidOnDiskChooser hash1 hash2 =
-                match hash1, hash2 with
-                | Some h1, Some h2 when h1 = h2 -> None 
-                | _ -> Some (hash1, hash2)
-            let localInvalid = Seq.map2 invalidOnDiskChooser expectedVersionHashesArr actualVersionsHashes |> Seq.choose id |> Array.ofSeq
+            let invalidOnDiskChooser expectation =
+                match expectation with
+                | ExpectedAndActual(expected,Some(actual)) when expected = actual -> None
+                | _ -> Some expectation
+            let localInvalid = Seq.map invalidOnDiskChooser expectationsArr |> Seq.choose id |> Array.ofSeq
             if Array.length localInvalid = 0 then
                 // valid as actual disk version match expected version. No need to check the storage
                 return AllExist (List.init N (fun _ -> ArtefactLocation.Local))
             else
                 // check if the locally "invalid" are "remote valid" (restorable from storage in case of disk data absence)
-                let eligibleForRemoteCheckChooser idx pair =
-                    let expected,actual = pair
-                    match expected,actual with
-                    |   Some(v),None -> Some(idx,v)
-                    |   _,_ -> None
+                let eligibleForRemoteCheckChooser idx expectation =
+                    match expectation with
+                    |   ExpectedAndActual(expectedVersion, None) -> Some(idx,expectedVersion)
+                    |   _ -> None
 
                 let eligibleForRemoteCheck = Seq.mapi eligibleForRemoteCheckChooser localInvalid |> Seq.choose id |> Array.ofSeq
                 if Array.length eligibleForRemoteCheck = Array.length localInvalid then
@@ -242,7 +249,11 @@ and LinkToArtefact(artefact: ArtefactVertex, expectedVersion: ArtefactVersion) =
         async {
             let expectedVersion = MdMap.find index expected
             let! artefactItemActualVersion = artefact.ActualVersion.Get index
-            let! status = findExpectedArtefacts checkStoragePresence (Seq.singleton expectedVersion) [|artefactItemActualVersion|] 
+            let expectation =
+                match expectedVersion with
+                |   None -> NoVersionExpected
+                |   Some(expVer) -> ExpectedAndActual(expVer,artefactItemActualVersion)
+            let! status = findExpectedArtefacts checkStoragePresence (Seq.singleton expectation)
             match status with
             |   SomeAreLocalUnexpected -> return LocalUnexpected
             |   SomeAreNotFound -> return NotFound
