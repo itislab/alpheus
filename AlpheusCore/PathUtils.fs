@@ -192,6 +192,7 @@ let deletePath (path:string) =
 
 /// Substitutes index of string values into a pattern command, e.g. "/files/*/*".
 /// Note that index length is allowed to be less or equal to the rank of the command.
+/// If the index length is greater then number of "*" in path, "*" are returned as is
 let rec applyIndex (index: string list) (path: string) =
     match index with
     | [] -> path

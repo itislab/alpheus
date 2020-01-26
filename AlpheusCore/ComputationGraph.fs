@@ -83,7 +83,8 @@ type CommandMethod(command: CommandLineVertex,
                 | :? ArtefactItem as item -> item
                 | :? (ArtefactItem[]) as vector -> reduceArtefactItem i vector
                 | _ -> failwith "Unexpected type of the input")
-                    
+            
+            // the longest defined index among all of the inputs
             let index = // empty list for scalar, nonempty for vector element
                 inputItems 
                 |> Seq.map(fun item -> item.Index)
@@ -127,7 +128,7 @@ type CommandMethod(command: CommandLineVertex,
                 // 2) restoring inputs from storage if it is needed
                 let! hashesToRestorePerInput = 
                     command.Inputs 
-                    |> Seq.map(versionsToRestore index)
+                    |> Seq.map(getPathsToRestore index)
                     |> Async.Parallel
                 let hashesToRestore =
                     hashesToRestorePerInput
