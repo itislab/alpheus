@@ -142,6 +142,50 @@ type ``Vector scenarios``(output) as this =
                 (cmd.Inputs.[1].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "2nd input is a vector of 3 elements") |> ignore
                 (cmd.Outputs.[0].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "The output is a vector of 3 elements") |> ignore
             | _ -> failwith "Unexpected origin"
+        }
+
+    [<Fact>]
+    member s.``Resource groups work``() =
+        async {
+            let root = s.ExperimentRoot
+            do! prepareSources(root)
+
+            let settings = {
+                CommandExecutionSettings.Default with
+                    ResourceGroups = Set.add "res1" CommandExecutionSettings.Default.ResourceGroups
+            }
+
+            let! res = API.buildAsync root root ["base.txt"; "data/*.txt"] ["output/*.txt"] concatCommand settings
+            assertResultOk res
+
+            let! res = API.buildAsync root root ["base.txt"; "output/*.txt"] ["output2/*.txt"] concatCommand settings
+            assertResultOk res
+
+            let outputId = ArtefactId.Path "output/*.txt"
+            let output2Id = ArtefactId.Path "output2/*.txt"
+            let res = API.compute (root, output2Id)
+            assertResultOk res
+
+            "Base fileBase fileFile 1" |> assertFileContent (Path.Combine(root, "output2", "1.txt"))
+            "Base fileBase fileFile 2" |> assertFileContent (Path.Combine(root, "output2", "2.txt"))
+            "Base fileBase fileFile 3" |> assertFileContent (Path.Combine(root, "output2", "3.txt"))
+
+            // Checks the output alph file:
+            let alph = AlphFiles.tryLoad (PathUtils.idToAlphFileFullPath root outputId) |> Option.get
+            match alph.Origin with 
+            | DataOrigin.CommandOrigin cmd ->
+                cmd.Inputs.[0].Hash.IsScalar.Should().BeTrue("base.txt is scalar") |> ignore
+                (cmd.Inputs.[1].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "2nd input is a vector of 3 elements") |> ignore
+                (cmd.Outputs.[0].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "The output is a vector of 3 elements") |> ignore
+            | _ -> failwith "Unexpected origin"
+
+            let alph = AlphFiles.tryLoad (PathUtils.idToAlphFileFullPath root output2Id) |> Option.get
+            match alph.Origin with 
+            | DataOrigin.CommandOrigin cmd ->
+                cmd.Inputs.[0].Hash.IsScalar.Should().BeTrue("base.txt is scalar") |> ignore
+                (cmd.Inputs.[1].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "2nd input is a vector of 3 elements") |> ignore
+                (cmd.Outputs.[0].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "The output is a vector of 3 elements") |> ignore
+            | _ -> failwith "Unexpected origin"
         } 
 
     [<Fact>]

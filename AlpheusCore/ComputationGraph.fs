@@ -93,6 +93,7 @@ type CommandMethod(command: CommandLineVertex,
 
             let logVerbose str = Logger.logVerbose Logger.Execution (sprintf "%s%A: %s" methodItemId index str)
             let logInfo str = Logger.logVerbose Logger.Execution (sprintf "%s%A: %s" methodItemId index str)
+            let logError str = Logger.logError Logger.Execution (sprintf "%s%A: %s" methodItemId index str)
             logInfo "Started"
 
             // Build the full output paths by applying the index of this method.
@@ -142,9 +143,16 @@ type CommandMethod(command: CommandLineVertex,
 
                 // 3) executing a command
                 let mutable exitCode = 0
+                let mutable aquiredResources = Set.empty
+                let mutable aquiringResources = Set.empty
                 try
                     // acquiring resource semaphores
-                    let! _ = command.ResourceGroups |> Seq.map (fun g -> Utils.enterResourceGroupMonitorAsync resourceSemaphores g) |> Async.Parallel
+                    for resorceAqcAsync,resName in command.ResourceGroups |> Seq.sort |> Seq.map (fun g -> (Utils.enterResourceGroupMonitorAsync resourceSemaphores g),g) do
+                        aquiringResources <- Set.add resName aquiringResources
+                        do! resorceAqcAsync // in is crucial to lock the resources sequential and in ordered manner to prevent deadlocks
+                        aquiredResources <- Set.add resName aquiredResources
+                        logVerbose (sprintf "Got resource: %s" resName)
+
                     let print (s:string) = Logger.logInfo Logger.ExecutionOutput s
                     let input idx = command.Inputs.[idx-1].Artefact.Id |> idToFullPath experimentRoot |> applyIndex index
                     let output idx = command.Outputs.[idx-1].Artefact.Id |> idToFullPath experimentRoot |> applyIndex index
@@ -153,7 +161,10 @@ type CommandMethod(command: CommandLineVertex,
                     exitCode <- exitCode2
                 finally
                     // releasing resource semaphores
-                    command.ResourceGroups |> Seq.iter (fun g -> Utils.exitResourceGroupMonitor (!resourceSemaphores) g)
+                    let notAquired = Set.difference aquiringResources aquiredResources
+                    if not (Set.isEmpty notAquired) then                        
+                        logError <| sprintf "Method could not success as failed to obtain the following resources: %A" notAquired
+                    aquiredResources |> Seq.iter (fun g -> Utils.exitResourceGroupMonitor (!resourceSemaphores) g)
 
                 // 4) upon successful exit code hash the outputs
                 if not (Seq.exists (fun x -> exitCode = x) command.SuccessfulExitCodes) then
