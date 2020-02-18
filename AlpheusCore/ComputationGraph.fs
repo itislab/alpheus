@@ -92,9 +92,11 @@ type CommandMethod(command: CommandLineVertex,
             let methodItemId = command.MethodId |> applyIndex index
 
             let logVerbose str = Logger.logVerbose Logger.Execution (sprintf "%s%A: %s" methodItemId index str)
+            let logLongRunningStart str = Logger.logVerboseLongRunningStart Logger.Execution (sprintf "%s%A: %s" methodItemId index str)
+            let logLongRunningFinish ct str = Logger.logVerboseLongRunningFinish ct Logger.Execution (sprintf "%s%A: %s" methodItemId index str)
             let logInfo str = Logger.logVerbose Logger.Execution (sprintf "%s%A: %s" methodItemId index str)
             let logError str = Logger.logError Logger.Execution (sprintf "%s%A: %s" methodItemId index str)
-            logInfo "Started"
+            logVerbose "Started"
 
             // Build the full output paths by applying the index of this method.
             // Note that in case of scatter, these still might contain '*'
@@ -136,9 +138,9 @@ type CommandMethod(command: CommandLineVertex,
                     |> Array.collect List.toArray
                     |> Array.map(fun (path, hash) -> hash, path)
                 if Array.length hashesToRestore > 0 then
-                    logVerbose (sprintf "Restoring missing inputs from storage...")
+                    let ct = logLongRunningStart (sprintf "Restoring missing inputs from storage...")
                     do! restoreFromStorage hashesToRestore
-                    logVerbose (sprintf "Inputs are restored")
+                    logLongRunningFinish ct (sprintf "Inputs are restored")
 
 
                 // 3) executing a command
@@ -147,12 +149,14 @@ type CommandMethod(command: CommandLineVertex,
                 let mutable aquiringResources = Set.empty
                 try
                     // acquiring resource semaphores
+                    let resourcesCt = logLongRunningStart "Waiting for system resources quota to become available"
                     for resorceAqcAsync,resName in command.ResourceGroups |> Seq.sort |> Seq.map (fun g -> (Utils.enterResourceGroupMonitorAsync resourceSemaphores g),g) do
                         aquiringResources <- Set.add resName aquiringResources
                         do! resorceAqcAsync // in is crucial to lock the resources sequential and in ordered manner to prevent deadlocks
                         aquiredResources <- Set.add resName aquiredResources
                         logVerbose (sprintf "Got resource: %s" resName)
 
+                    logLongRunningFinish resourcesCt "Obtained needed system resources quota"
                     let print (s:string) = Logger.logInfo Logger.ExecutionOutput s
                     let input idx = command.Inputs.[idx-1].Artefact.Id |> idToFullPath experimentRoot |> applyIndex index
                     let output idx = command.Outputs.[idx-1].Artefact.Id |> idToFullPath experimentRoot |> applyIndex index
@@ -177,7 +181,7 @@ type CommandMethod(command: CommandLineVertex,
                     // 6) dumping updated alph files to disk
                     do! command.OnSucceeded(index)                    
             |   UpToDate _ ->
-                logVerbose "skipping as up to date"
+                logInfo "Up to date"
             //comp.Outputs |> Seq.map (fun (output:DependencyGraph.VersionedArtefact) -> output.ExpectedVersion) |> List.ofSeq
 
             let outPathToArtefactItem (outputPath:string) : Artefact =

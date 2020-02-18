@@ -70,7 +70,7 @@ let runCmdLocallyAsync print outputAnnotationId program args (workingDir:string)
         logVerbose LogCategory.Execution (formatLine outputAnnotationId (sprintf "Running \"%s %s\" in \"%s\"" program args p.StartInfo.WorkingDirectory))
         p.Start() |> ignore
         lock activeSubprocessesLockObj (fun () -> activeSubprocesses <- Map.add p.Id p activeSubprocesses )
-        logVerbose LogCategory.Execution (formatLine outputAnnotationId (sprintf "Started subprocess (PID=%d)" p.Id))
+        let ct = logVerboseLongRunningStart LogCategory.Execution (formatLine outputAnnotationId (sprintf "Started subprocess (PID=%d)" p.Id))
         try
             let outputTask = p.StandardOutput |> printStream (annotateLine outputAnnotationId "stdout") |> Async.StartAsTask
             let errorTask = p.StandardError |> printStream (annotateLine outputAnnotationId "stderr") |> Async.StartAsTask
@@ -79,7 +79,7 @@ let runCmdLocallyAsync print outputAnnotationId program args (workingDir:string)
             errorTask.Wait()
         finally
             lock activeSubprocessesLockObj (fun () -> activeSubprocesses <- Map.remove p.Id activeSubprocesses)
-            logVerbose LogCategory.Execution (formatLine outputAnnotationId (sprintf "Subprocess (PID=%d) exited with exit code %d" p.Id p.ExitCode))
+            logVerboseLongRunningFinish ct LogCategory.Execution (formatLine outputAnnotationId (sprintf "Subprocess (PID=%d) exited with exit code %d" p.Id p.ExitCode))
         return p.ExitCode
     }
 

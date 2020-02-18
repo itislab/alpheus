@@ -15,15 +15,18 @@ type ArchivingMessage =
 
 let archiveSingleFileToStreamAsync (fileAbsPath:string) (streamToWriteTo:Stream) =
     async {
+        let ct = Logger.logVerboseLongRunningStart Logger.Storage (sprintf "Archiving file %s ..." fileAbsPath)
         use archive = new ZipArchive(streamToWriteTo,ZipArchiveMode.Create,true)
         use fileStream = new FileStream(fileAbsPath, FileMode.Open, FileAccess.Read)
         use fileStreamInZip = archive.CreateEntry("__artefact__", CompressionLevel.Fastest).Open()
         do! Async.AwaitTask (fileStream.CopyToAsync fileStreamInZip)
+        Logger.logVerboseLongRunningFinish ct Logger.Storage (sprintf "Complete archiving file %s" fileAbsPath)
         return ()                            
     }
 
 let archiveDirFilesToStreamAsync (fileCompleteCallback:string->unit) (directoryFullPath:string) (fileFullPaths:string seq) (streamToWriteTo:Stream) =
     async {        
+        let ct = Logger.logVerboseLongRunningStart Logger.Storage (sprintf "Archiving dir %s ..." directoryFullPath)
         let fileFullPaths = Array.ofSeq fileFullPaths
         use archive = new ZipArchive(streamToWriteTo,ZipArchiveMode.Create,true)
         
@@ -76,22 +79,22 @@ let archiveDirFilesToStreamAsync (fileCompleteCallback:string->unit) (directoryF
                                 // relative path
                                 Path.GetRelativePath(directoryFullPath,filePath)                                
                                
-                            printfn "archiver: Adding archive item %s" nameInArchive
+                            let itemCt = Logger.logVerboseLongRunningStart Logger.Storage (sprintf "Adding archive item %s" nameInArchive)
                             let fileStreamInZip = archive.CreateEntry(nameInArchive, CompressionLevel.Fastest).Open()
                             do! Async.AwaitTask (memStream.CopyToAsync fileStreamInZip)
                             memStream.Dispose()
                             fileStreamInZip.Dispose()
-                            printfn "archiver: Archived %s as %s" filePath nameInArchive
+                            Logger.logVerboseLongRunningFinish itemCt Logger.Storage (sprintf "Archived %s as %s" filePath nameInArchive)
                             inbox.Post(Done filePath)
                         } |> Async.Start
-            printfn "All %d files are saved" totalFiles |> ignore
+            Logger.logVerbose Logger.Storage (sprintf "All %d files are saved" totalFiles)
             archivingDoneEvent.Set() |> ignore          
             })    
 
         archivingAgent.Post(ExpectedFileCount(Array.length fileFullPaths))
         fileFullPaths |> Array.iter (fun name -> archivingAgent.Post(LoadFileRequest name))            
         do! Async.AwaitTask (Task.Run(System.Action(fun () -> archivingDoneEvent.WaitOne() |> ignore)))
-        
+        Logger.logVerboseLongRunningFinish ct Logger.Storage (sprintf "Complete archiving dir %s" directoryFullPath)
         return ()
     }
 
@@ -109,30 +112,30 @@ let artefactFromArchiveStreamAsync (targetAbsPath:string) (streamToReadFrom:Stre
         //do! Async.AwaitTask(dbgAzureStream.CopyToAsync(memStream))
         //printfn "archiver: storage stream copied"
         
+        let ct = Logger.logVerboseLongRunningStart Logger.Storage (sprintf "Restoring %s from archive ..." targetAbsPath)
+
         use archive = new ZipArchive(streamToReadFrom, ZipArchiveMode.Read, true)
         
-        printfn "archiver: Archive content to extract to disk"
-        archive.Entries |> Seq.iter (fun entry -> printfn "archiver: %s:%s" entry.Name entry.FullName)
+        //printfn "archiver: Archive content to extract to disk"
+        //archive.Entries |> Seq.iter (fun entry -> printfn "archiver: %s:%s" entry.Name entry.FullName)
 
 
         //printfn "archiver: compressed stream opened"
         if isSingleFile then
             let entry = archive.GetEntry("__artefact__")
             entry.ExtractToFile(targetAbsPath,true)
-            printfn "%s single file artefact restored" targetAbsPath
+            Logger.logVerboseLongRunningFinish ct Logger.Storage (sprintf "%s single file artefact restored" targetAbsPath)
         else
-            printfn "archiver: decompressing stream into %s" targetAbsPath
+            //printfn "archiver: decompressing stream into %s" targetAbsPath
             //let tmpDirName = Path.Combine(System.IO.Path.GetTempPath(), Guid.NewGuid().ToString())
             
-            try
-                //let dirInfo = Directory.CreateDirectory tmpDirName
-                //printfn "archiver: temp dir (%s) created" tmpDirName
+            
+            //let dirInfo = Directory.CreateDirectory tmpDirName
+            //printfn "archiver: temp dir (%s) created" tmpDirName
 
-                archive.ExtractToDirectory targetAbsPath
-                //printfn "archiver: decompressed %s" targetAbsPath
-            with
-                | exc ->
-                    printfn "%A" exc
-                    raise exc
+            archive.ExtractToDirectory targetAbsPath
+            //printfn "archiver: decompressed %s" targetAbsPath
+            
+            Logger.logVerboseLongRunningFinish ct Logger.Storage (sprintf "%s directory artefact restored" targetAbsPath)
             
     }
