@@ -397,9 +397,9 @@ let buildAsync experimentRoot workingDir deps outputs command executionSettings 
     let getId = pathToId experimentRoot workingDir // WARNING: this method depends on the current directory!
     let inputIDs = List.map getId deps
     let outputIDs = List.map getId outputs
-    logVerbose LogCategory.API (sprintf "Dependencies: %A" inputIDs)
-    logVerbose LogCategory.API (sprintf "Outputs: %A" outputIDs)
-    logVerbose LogCategory.API (sprintf "Command: \"%s\"" command)
+    logInfo LogCategory.API (sprintf "Dependencies: %A" inputIDs)
+    logInfo LogCategory.API (sprintf "Outputs: %A" outputIDs)
+    logInfo LogCategory.API (sprintf "Command: \"%s\"" command)
 
     command |> MethodCommand.validate (inputIDs.Length, outputIDs.Length)
 
@@ -412,7 +412,7 @@ let buildAsync experimentRoot workingDir deps outputs command executionSettings 
         let! _ = g.AddMethod command inputIDs outputIDs rootBasedCwd executionSettings
     
         if executionSettings.DoNotCleanOutputs then
-            Logger.logVerbose Logger.API "Clearing of outputs by alpheus is disabled for this computation"
+            Logger.logInfo Logger.API "Clearing of outputs by alpheus is disabled for this computation"
         Logger.logVerbose Logger.API (sprintf "Dependency graph is built (%d artefacts; %d methods)" g.ArtefactsCount g.MethodsCount)
         Logger.logVerbose Logger.API (sprintf "Graph artefacts: %A" g.Artefacts)
         
