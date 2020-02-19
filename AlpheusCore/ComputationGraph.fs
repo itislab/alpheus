@@ -18,6 +18,9 @@ type ArtefactItem =
       Index: string list
       }
 
+type NonSuccessfulExitCodeException(str:string) =
+    inherit Exception(str)
+
 type SourceMethod(source: SourceVertex, experimentRoot,
                     checkStoragePresence : HashString seq -> Async<bool array>) = 
     inherit AngaraGraphNode<ArtefactItem>(DependencyGraph.Source source)
@@ -172,7 +175,7 @@ type CommandMethod(command: CommandLineVertex,
 
                 // 4) upon successful exit code hash the outputs
                 if not (Seq.exists (fun x -> exitCode = x) command.SuccessfulExitCodes) then
-                    raise(InvalidOperationException(sprintf "Process exited with non-successful exit code %d" exitCode))
+                    raise(NonSuccessfulExitCodeException(sprintf "Process exited with non-successful exit code %d" exitCode))
                 else
                     logInfo "Method succeeded"
                     logVerbose (sprintf "Program succeeded. Calculating hashes of the outputs...")
@@ -220,7 +223,12 @@ let doComputations (g:FlowGraph<AngaraGraphNode<ArtefactItem>>) =
         let final = Control.pickFinal engine.Changes
         let finalState = final.GetResult()
         Ok()
-    with 
-    | :? Control.FlowFailedException as flowExc -> 
-        let failed = String.Join("\n\t", flowExc.InnerExceptions |> Seq.map(fun e -> e.ToString()))
-        Error(SystemError(sprintf "Failed to compute the artefacts: \n\t%s" failed))
+    with
+    | :? Control.FlowFailedException as flowExc ->
+        match Seq.tryFind (fun (exc:exn) -> exc :? NonSuccessfulExitCodeException) flowExc.InnerExceptions with
+        | Some(exc) ->
+            let exc2: NonSuccessfulExitCodeException = downcast exc
+            Error(UserError(exc2.Message))
+        | None ->
+            let failed = String.Join("\n\t", flowExc.InnerExceptions |> Seq.map(fun e -> e.ToString()))
+            Error(SystemError(sprintf "Failed to compute the artefacts: \n\t%s" failed))

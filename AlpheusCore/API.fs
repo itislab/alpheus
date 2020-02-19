@@ -358,6 +358,7 @@ let compute (experimentRoot, artefactId) =
         // flow graph to calculate statuses
         let flowGraph = ComputationGraph.buildGraph experimentRoot g (checkStoragePresence experimentRoot) restoreFromStorage
         logVerbose LogCategory.API "Running computations"
+        
         let compResult = ComputationGraph.doComputations flowGraph
         let presenceCheckResult =
             result {
@@ -384,10 +385,10 @@ let compute (experimentRoot, artefactId) =
                     return! restoreAsync (experimentRoot,artefactId) |> Async.RunSynchronously
                 else
                     return ()
-            }
-
+                }
         return presenceCheckResult
-            
+        
+        
     } |> Async.RunSynchronously
 
 /// Adds one more method vertex to the experiment graph
