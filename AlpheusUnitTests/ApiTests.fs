@@ -188,6 +188,44 @@ type DepGraphSaveRestore(output) =
     inherit SampleExperiment.SampleExperiment(output)
 
     [<Fact>]
+    member s.``API Save-Restore: dir artefact saves & restores``() =
+        async {
+            // preparing dir for test in the single time experiment folder
+            let templatePath = Path.Combine("data","folder_with_files")
+            let dirs = Directory.GetDirectories(templatePath,"*",SearchOption.AllDirectories)
+            dirs |> Seq.iter (fun d -> Directory.CreateDirectory(Path.Combine(s.ExperimentRoot,d)) |> ignore)
+
+            let files = Directory.GetFiles(templatePath,"*",SearchOption.AllDirectories)
+            files |> Seq.iter (fun f -> File.Copy(f,Path.Combine(s.ExperimentRoot,f)))
+
+            let artId = ArtefactId.Path templatePath
+            let path = artId |> PathUtils.idToFullPath s.ExperimentRoot
+
+            // local storage is available by default
+            let! saveResult = API.saveAsync (s.ExperimentRoot,artId) (Some "local") false
+            assertResultOk saveResult
+
+            let origFilenames = Directory.EnumerateFiles(path,"*.txt",SearchOption.AllDirectories) |> Seq.sort |> Array.ofSeq
+            let! origContents = origFilenames |> Seq.map (fun n -> File.ReadAllTextAsync(Path.Combine(path,n)) |> Async.AwaitTask) |> Async.Parallel
+
+            // deleting the file to restore it
+            Directory.Delete(path,true)
+            Assert.False(Directory.Exists(path))
+
+            // now restoring
+            let! restoreResult = API.restoreAsync (s.ExperimentRoot, artId)
+            assertResultOk restoreResult
+
+            // checking that it actually restored and it's content matches
+            Assert.True(Directory.Exists(path),"Directory is not restored")
+            
+            let restoredFilenames = Directory.EnumerateFiles(path,"*.txt",SearchOption.AllDirectories) |> Seq.sort |> Array.ofSeq
+            Assert.Equal<string>(origFilenames, restoredFilenames)
+            let! restoredContents = origFilenames |> Seq.map (fun n -> File.ReadAllTextAsync(Path.Combine(path,n)) |> Async.AwaitTask) |> Async.Parallel
+            Assert.Equal<string>(origContents, restoredContents)
+        }
+
+    [<Fact>]
     member s.``API Save-Restore: file artefact saves & restores``() =
         async {
             let artId = s.ArtefactIds.[0]
@@ -305,6 +343,8 @@ let equalStatuses expected actual =
     let s1 = Map.toSeq expected
     let s2 = Map.toSeq actual
     Seq.forall2 (fun x y -> let idx1,v1 = x in let idx2,v2 = y in (idx1=idx2) && MdMap.equal (fun _ elem1 elem2 -> elem1=elem2) v1 v2) s1 s2
+
+
 
 type ScalarScenarios(output) =
     inherit SingleUseOneTimeDirectory(output)
