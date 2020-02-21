@@ -26,8 +26,8 @@ let archiveSingleFileToStreamAsync (fileAbsPath:string) (streamToWriteTo:Stream)
 
 let archiveDirFilesToStreamAsync (fileCompleteCallback:string->unit) (directoryFullPath:string) (fileFullPaths:string seq) (streamToWriteTo:Stream) =
     async {        
-        let ct = Logger.logVerboseLongRunningStart Logger.Storage (sprintf "Archiving dir %s ..." directoryFullPath)
         let fileFullPaths = Array.ofSeq fileFullPaths
+        let ct = Logger.logVerboseLongRunningStart Logger.Storage (sprintf "Archiving %d files ..." fileFullPaths.Length)
         use archive = new ZipArchive(streamToWriteTo,ZipArchiveMode.Create,true)
         
         use archivingDoneEvent = new ManualResetEvent(false)
@@ -94,7 +94,7 @@ let archiveDirFilesToStreamAsync (fileCompleteCallback:string->unit) (directoryF
         archivingAgent.Post(ExpectedFileCount(Array.length fileFullPaths))
         fileFullPaths |> Array.iter (fun name -> archivingAgent.Post(LoadFileRequest name))            
         do! Async.AwaitTask (Task.Run(System.Action(fun () -> archivingDoneEvent.WaitOne() |> ignore)))
-        Logger.logVerboseLongRunningFinish ct Logger.Storage (sprintf "Complete archiving dir %s" directoryFullPath)
+        Logger.logVerboseLongRunningFinish ct Logger.Storage (sprintf "Complete archiving %d files" fileFullPaths.Length)
         return ()
     }
 
@@ -112,7 +112,11 @@ let artefactFromArchiveStreamAsync (targetAbsPath:string) (streamToReadFrom:Stre
         //do! Async.AwaitTask(dbgAzureStream.CopyToAsync(memStream))
         //printfn "archiver: storage stream copied"
         
-        let ct = Logger.logVerboseLongRunningStart Logger.Storage (sprintf "Restoring %s from archive ..." targetAbsPath)
+        let ct =
+            if isSingleFile then
+                Logger.logVerboseLongRunningStart Logger.Storage (sprintf "Restoring %s from archive ..." targetAbsPath)
+            else
+                Logger.logVerboseLongRunningStart Logger.Storage (sprintf "Restoring %s part from archive ..." targetAbsPath)
 
         use archive = new ZipArchive(streamToReadFrom, ZipArchiveMode.Read, true)
         
@@ -136,6 +140,6 @@ let artefactFromArchiveStreamAsync (targetAbsPath:string) (streamToReadFrom:Stre
             archive.ExtractToDirectory targetAbsPath
             //printfn "archiver: decompressed %s" targetAbsPath
             
-            Logger.logVerboseLongRunningFinish ct Logger.Storage (sprintf "%s directory artefact restored" targetAbsPath)
+            Logger.logVerboseLongRunningFinish ct Logger.Storage (sprintf "%s directory artefact part restored" targetAbsPath)
             
     }

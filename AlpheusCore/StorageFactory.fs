@@ -162,7 +162,7 @@ let getStorageSaver (projectRoot:string)  storageDef =
                             let fileCompleteCallback filename =
                                 lock counterSync (fun () ->
                                     incr sharedCounter
-                                    printfn "%d/%d\t %s Done" sharedCounter.Value N filename
+                                    Logger.logInfo Logger.Storage (sprintf "%d/%d\t %s Done" sharedCounter.Value N filename)
                                 ) 
 
                             let archiver = ArtefactArchiver.archiveDirFilesToStreamAsync fileCompleteCallback dirFullPath
