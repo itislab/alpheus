@@ -78,7 +78,7 @@ let logVerboseLongRunningStart (category: LogCategory) (message:string) =
             let delayedPrint =
                 async {
                     do! Async.SwitchToThreadPool()
-                    do! Async.Sleep 5000 // 5 sec is considered long enough for now
+                    do! Async.Sleep 500 // half a sec is considered long enough for now
                     lock(ct) (fun () ->
                         if ct.IsCancellationRequested then
                             ct.Dispose()
