@@ -252,6 +252,42 @@ type DepGraphSaveRestore(output) =
             Assert.Equal(origContent,restoredContent)
         }
 
+    [<Fact>]
+    member s.``API Save-Restore: vector file artefact saves & restores``() =
+        async {
+            let artId = s.ArtefactIds.[5]
+            let path = artId |> PathUtils.idToFullPath s.ExperimentRoot
+
+            let searchPath = Path.Combine(s.ExperimentRoot,"dir4")
+            let origFilenames = Directory.EnumerateFiles(searchPath,"*.txt",SearchOption.AllDirectories) |> Seq.sort |> Array.ofSeq
+            let origAllPaths = origFilenames |> Seq.map (fun n -> Path.Combine(searchPath,n))            
+
+
+            // local storage is available by default
+            let! saveResult =  API.saveAsync (s.ExperimentRoot, artId) (Some "local") false
+            assertResultOk saveResult
+             
+            // saving the content for later verification
+            let! origContents = origAllPaths |> Seq.map (fun n -> File.ReadAllTextAsync(n) |> Async.AwaitTask) |> Async.Parallel
+
+            // deleting the file to restore it
+            origFilenames
+            |> Seq.iter (fun p -> File.Delete(p))
+
+            Assert.False(File.Exists(path))
+
+            let! restoreResult = API.restoreAsync (s.ExperimentRoot, artId)
+            assertResultOk restoreResult
+
+            // checking that it actually restored and it's content matches
+            let restoredFilenames = Directory.EnumerateFiles(searchPath,"*.txt",SearchOption.AllDirectories) |> Seq.sort |> Array.ofSeq
+            let restoredAllPaths = restoredFilenames |> Seq.map (fun n -> Path.Combine(searchPath,n))            
+            let! restoredContents = restoredAllPaths |> Seq.map (fun n -> File.ReadAllTextAsync(n) |> Async.AwaitTask) |> Async.Parallel
+
+            Assert.Equal<string>(origFilenames, restoredFilenames)
+            Assert.Equal<string>(origContents, restoredContents)
+        }
+
 
     [<Fact>]
     member s.``API storage list: default is local``() =

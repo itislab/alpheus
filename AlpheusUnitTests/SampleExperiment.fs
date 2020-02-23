@@ -15,6 +15,7 @@ let artIdsStr =
         @"dir2/test3.txt" // depends on test1.txt and test2/
         @"dir2/test4/" // also depends on test11.txt and test2/ ; data for this artefact will be missing
         @"dir3/dir5/test5.txt" // depends on test3.txt and test4/
+        @"dir4/*.txt" // used as vector
     |]
 
 type SampleExperiment(output) as this =
@@ -39,10 +40,19 @@ type SampleExperiment(output) as this =
             Directory.CreateDirectory(Path.Combine(rootPath,"dir3")) |> ignore
             Directory.CreateDirectory(Path.Combine(rootPath,"dir2","test4")) |> ignore
             Directory.CreateDirectory(Path.Combine(rootPath,"dir3","dir5")) |> ignore
+            Directory.CreateDirectory(Path.Combine(rootPath,"dir4")) |> ignore
 
             // creating files with content
             fullPaths
+                |> Array.filter (fun (x:string) -> not(x.Contains("*")))
                 |> Array.filter (fun (x:string) -> x.EndsWith("txt"))
+                |> Array.iteri (fun i x -> File.WriteAllText(x,sprintf "data file %d" i) )
+
+            // creating vecor files with content
+            fullPaths
+                |> Array.filter (fun (x:string) -> x.Contains("*"))
+                |> Array.filter (fun (x:string) -> x.EndsWith("txt"))
+                |> Array.collect (fun (x:string) -> Array.init 4 (fun idx -> x.Replace("*",sprintf "%d" idx)))
                 |> Array.iteri (fun i x -> File.WriteAllText(x,sprintf "data file %d" i) )
 
             // creating graph
