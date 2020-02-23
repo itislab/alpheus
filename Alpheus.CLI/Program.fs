@@ -44,7 +44,7 @@ let main argv =
         | Error(er) ->
             match er with
             | UserError m -> printfn "Error occurred: %s" m; 1
-            | SystemError m -> printfn "Internal error occurred: %s" m; 1
+            | SystemError m -> printfn "Internal error occurred (please report it at https://github.com/itislab/alpheus/issues): %s" m; 1
     with
     |   :? ArguException as e ->
         printfn "%s" e.Message // argu exception is parse exception. So don't print stack trace. We print only parse error content.
