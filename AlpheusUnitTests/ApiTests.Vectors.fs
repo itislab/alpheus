@@ -371,14 +371,14 @@ type ``Vector scenarios``(output) as this =
     /// 
     member s.``Scatter with several outputs succeeds``() =
         async {
-            // issue 73: Can't save the successful multiple output scatter method
+            // issue 73: Complex extensions are not supported (e.g. *.tar.gz)
             let root = s.ExperimentRoot
             
             let createManyFilesCommand = 
                 if isTestRuntimeWindows then
                     "cmd /C \"FOR %i IN (1,2,3) DO (echo sample%i-1 > %i.1sample.txt && echo sample%i-2 > %i.2sample.txt)\""
                 else
-                    "/bin/sh -c \"for i in $(seq 1 3); do echo sample$i-1 > $i.1sample.txt && sample$i-2 > $i.2sample.txt done\""
+                    "/bin/bash -c \"for i in $(seq 1 3); do echo sample$i-1 > $i.1sample.txt && echo sample$i-2 > $i.2sample.txt ; done\""
 
             let! res = API.buildAsync root (Path.Combine(root, "samples")) [] ["*.1sample.txt";"*.2sample.txt"] createManyFilesCommand DependencyGraph.CommandExecutionSettings.Default
             assertResultOk res
