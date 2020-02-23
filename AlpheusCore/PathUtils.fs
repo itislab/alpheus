@@ -147,8 +147,15 @@ let enumeratePath (artefactPath:string) : MdMap<string, string> =
             |> Seq.fold (fun map d -> map |> MdMap.add [d.Name] d.FullName) MdMap.empty
         | [file] -> 
             assertCorrectFilePattern file
+            let fNameWithoutExtension (fname:string) =
+                // Path.GetFileNameWithoutExtension will not suite here, as test123.tar.gz will result in test123.tar, we need test123
+                let idx = fname.IndexOf(".")
+                if idx < 0 then
+                    raise(InvalidOperationException(sprintf "filename %s must contain extension (e.g. xxxxx.ext)" fname))
+                else
+                    fname.Substring(0,idx)
             files path file
-            |> Seq.fold (fun map f -> map |> MdMap.add [Path.GetFileNameWithoutExtension f.Name] f.FullName) MdMap.empty
+            |> Seq.fold (fun map f -> map |> MdMap.add [fNameWithoutExtension f.Name] f.FullName) MdMap.empty
 
         | dir :: tail ->
             assertCorrectDirPattern dir

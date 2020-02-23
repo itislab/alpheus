@@ -250,6 +250,7 @@ type PathUtilsTests(output) =
         file "dir3/test1.txt"
         dir "dir3/dir5"
         file "dir3/dir5/test5.txt"
+        file "test6.txt.gz"
 
         let artefactId = ArtefactId.Path artefactId
         let items = enumerateItems s.ExperimentRoot artefactId
@@ -268,6 +269,7 @@ type PathUtilsTests(output) =
            [| "*/*/*.txt"; [| ["dir3"; "dir5"; "test5"], "dir3/dir5/test5.txt" |] |]
            [| "*/"; [| ["dir1"], "dir1"; ["dir2"], "dir2"; ["dir3"], "dir3" |] |]
            [| "*/*/"; [| ["dir1";"test2"], "dir1/test2"; ["dir3";"dir5"], "dir3/dir5" |] |]
+           [| "*.txt.gz"; [| [ "test6" ],"test6.txt.gz" |] |]
         |]
 
     // todo:
