@@ -366,6 +366,30 @@ type ``Vector scenarios``(output) as this =
             |> concatStrings 
             |> assertFileContent (Path.Combine(root, "summary.txt"))
         }
+
+    [<Fact>]
+    /// 
+    member s.``Scatter with several outputs succeeds``() =
+        async {
+            // issue 73: Complex extensions are not supported (e.g. *.tar.gz)
+            let root = s.ExperimentRoot
+            
+            let createManyFilesCommand = 
+                if isTestRuntimeWindows then
+                    "cmd /C \"FOR %i IN (1,2,3) DO (echo sample%i-1 > %i.1sample.txt && echo sample%i-2 > %i.2sample.txt)\""
+                else
+                    "/bin/bash -c \"for i in $(seq 1 3); do echo sample$i-1 > $i.1sample.txt && echo sample$i-2 > $i.2sample.txt ; done\""
+
+            let! res = API.buildAsync root (Path.Combine(root, "samples")) [] ["*.1sample.txt";"*.2sample.txt"] createManyFilesCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res
+
+            let res = API.compute (root, Path "samples/*.1sample.txt")
+            assertResultOk res
+
+            //["sample1"] |> concatStrings |> assertFileContent (Path.Combine(root, "samples", "sample1.txt"))
+            //["sample2"] |> concatStrings |> assertFileContent (Path.Combine(root, "samples", "sample2.txt"))
+            //["sample3"] |> concatStrings |> assertFileContent (Path.Combine(root, "samples", "sample3.txt"))
+        }
                            
              
 
