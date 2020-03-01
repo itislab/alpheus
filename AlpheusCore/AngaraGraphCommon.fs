@@ -100,7 +100,7 @@ let internal resolveIndex (index:string list) (map: MdMap<string, 'a>) =
     | Some(MdMapTree.Map _) -> Some (MdMap.get index map)
     | None -> None
 
-/// Returns a submap (by index applied) of link expected expectations supplied with the actual version
+/// Returns a submap (by index applied) of link expectations supplied with the actual version
 let getActualForExpected index (link: LinkToArtefact) =
     async {
         match link.ExpectedVersion |> resolveIndex index with // this guards against overspecified index
@@ -116,7 +116,8 @@ let getActualForExpected index (link: LinkToArtefact) =
                             match e with 
                             | Some e2 -> // expecting particular version? time to check what version is on disk
                                 async {
-                                    let! a2 = link.Artefact.ActualVersion.Get j
+                                    let fullIndex = List.truncate link.Artefact.Rank (List.append index j)
+                                    let! a2 = link.Artefact.ActualVersion.Get fullIndex
                                     return ExpectedAndActual(e2,a2)
                                 }
                             | None -> async.Return NoVersionExpected
