@@ -107,6 +107,34 @@ type ``Vector scenarios``(output) as this =
         }
 
     [<Fact>]
+    member s.``Re-Runs same method upon input changes``() =
+        async {
+            let root = s.ExperimentRoot 
+            do! prepareSources(root)
+
+            let! res = API.buildAsync root root ["base.txt"; "data/*.txt"] ["output/out*.txt"] concatCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res
+
+            let outputId = ArtefactId.Path "output/out*.txt"
+            let res = API.compute (root, outputId)
+            assertResultOk res
+
+            "Base fileFile 1" |> assertFileContent (Path.Combine(root, "output", "out1.txt"))
+            "Base fileFile 2" |> assertFileContent (Path.Combine(root, "output", "out2.txt"))
+            "Base fileFile 3" |> assertFileContent (Path.Combine(root, "output", "out3.txt"))
+
+            do! File.WriteAllTextAsync(Path.Combine(root, "data", "1.txt"),"Changed File 1") |> Async.AwaitTask
+
+            let res = API.compute (root, outputId)
+            assertResultOk res
+
+            "Base fileChanged File 1" |> assertFileContent (Path.Combine(root, "output", "out1.txt"))
+            "Base fileFile 2" |> assertFileContent (Path.Combine(root, "output", "out2.txt"))
+            "Base fileFile 3" |> assertFileContent (Path.Combine(root, "output", "out3.txt"))
+
+        }
+
+    [<Fact>]
     member s.``Runs two methods one after another for multiple input files``() =
         async {
             let root = s.ExperimentRoot
