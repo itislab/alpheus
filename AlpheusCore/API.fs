@@ -419,3 +419,39 @@ let buildAsync experimentRoot workingDir deps outputs command executionSettings 
         
         return Ok()
     }
+
+/// Puts the valid signature into the command vertex section, leaving other signatures untouched.
+/// Useful after alph files manual manipulation 
+/// For internal use only! This functionality must be hidden from CLI and other user interfaces!
+let signAlphFileAsync (experimentRoot, artefactId) =
+    async {
+        let alphPath = PathUtils.idToAlphFileFullPath experimentRoot artefactId
+        if not (File.Exists alphPath) then
+            return (UserError (sprintf "The alph file %s does not exist" alphPath)) |> Error
+        else
+            match! AlphFiles.tryLoadAsync alphPath with
+            |   None -> return (SystemError (sprintf "Failed to parse the alph file %s" alphPath)) |> Error
+            |   Some(alphFile) ->
+                match alphFile.Origin with
+                |   SourceOrigin _ ->
+                    logInfo LogCategory.API (sprintf "The artefact %O is source artefact. Nothing to sign." artefactId)
+                    return Ok()
+                |   CommandOrigin co ->
+                    let actualSig = Hash.getSignature co
+                    let statedSig = co.Signature
+                    if actualSig = statedSig then
+                        logInfo LogCategory.API (sprintf "Signature for the artefact %O is already valid" artefactId)
+                        return Ok()
+                    else
+                        let updatedAlph = 
+                            {
+                                alphFile with
+                                    Origin = CommandOrigin({
+                                        co with
+                                            Signature = actualSig
+                                        })
+                            }
+                        do! AlphFiles.saveAsync updatedAlph alphPath
+                        logInfo LogCategory.API (sprintf "Signature for the artefact %O successfully update" artefactId)
+                        return Ok()
+    }

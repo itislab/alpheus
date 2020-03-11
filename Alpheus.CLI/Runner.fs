@@ -112,6 +112,13 @@ let run (programName:string) (workingDir:string) (parseResults:ParseResults<Alph
         }
     elif parseResults.Contains Build then                
         BuildCommand.run workingDir (parseResults.GetResult <@ Build @>)
+    elif parseResults.Contains Sign then
+        result {
+            let signArgs = parseResults.GetResult <@ Sign @>
+            let path = signArgs.GetResult <@ SignArgs.Path @>
+            let! artefact = API.artefactFor workingDir path
+            return! API.signAlphFileAsync artefact |> Async.RunSynchronously
+        }
     else
         Error (UserError usage)
 

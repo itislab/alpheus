@@ -6,7 +6,7 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>alpheus</ToolCommandName>
     <PackageId>Alpheus-cli</PackageId>
-    <Version>1.0.0-beta1</Version>
+    <Version>1.0.0-beta2</Version>
     <Authors>Itis Lab</Authors>
     <Product>Alpheus CLI</Product>
     <PackageProjectUrl>https://github.com/itislab/alpheus</PackageProjectUrl>

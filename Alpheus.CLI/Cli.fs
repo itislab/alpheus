@@ -54,6 +54,15 @@ with
             |   Successful_Exit_Codes _ -> "Exit codes (space separated) of the command that are considered as successful computation. Default: 0"
             |   Command _ -> "Command that generates the outputs"
 
+type SignArgs =
+    |   [<Mandatory; MainCommand>]Path of ``File or Dir``:string
+with
+    interface IArgParserTemplate with
+        member s.Usage =
+            match s with
+            |   Path _ -> "File/Directory to sign artefact file for"
+
+
 [<CliPrefix(CliPrefix.None)>]
 type ComputeArgs =
     |   [<Mandatory; MainCommand>]File of ``File or Dir``:string
@@ -108,6 +117,7 @@ type AlpheusArgs =
     | Status of ParseResults<StatusArgs>
     | Save of ParseResults<SaveArgs>
     | Restore of ParseResults<RestoreArgs>
+    | [<Hidden>]Sign of ParseResults<SignArgs>
     | [<AltCommandLine("-v")>][<CliPrefix(CliPrefix.DoubleDash)>] Verbosity of VerbosityLevel
 with
     interface IArgParserTemplate with
@@ -121,3 +131,4 @@ with
             |   Save _ -> "Save a copy of file/directory to the storage(s)"
             |   Restore _ -> "Restore a copy of the file/directory from storage"
             |   Verbosity _ -> "Level of verbosity for produced text messages"
+            |   Sign _ -> "hidden"
