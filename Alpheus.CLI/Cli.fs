@@ -62,6 +62,14 @@ with
             match s with
             |   Path _ -> "File/Directory to sign artefact file for"
 
+type HashArgs =
+    |   [<Mandatory; MainCommand>]Path of ``File or Dir``:string
+with
+    interface IArgParserTemplate with
+        member s.Usage =
+            match s with
+            |   Path _ -> "File/Directory or artefact file path to show actual disk version for"
+            
 
 [<CliPrefix(CliPrefix.None)>]
 type ComputeArgs =
@@ -118,6 +126,7 @@ type AlpheusArgs =
     | Save of ParseResults<SaveArgs>
     | Restore of ParseResults<RestoreArgs>
     | [<Hidden>]Sign of ParseResults<SignArgs>
+    | [<Hidden>]Hash of ParseResults<HashArgs>
     | [<AltCommandLine("-v")>][<CliPrefix(CliPrefix.DoubleDash)>] Verbosity of VerbosityLevel
 with
     interface IArgParserTemplate with
@@ -131,4 +140,5 @@ with
             |   Save _ -> "Save a copy of file/directory to the storage(s)"
             |   Restore _ -> "Restore a copy of the file/directory from storage"
             |   Verbosity _ -> "Level of verbosity for produced text messages"
-            |   Sign _ -> "hidden"
+            |   Sign _ -> "Sign the alph file content (expert use only. do not use if unsure)"
+            |   Hash _ -> "Show the actual disk version of the artefact"

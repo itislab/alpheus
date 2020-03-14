@@ -132,7 +132,8 @@ let hashPath fullPath =
             else
                 return None
     }
-    
+
+/// Builds hash for the given path which can be either a file or a directory     
 /// optimization that caches the computed hashes into *.hash files
 let hashPathAndSave (fullPath:string) =
     let hashFilePath = PathUtils.pathToHashFile fullPath

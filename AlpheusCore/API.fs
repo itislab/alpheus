@@ -420,9 +420,23 @@ let buildAsync experimentRoot workingDir deps outputs command executionSettings 
         return Ok()
     }
 
+/// Returns the actual hash of the artefact
+/// REMARK: For internal use only! This functionality must be hidden from CLI and other user interfaces!
+let hashArtefactAsync (experimentRoot, artefactId) =
+    async {
+        let artPath = PathUtils.idToFullPath experimentRoot artefactId
+        let vectorizedPaths = PathUtils.enumeratePath artPath |> MdMap.toSeq |> List.ofSeq
+        let indices = List.map fst vectorizedPaths
+        let ct = logVerboseLongRunningStart Logger.API (sprintf "Analyzing actual disk version of the artefact %O" artefactId)
+        let! paths = vectorizedPaths |> Seq.map (snd >> Hash.hashPathAndSave) |> Async.Parallel
+        logVerboseLongRunningFinish ct Logger.API (sprintf "Artefact actual version analysis complete")
+        let joined = Seq.zip indices paths |> List.ofSeq
+        return joined
+    }
+
 /// Puts the valid signature into the command vertex section, leaving other signatures untouched.
 /// Useful after alph files manual manipulation 
-/// For internal use only! This functionality must be hidden from CLI and other user interfaces!
+/// REMARK: For internal use only! This functionality must be hidden from CLI and other user interfaces!
 let signAlphFileAsync (experimentRoot, artefactId) =
     async {
         let alphPath = PathUtils.idToAlphFileFullPath experimentRoot artefactId
@@ -440,7 +454,7 @@ let signAlphFileAsync (experimentRoot, artefactId) =
                     let actualSig = Hash.getSignature co
                     let statedSig = co.Signature
                     if actualSig = statedSig then
-                        logInfo LogCategory.API (sprintf "Signature for the artefact %O is already valid" artefactId)
+                        logInfo LogCategory.API (sprintf "Signature for the artefact %O is already valid." artefactId)
                         return Ok()
                     else
                         let updatedAlph = 
@@ -452,6 +466,6 @@ let signAlphFileAsync (experimentRoot, artefactId) =
                                         })
                             }
                         do! AlphFiles.saveAsync updatedAlph alphPath
-                        logInfo LogCategory.API (sprintf "Signature for the artefact %O successfully update" artefactId)
+                        logInfo LogCategory.API (sprintf "Signature for the artefact %O successfully updated." artefactId)
                         return Ok()
     }
