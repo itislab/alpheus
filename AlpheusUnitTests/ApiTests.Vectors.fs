@@ -174,6 +174,52 @@ type ``Vector scenarios``(output) as this =
         }
 
     [<Fact>]
+    /// also triggers issue #78
+    member s.``Vector elements are restored from storage during comupute if needed``() =
+        async {
+            let root = s.ExperimentRoot
+            do! prepareSources(root)
+
+            let! res = API.buildAsync root root ["base.txt"; "data/*.txt"] ["output/*.txt"] concatCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res
+
+            let! res = API.buildAsync root root ["base.txt"; "output/*.txt"] ["output2/*.txt"] concatCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res
+
+            let outputId = ArtefactId.Path "output/*.txt"
+            let output2Id = ArtefactId.Path "output2/*.txt"
+            API.compute (root, output2Id) |> assertResultOk
+            
+            Logger.logInfo Logger.Test "First time computed"
+
+            // now saving "output/*.txt"
+            let! saveRes = API.saveAsync (root,outputId) None false
+            assertResultOk saveRes
+
+            Logger.logInfo Logger.Test "output/*.txt saved to storage"
+            
+            // deleting "output2/*.txt" and "output/*.txt"
+            File.Delete <| Path.Combine(root, "output", "1.txt")
+            File.Delete <| Path.Combine(root, "output", "2.txt")
+            File.Delete <| Path.Combine(root, "output", "3.txt")
+            File.Delete <| Path.Combine(root, "output2", "1.txt")
+            File.Delete <| Path.Combine(root, "output2", "2.txt")
+            File.Delete <| Path.Combine(root, "output2", "3.txt")
+
+            Logger.logInfo Logger.Test "Deleted output/*.txt and output2/*.txt"
+
+            // now asking again to compute
+            Logger.logInfo Logger.Test "Now, restore should happen"
+            API.compute (root, output2Id) |> assertResultOk
+
+            Logger.logInfo Logger.Test "Second time computed"
+
+            "Base fileBase fileFile 1" |> assertFileContent (Path.Combine(root, "output2", "1.txt"))
+            "Base fileBase fileFile 2" |> assertFileContent (Path.Combine(root, "output2", "2.txt"))
+            "Base fileBase fileFile 3" |> assertFileContent (Path.Combine(root, "output2", "3.txt"))
+        }
+
+    [<Fact>]
     member s.``Resource groups work``() =
         async {
             let root = s.ExperimentRoot

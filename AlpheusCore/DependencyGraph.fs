@@ -404,9 +404,11 @@ and CommandLineVertex(
             let outLinksUpdates =
                 s.Outputs 
                 |> Seq.map (expectActual index true) 
+            // for the inputs we need to set invalidate=true to cover the case
+            // when the inputs are restored from up-to-date remote state.
             let inputLinksUpdates =
                 s.Inputs 
-                |> Seq.map (expectActual index false) 
+                |> Seq.map (expectActual index true) 
             do! Seq.append outLinksUpdates inputLinksUpdates |> Async.Parallel |> Async.Ignore            
 
             logVerbose DependencyGraph (sprintf "Saving alph files for outputs of %A%A" methodId index)
