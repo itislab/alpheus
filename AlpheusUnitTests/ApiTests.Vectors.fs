@@ -174,6 +174,83 @@ type ``Vector scenarios``(output) as this =
         }
 
     [<Fact>]
+    /// also tests the issue #85
+    member s.``up-to-date remote are not restored if not needed``() =
+        async {
+            let root = s.ExperimentRoot
+            do! prepareSources(root)
+
+            let! res = API.buildAsync root root ["base.txt"; "data/*.txt"] ["output/*.txt"] concatCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res
+
+            let! res = API.buildAsync root root ["base.txt"; "output/*.txt"] ["output2/*.txt"] concatCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res
+
+            let! res = API.buildAsync root root ["base.txt"; "output2/*.txt"] ["output3/*.txt"] concatCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res
+
+            let outputId = ArtefactId.Path "output/*.txt"
+            let output2Id = ArtefactId.Path "output2/*.txt"
+            let output3Id = ArtefactId.Path "output3/*.txt"
+            API.compute (root, output3Id) |> assertResultOk
+            
+            Logger.logInfo Logger.Test "Chain computed first time"
+
+            // now saving "output/*.txt"
+            let! saveRes = API.saveAsync (root,outputId) None false
+            assertResultOk saveRes
+            Logger.logInfo Logger.Test "output/*.txt saved to storage"
+            
+            // deleting "output3/*.txt" and "output/*.txt"
+            File.Delete <| Path.Combine(root, "output", "1.txt")
+            File.Delete <| Path.Combine(root, "output", "2.txt")
+            File.Delete <| Path.Combine(root, "output", "3.txt")
+            File.Delete <| Path.Combine(root, "output3", "1.txt")
+            File.Delete <| Path.Combine(root, "output3", "2.txt")
+            File.Delete <| Path.Combine(root, "output3", "3.txt")
+
+            Logger.logInfo Logger.Test "Deleted output/*.txt and output3/*.txt"
+
+            Logger.logInfo Logger.Test "Test begins. Second time compute..."
+            API.compute (root, output3Id) |> assertResultOk
+            Logger.logInfo Logger.Test "Second time computed"
+
+            Assert.False(File.Exists(Path.Combine(root, "output", "1.txt")))
+            Assert.False(File.Exists(Path.Combine(root, "output", "2.txt")))
+            Assert.False(File.Exists(Path.Combine(root, "output", "3.txt")))
+            
+
+            "Base fileBase fileBase fileFile 1" |> assertFileContent (Path.Combine(root, "output3", "1.txt"))
+            "Base fileBase fileBase fileFile 2" |> assertFileContent (Path.Combine(root, "output3", "2.txt"))
+            "Base fileBase fileBase fileFile 3" |> assertFileContent (Path.Combine(root, "output3", "3.txt"))
+
+            // Checks the output alph file:
+            let alph = AlphFiles.tryLoad (PathUtils.idToAlphFileFullPath root outputId) |> Option.get
+            match alph.Origin with 
+            | DataOrigin.CommandOrigin cmd ->
+                cmd.Inputs.[0].Hash.IsScalar.Should().BeTrue("base.txt is scalar") |> ignore
+                (cmd.Inputs.[1].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "2nd input is a vector of 3 elements") |> ignore
+                (cmd.Outputs.[0].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "The output is a vector of 3 elements") |> ignore
+            | _ -> failwith "Unexpected origin"
+
+            let alph = AlphFiles.tryLoad (PathUtils.idToAlphFileFullPath root output2Id) |> Option.get
+            match alph.Origin with 
+            | DataOrigin.CommandOrigin cmd ->
+                cmd.Inputs.[0].Hash.IsScalar.Should().BeTrue("base.txt is scalar") |> ignore
+                (cmd.Inputs.[1].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "2nd input is a vector of 3 elements") |> ignore
+                (cmd.Outputs.[0].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "The output is a vector of 3 elements") |> ignore
+            | _ -> failwith "Unexpected origin"
+
+            let alph = AlphFiles.tryLoad (PathUtils.idToAlphFileFullPath root output3Id) |> Option.get
+            match alph.Origin with 
+            | DataOrigin.CommandOrigin cmd ->
+                cmd.Inputs.[0].Hash.IsScalar.Should().BeTrue("base.txt is scalar") |> ignore
+                (cmd.Inputs.[1].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "2nd input is a vector of 3 elements") |> ignore
+                (cmd.Outputs.[0].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "The output is a vector of 3 elements") |> ignore
+            | _ -> failwith "Unexpected origin"
+        }
+
+    [<Fact>]
     /// also triggers issue #78
     member s.``Vector elements are restored from storage during comupute if needed``() =
         async {
@@ -217,6 +294,23 @@ type ``Vector scenarios``(output) as this =
             "Base fileBase fileFile 1" |> assertFileContent (Path.Combine(root, "output2", "1.txt"))
             "Base fileBase fileFile 2" |> assertFileContent (Path.Combine(root, "output2", "2.txt"))
             "Base fileBase fileFile 3" |> assertFileContent (Path.Combine(root, "output2", "3.txt"))
+
+            // Checks the output alph file:
+            let alph = AlphFiles.tryLoad (PathUtils.idToAlphFileFullPath root outputId) |> Option.get
+            match alph.Origin with 
+            | DataOrigin.CommandOrigin cmd ->
+                cmd.Inputs.[0].Hash.IsScalar.Should().BeTrue("base.txt is scalar") |> ignore
+                (cmd.Inputs.[1].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "2nd input is a vector of 3 elements") |> ignore
+                (cmd.Outputs.[0].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "The output is a vector of 3 elements") |> ignore
+            | _ -> failwith "Unexpected origin"
+
+            let alph = AlphFiles.tryLoad (PathUtils.idToAlphFileFullPath root output2Id) |> Option.get
+            match alph.Origin with 
+            | DataOrigin.CommandOrigin cmd ->
+                cmd.Inputs.[0].Hash.IsScalar.Should().BeTrue("base.txt is scalar") |> ignore
+                (cmd.Inputs.[1].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "2nd input is a vector of 3 elements") |> ignore
+                (cmd.Outputs.[0].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "The output is a vector of 3 elements") |> ignore
+            | _ -> failwith "Unexpected origin"
         }
 
     [<Fact>]
