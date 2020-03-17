@@ -261,6 +261,13 @@ let getCommandVertexStatus checkStoragePresence (command:CommandLineVertex) inde
     }
 
 
+type ZeroLengthVectorException(str:string) =
+    inherit Exception(str)
+
+type ArtefactNotFoundInStoragesException(str:string) =
+    inherit Exception(str)
+
+
 /// This type represents an Angara Flow method.
 /// Note that execution modifies the given vertex and it is Angara Flow execution runtime who controls
 /// the concurrency.

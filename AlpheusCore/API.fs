@@ -364,7 +364,7 @@ let compute (experimentRoot, artefactId) =
             result {
                 do! compResult
                 // we need to check the status of the requested artefact.
-                // it is up-to-date remote, we need to fetch it as user asked for it explicitly
+                // if it is up-to-date remote, we need to fetch it as user asked for it explicitly
                 // see issue #51
                 let! requestedArtefact = g.GetArtefact artefactId
                 let linkToRequested = 

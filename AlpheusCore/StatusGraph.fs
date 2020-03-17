@@ -32,31 +32,61 @@ type SourceMethod(source: SourceVertex, experimentRoot, checkStoragePresense) =
                 link.AnalyzeStatus checkStoragePresense index
 
             // Output of the method is an scalar or a vector of full paths to the data of the artefact.
-            let indices =
+            // disk indices (if any on disk) specify the actual vector indices
+            let diskIndicesMap =
                 artefact.Id 
                 |> PathUtils.enumerateItems experimentRoot
+            let diskIndices =
+                diskIndicesMap
                 |> MdMap.toSeq |> Seq.map fst |> Array.ofSeq
 
-            let! itemStatuses =
-                indices |> Array.map (getItemStatus expectedArtefact) |> Async.Parallel
+            let! result =
+                async {
+                    let linkStatusToCommandVertextStatus status =
+                        match status with
+                        |   LocalUnexpected ->
+                            // Source methods always updates their output.
+                            // Always valid if there is any disk version of the artefact
+                            UpToDate [ArtefactLocation.Local]
+                        |   NotFound ->
+                            // that's bad! as there is not local nor remote version
+                            // we can't get the artefact data by any means
+                            // this is exception
+                            raise (ArtefactNotFoundInStoragesException "The artefact data is not found neither on disk nor in any of the available storages")
+                        |   Local -> UpToDate [ArtefactLocation.Local]
+                        |   Remote -> UpToDate [ArtefactLocation.Remote]
+                
+                    if diskIndicesMap.IsScalar then
+                        let! linkStatus = getItemStatus expectedArtefact List.empty
+                        let toRet = 
+                            {
+                                ArtefactId = artefact.Id;
+                                Index = [];
+                                Status = linkStatusToCommandVertextStatus linkStatus
+                            }
+                        return [toRet :> Artefact] 
+                    else
+                        let indices =
+                            if MdMap.toShallowSeq diskIndicesMap |> Seq.isEmpty then
+                                // check remote up to date
+                                let expectedIndices = expectedArtefact.ExpectedVersion
 
-            let linkStatusToCommandVertextStatus status =
-                match status with                
-                |   LocalUnexpected ->
-                    // Source methods always updates their output.
-                    // Always valid if there is any disk version of the artefact
-                    UpToDate [ArtefactLocation.Local] 
-                |   NotFound ->
-                    // that's bad! as there is not local nor remote version
-                    // we can't get the artefact data by any means
-                    // this is exception
-                    failwith "The artefact data is not found neither on disk nor in any of the available storages"
-                |   Local -> UpToDate [ArtefactLocation.Local] 
-                |   Remote -> UpToDate [ArtefactLocation.Remote]
-            let result =
-                Array.map2 (fun index status -> {ArtefactId = artefact.Id; Index = index; Status = linkStatusToCommandVertextStatus status}) indices itemStatuses
-                |> Seq.map (fun x -> x :> Artefact)
-                |> List.ofSeq
+                                if not expectedIndices.IsScalar && (MdMap.toShallowSeq expectedIndices |> Seq.isEmpty) then
+                                    raise (ZeroLengthVectorException (sprintf "No disk data matches source vector pattern for artefact %O" artefact ))
+                                else
+                                    MdMap.toSeq expectedIndices |> Seq.map fst |> Seq.toArray
+                                
+                            else
+                                // TODO: check issue #89
+                                diskIndices
+                            
+                        let! itemStatuses = indices |> Array.map (getItemStatus expectedArtefact) |> Async.Parallel
+                        let toRet =
+                            Array.map2 (fun index status -> {ArtefactId = artefact.Id; Index = index; Status = linkStatusToCommandVertextStatus status}) diskIndices itemStatuses
+                            |> Seq.map (fun x -> x :> Artefact)
+                            |> List.ofSeq
+                        return toRet
+                }
             
             return seq{ yield (result, null) }
         } |> Async.RunSynchronously
@@ -70,7 +100,7 @@ type CommandMethod(command: CommandLineVertex,
     override s.Execute(inputs, _) = //ignoring checkpoint.
         async{
             // Rules of execution
-            // The artefact is valid either if actual disk version matches expected version or if the disk version is absend and expected version is restorable from storage
+            // The artefact is valid either if actual disk version matches expected version or if the disk version is absent and expected version is restorable from storage
             // We can bypass the computation entirely if inputs and outputs are valid
             
             let inputItems = inputs |> List.map (fun inp -> inp :?> ArtefactItem)

@@ -247,20 +247,25 @@ and LinkToArtefact(artefact: ArtefactVertex, expectedVersion: ArtefactVersion) =
     member s.AnalyzeStatus checkStoragePresence (index: string list) =    
         if index.Length <> artefact.Rank then invalidArg "index" "Index doesn't correspond to the rank of the artefact"
         async {
-            let expectedVersion = MdMap.find index expected
             let! artefactItemActualVersion = artefact.ActualVersion.Get index
-            let expectation =
-                match expectedVersion with
-                |   None -> NoVersionExpected
-                |   Some(expVer) -> ExpectedAndActual(expVer,artefactItemActualVersion)
-            let! status = findExpectedArtefacts checkStoragePresence (Seq.singleton expectation)
-            match status with
-            |   SomeAreLocalUnexpected -> return LocalUnexpected
-            |   SomeAreNotFound -> return NotFound
-            |   AllExist items ->
-                match List.head items with
-                |   ArtefactLocation.Local -> return LinkToArtefactStatus.Local
-                |   ArtefactLocation.Remote -> return LinkToArtefactStatus.Remote
+            match MdMap.tryFind index expected with
+            |   None ->
+                match artefactItemActualVersion with
+                |   Some(_) -> return LinkToArtefactStatus.Local // something is on disk, but no expected version
+                |   None -> return LinkToArtefactStatus.NotFound
+            |   Some(expectedVersion) ->
+                let expectation =
+                    match expectedVersion with
+                    |   None -> NoVersionExpected
+                    |   Some(expVer) -> ExpectedAndActual(expVer,artefactItemActualVersion)
+                let! status = findExpectedArtefacts checkStoragePresence (Seq.singleton expectation)
+                match status with
+                |   SomeAreLocalUnexpected -> return LocalUnexpected
+                |   SomeAreNotFound -> return NotFound
+                |   AllExist items ->
+                    match List.head items with
+                    |   ArtefactLocation.Local -> return LinkToArtefactStatus.Local
+                    |   ArtefactLocation.Remote -> return LinkToArtefactStatus.Remote
         }
 
     /// Makes the link to expect the actual version.

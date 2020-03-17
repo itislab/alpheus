@@ -107,6 +107,28 @@ type ``Vector scenarios``(output) as this =
         }
 
     [<Fact>]
+    member s.``Absense of source vertex artefact is a user error``() =
+        async {
+            let root = s.ExperimentRoot 
+            do! prepareSources(root)
+
+            Directory.CreateDirectory(Path.Combine(root,"data2")) |> ignore
+
+            let! res = API.buildAsync root root ["base.txt"; "data2/*.txt"] ["output/out*.txt"] concatCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res // build is ok
+
+            let outputId = ArtefactId.Path "output/out*.txt"
+            let res = API.compute (root, outputId) // but compute is not, as no files match "data2/*.txt"
+            
+            match res with
+            |   Ok() -> Assert.True(false, "compute op is expected to fail but succeeded")
+            |   Error er ->
+                match er with
+                |   SystemError se -> Assert.True(false, "compute op is expected to fail with user error, but failed with system error") 
+                |   UserError ue -> ()
+        }
+
+    [<Fact>]
     member s.``Re-Runs same method upon input changes``() =
         async {
             let root = s.ExperimentRoot 
@@ -132,6 +154,23 @@ type ``Vector scenarios``(output) as this =
             "Base fileFile 2" |> assertFileContent (Path.Combine(root, "output", "out2.txt"))
             "Base fileFile 3" |> assertFileContent (Path.Combine(root, "output", "out3.txt"))
 
+        }
+
+    [<Fact>]
+    member s.``Getting up-to-date local status of the vector``() =
+        async {
+            let root = s.ExperimentRoot 
+            do! prepareSources(root)
+
+            let! res = API.buildAsync root root ["base.txt"; "data/*.txt"] ["output/out*.txt"] concatCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res
+
+            let outputId = ArtefactId.Path "output/out*.txt"
+            let res = API.compute (root, outputId)
+            assertResultOk res
+
+            let res = API.status(root,outputId)
+            assertResultOk res
         }
 
     [<Fact>]

@@ -29,12 +29,14 @@ type SourceMethod(source: SourceVertex, experimentRoot,
         async {
             let expectedArtefact = source.Output
             let artefact = expectedArtefact.Artefact
-            let items = artefact.Id |> PathUtils.enumerateItems experimentRoot
+            let diskItems = artefact.Id |> PathUtils.enumerateItems experimentRoot
 
             // if alph file exists on disk (e.g. isTracked), we need to re-save it to update the expected version
             let alphExists = source.Output.Artefact.Id |> PathUtils.idToAlphFileFullPath source.ExperimentRoot |> File.Exists
             if alphExists then
-                let itemsIndex = items |> MdMap.toSeq |> Seq.map fst
+                let itemsIndex = diskItems |> MdMap.toSeq |> Seq.map fst
+                // TODO:    what of there is index shrinkage? e.g. index "10" existed previously (in alph file) but now there are only 0..9 on disk?
+                //          issue #89 exists for that
                 let expectActualOnlyForExistent index =
                     async {
                         let! actualVersion = source.Output.Artefact.ActualVersion.Get index
@@ -44,14 +46,20 @@ type SourceMethod(source: SourceVertex, experimentRoot,
                     }
                 let expect = itemsIndex |> Seq.map expectActualOnlyForExistent
                 do! expect |> Async.Parallel |> Async.Ignore
-                artefact.SaveAlphFile()            
+                artefact.SaveAlphFile()
+            else
+                // alph file is not on disk
+                // for the vector we need to check, that it's not of zero length
+                if (not diskItems.IsScalar) && ((MdMap.toShallowSeq diskItems |> Seq.isEmpty)) then
+                    raise (ZeroLengthVectorException(sprintf "Nothing on disk matches the vector mask for the %O" artefact))
+
             
             // Output of the method is an scalar or a vector of full paths to the data of the artefact.
             let outputArtefact : Artefact =
-                items
+                diskItems
                 |> toJaggedArrayOrValue (fun (index, fullPath) -> { FullPath = fullPath; Index = index })
-
-            return Seq.singleton ([outputArtefact], null)
+            
+            return Seq.singleton ([outputArtefact], null) // list of single element means single output (possible array if it is vector)
         } |> Async.RunSynchronously
 
 type CommandMethod(command: CommandLineVertex,
@@ -67,7 +75,7 @@ type CommandMethod(command: CommandLineVertex,
             let reducedIndex = fullIndex |> List.truncate (fullIndex.Length-1)
             let path = command.Inputs.[inputN].Artefact.Id |> PathUtils.idToFullPath experimentRoot |> PathUtils.applyIndex reducedIndex
             { FullPath = path; Index = reducedIndex }
-        else failwith "Input is empty (no artefacts to reduce)"
+        else raise (ZeroLengthVectorException("Input is empty (no artefacts to reduce)"))
 
 
     override s.Execute(inputs, _) = // ignoring checkpoints
@@ -225,10 +233,21 @@ let doComputations (g:FlowGraph<AngaraGraphNode<ArtefactItem>>) =
         Ok()
     with
     | :? Control.FlowFailedException as flowExc ->
-        match Seq.tryFind (fun (exc:exn) -> exc :? NonSuccessfulExitCodeException) flowExc.InnerExceptions with
+        let userExceptionTypes = [|
+            // these types of exceptions are reported as user errors
+            // other types are considered as system errors
+            typedefof<NonSuccessfulExitCodeException>;
+            typedefof<ZeroLengthVectorException>;
+            typedefof<ArtefactNotFoundInStoragesException>
+            |]
+        
+        let predicate exc =
+            userExceptionTypes
+            |> Seq.exists (fun t -> t.IsInstanceOfType(exc))
+            
+        match Seq.tryFind predicate flowExc.InnerExceptions with
         | Some(exc) ->
-            let exc2: NonSuccessfulExitCodeException = downcast exc
-            Error(UserError(exc2.Message))
+            Error(UserError(exc.Message))
         | None ->
             let failed = String.Join("\n\t", flowExc.InnerExceptions |> Seq.map(fun e -> e.ToString()))
             Error(SystemError(sprintf "Failed to compute the artefacts: \n\t%s" failed))
