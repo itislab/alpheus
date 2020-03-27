@@ -107,6 +107,46 @@ type ``Vector scenarios``(output) as this =
         }
 
     [<Fact>]
+    member s.``Runs same method for shrinked index``() =
+        // also see issue #89
+        async {
+            let root = s.ExperimentRoot 
+            do! prepareSources(root)
+
+            let! res = API.buildAsync root root ["base.txt"; "data/*.txt"] ["output/out*.txt"] concatCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res
+
+            let outputId = ArtefactId.Path "output/out*.txt"
+            let res = API.compute (root, outputId)
+            assertResultOk res
+
+            "Base fileFile 1" |> assertFileContent (Path.Combine(root, "output", "out1.txt"))
+            "Base fileFile 2" |> assertFileContent (Path.Combine(root, "output", "out2.txt"))
+            "Base fileFile 3" |> assertFileContent (Path.Combine(root, "output", "out3.txt"))
+
+            Logger.logInfo Logger.Test "Deleting data/3.txt"
+            // shrinking input index: instead of 3 files in data, we will retain only 2
+            File.Delete(Path.Combine(root,"data","3.txt"))
+
+            //running again
+            Logger.logInfo Logger.Test "computing output/out*.txt again"
+            let res = API.compute (root, outputId)
+            assertResultOk res
+
+            Assert.False(File.Exists(Path.Combine(root,"output","out3.txt")))
+
+            // Checks the output alph file:
+            let alph = AlphFiles.tryLoad (PathUtils.idToAlphFileFullPath root outputId) |> Option.get
+            match alph.Origin with 
+            | DataOrigin.CommandOrigin cmd ->
+                cmd.Inputs.[0].Hash.IsScalar.Should().BeTrue("base.txt is scalar") |> ignore
+                (cmd.Inputs.[1].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(2, "2nd input is a vector of 2 elements") |> ignore
+                (cmd.Outputs.[0].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(2, "The output is a vector of 2 elements") |> ignore
+            | _ -> failwith "Unexpected origin"
+        }
+
+
+    [<Fact>]
     member s.``Re-Runs same method upon input changes``() =
         async {
             let root = s.ExperimentRoot 
