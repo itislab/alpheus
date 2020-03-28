@@ -39,6 +39,7 @@ type ActualArtefactVersion(id: ArtefactId, experimentRoot: string) =
         lock versionLock (fun() -> version <- version |> MdMap.add index (lazyReadVersion index))
 
     /// Gets an actual version for the given exact index.
+    /// None means that there is nothing on disk
     member s.Get (index: string list) : Async<HashString option> =
         checkRank index
         let factory = 

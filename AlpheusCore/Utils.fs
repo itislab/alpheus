@@ -45,5 +45,18 @@ let exitResourceGroupMonitor monitors (groupName:string) =
     let simaphore: SemaphoreSlim = Map.find groupName monitors
     simaphore.Release() |> ignore
 
+/// returns the 'map' in which the 'key' is removed.
+/// if there is no element identified with 'key', the same 'map' is returned
+let mdmapRemoveIfDefined (key:'k list) (map:MdMap<'k,'v>) =
+    map
+    |> MdMap.toSeq
+    |> Seq.filter (fun p -> let k,_ = p in k <> key)
+    |> Seq.fold (fun s e -> let k,v = e in MdMap.add k v s) MdMap.empty
 
-
+let mdmapMerge (mapper: 'k list -> 'v option -> 'v option -> 'w) mdmap1 mdmap2 =
+    let firstKeys = mdmap1 |> MdMap.toSeq |> Seq.map fst |> Set.ofSeq
+    let secondKeys = mdmap2 |> MdMap.toSeq |> Seq.map fst |> Set.ofSeq
+    let unionKeys = Set.union firstKeys secondKeys
+    unionKeys
+    |> Seq.map (fun k -> k, (mapper k (MdMap.tryFind k mdmap1) (MdMap.tryFind k mdmap2)))
+    |> Seq.fold (fun s e -> let k,v = e in MdMap.add k v s) MdMap.empty

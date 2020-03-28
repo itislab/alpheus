@@ -12,44 +12,66 @@ open ItisLab.Alpheus.PathUtils
 open ItisLab.Alpheus.AngaraGraphCommon
 open FSharp.Control
 
+type ArtefactItemUpdateType =
+    /// perform computation with this item
+    |   Process
+    /// propagate delete of this item
+    |   Delete
 
 type ArtefactItem =
     { FullPath: string
       Index: string list
+      UpdateType: ArtefactItemUpdateType
       }
 
 type NonSuccessfulExitCodeException(str:string) =
     inherit Exception(str)
 
-type SourceMethod(source: SourceVertex, experimentRoot,
-                    checkStoragePresence : HashString seq -> Async<bool array>) = 
+type SourceMethod(source: SourceVertex, experimentRoot) = 
     inherit AngaraGraphNode<ArtefactItem>(DependencyGraph.Source source)
 
     override s.Execute(_, _) = // ignoring checkpoints
         async {
+            // we need to do two things here
+            // 1. Update Alph file (if needed)
+            // 2. Construct the ArtefactItem[s] and pass them as method result
             let expectedArtefact = source.Output
             let artefact = expectedArtefact.Artefact
-            let items = artefact.Id |> PathUtils.enumerateItems experimentRoot
+            let diskItems = artefact.Id |> PathUtils.enumerateItems experimentRoot
+            let expectedVersions = expectedArtefact.ExpectedVersion
+            let actualIndices = diskItems |> MdMap.toSeq |> Seq.map fst
+            let! actualVersionsStrached = actualIndices |> Seq.map artefact.ActualVersion.Get |> Async.Parallel
+            let actualVersions = Seq.zip actualIndices actualVersionsStrached |> Seq.fold (fun s e -> let k,v = e in MdMap.add k v s) MdMap.empty
 
-            // if alph file exists on disk (e.g. isTracked), we need to re-save it to update the expected version
+            let merger _ expectedOpt actualOpt = expectedOpt,actualOpt
+            let expAndAct = Utils.mdmapMerge merger expectedVersions actualVersions
+
             let alphExists = source.Output.Artefact.Id |> PathUtils.idToAlphFileFullPath source.ExperimentRoot |> File.Exists
+            // 1. Update Alph file (if needed)
+            // if alph file exists on disk (e.g. isTracked), we need to re-save it to update the expected version
             if alphExists then
-                let itemsIndex = items |> MdMap.toSeq |> Seq.map fst
-                let expectActualOnlyForExistent index =
-                    async {
-                        let! actualVersion = source.Output.Artefact.ActualVersion.Get index
-                        match actualVersion with
-                        |   None -> return () // we do nothing for artefacts that are not on disk. e.g. do not expect nothing for source artefact
-                        |   Some _ -> return! source.Output.ExpectActualVersionAsync index
-                    }
-                let expect = itemsIndex |> Seq.map expectActualOnlyForExistent
-                do! expect |> Async.Parallel |> Async.Ignore
-                artefact.SaveAlphFile()            
+                // we need to update (expect actual in) alph file only if there is something on disk
+                // otherwise the artefact can be saved and restored later from storages, so we do not need to override expectations
+                let doUpdateAlphFile = expAndAct |> MdMap.toSeq |> Seq.exists (fun p -> let _,(_,actual) = p in actual.IsSome)
+                if doUpdateAlphFile then
+                    do! expAndAct |> MdMap.toSeq |> Seq.map (fun p -> let idx,_  = p in source.Output.ExpectActualVersionAsync idx) |>  Async.Parallel |> Async.Ignore
+                    artefact.SaveAlphFile()            
+                    Logger.logVerbose Logger.DependencyGraph (sprintf "Written alph file for source artefact (%O), as there is some data for the artefact on disk" source.Output)
             
+            // 2. Constructing the ArtefactItem[s] and pass them as method result
             // Output of the method is an scalar or a vector of full paths to the data of the artefact.
+            let pairToStatus pair =
+                let expectedOp,actualOp = pair
+                match expectedOp,actualOp with
+                |   Some(_),Some(_) -> Process
+                |   Some(_), None -> Delete
+                |   None, Some(_) -> Process
+                |   None,None -> Delete // why this can happen?
+            let idxToPath idx =
+                PathUtils.idToFullPath experimentRoot source.Output.Artefact.Id |> PathUtils.applyIndex idx
             let outputArtefact : Artefact =
-                items
-                |> toJaggedArrayOrValue (fun (index, fullPath) -> { FullPath = fullPath; Index = index })
+                expAndAct
+                |> toJaggedArrayOrValue (fun (index, v) -> { FullPath = idxToPath index; Index = index; UpdateType = pairToStatus v })
 
             return Seq.singleton ([outputArtefact], null)
         } |> Async.RunSynchronously
@@ -66,7 +88,7 @@ type CommandMethod(command: CommandLineVertex,
             let fullIndex = vector.[0].Index
             let reducedIndex = fullIndex |> List.truncate (fullIndex.Length-1)
             let path = command.Inputs.[inputN].Artefact.Id |> PathUtils.idToFullPath experimentRoot |> PathUtils.applyIndex reducedIndex
-            { FullPath = path; Index = reducedIndex }
+            { FullPath = path; Index = reducedIndex; UpdateType=Process } // TODO: use proper UpdateType
         else failwith "Input is empty (no artefacts to reduce)"
 
 
@@ -190,9 +212,9 @@ type CommandMethod(command: CommandLineVertex,
             let outPathToArtefactItem (outputPath:string) : Artefact =
                 if outputPath.Contains('*') then
                     let outputItems = PathUtils.enumeratePath outputPath
-                    outputItems |> toJaggedArrayOrValue (fun (extraIndex, itemFullPath) -> { FullPath = itemFullPath; Index = index @ extraIndex })
+                    outputItems |> toJaggedArrayOrValue (fun (extraIndex, itemFullPath) -> { FullPath = itemFullPath; Index = index @ extraIndex; UpdateType=Process }) // TODO: use proper UpdateType
                 else
-                    upcast { FullPath = outputPath; Index = index }
+                    upcast { FullPath = outputPath; Index = index; UpdateType=Process } // TODO: use proper UpdateType
             let result =  Seq.singleton(outputPaths |> List.map outPathToArtefactItem, null)
             return result
         } |> Async.RunSynchronously
@@ -202,7 +224,7 @@ let buildGraph experimentRoot (g:DependencyGraph.Graph) checkStoragePresence res
     let resourceSemaphores = ref Map.empty
     let factory method : AngaraGraphNode<ArtefactItem> = 
         match method with
-        | DependencyGraph.Source src -> upcast SourceMethod(src, experimentRoot, checkStoragePresence) 
+        | DependencyGraph.Source src -> upcast SourceMethod(src, experimentRoot) 
         | DependencyGraph.Command cmd -> upcast CommandMethod(cmd, experimentRoot, checkStoragePresence, restoreFromStorage, resourceSemaphores)
 
     let flow = g |> DependencyGraphToAngaraWrapper |> AngaraTranslator.translate factory
