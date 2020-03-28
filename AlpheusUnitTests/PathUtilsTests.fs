@@ -168,6 +168,55 @@ type PathUtilsTests(output) =
         let artefactId = pathToId s.RelativeExperimentRoot Environment.CurrentDirectory alphFilePath 
         Assert.Equal(relativePath s.RelativeExperimentRoot artefactPath, idToExperimentPath artefactId)
 
+    [<Fact>]
+    member s.``deletePath deletes file artefact``() =
+        async {
+            let filePath = Path.Combine(s.ExperimentRoot,"1.txt")
+            do! File.WriteAllTextAsync(filePath,"test String!!!") |> Async.AwaitTask
+            Assert.True(File.Exists(filePath))
+            PathUtils.deletePath filePath
+            Assert.False(File.Exists(filePath))
+        }
+
+    [<Fact>]
+    member s.``deletePath deletes dir artefact``() =
+        async {
+            let dirPath = Path.Combine(s.ExperimentRoot,"dir1/")
+            Directory.CreateDirectory(dirPath) |> ignore
+            let filePath = Path.Combine(s.ExperimentRoot,"dir1","file1.txt")
+            do! File.WriteAllTextAsync(filePath,"test String!!!") |> Async.AwaitTask
+            Assert.True(Directory.Exists(dirPath))
+            PathUtils.deletePath dirPath
+            Assert.False(Directory.Exists(dirPath))
+        }
+
+    [<Fact>]
+    member s.``deletePath deletes hash file for file artefact``() =
+        async {
+            let filePath = Path.Combine(s.ExperimentRoot,"1.txt")
+            do! File.WriteAllTextAsync(filePath,"test String!!!") |> Async.AwaitTask
+            do! Hash.hashPathAndSave filePath |> Async.Ignore
+            let fileHashPath = pathToHashFile filePath
+            Assert.True(File.Exists(fileHashPath))
+            PathUtils.deletePath filePath
+            Assert.False(File.Exists(fileHashPath))
+        }
+
+    [<Fact>]
+    member s.``deletePath deletes hash file for dir artefact``() =
+        async {
+            let dirPath = Path.Combine(s.ExperimentRoot,"dir1/")
+            Directory.CreateDirectory(dirPath) |> ignore
+            let filePath = Path.Combine(s.ExperimentRoot,"dir1","file1.txt")
+            do! File.WriteAllTextAsync(filePath,"test String!!!") |> Async.AwaitTask
+            do! Hash.hashPathAndSave dirPath |> Async.Ignore
+            let dirHashPath = pathToHashFile dirPath
+            Assert.True(File.Exists(dirHashPath))
+            PathUtils.deletePath dirPath
+            Assert.False(File.Exists(dirHashPath))
+        }
+        
+
     [<Theory>]
     [<InlineData(TargetPlatform.Windows, @"c:\experiment\source\test.csv", @"c:\experiment\source\test.csv.alph")>]
     [<InlineData(TargetPlatform.Windows, @"c:\experiment\source\test\", @"c:\experiment\source\test.alph")>]
