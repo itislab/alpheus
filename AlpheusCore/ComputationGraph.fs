@@ -12,44 +12,82 @@ open ItisLab.Alpheus.PathUtils
 open ItisLab.Alpheus.AngaraGraphCommon
 open FSharp.Control
 
+type ArtefactItemUpdateType =
+    /// perform computation with this item
+    |   Process
+    /// propagate delete of this item
+    |   Delete
 
 type ArtefactItem =
     { FullPath: string
       Index: string list
+      UpdateType: ArtefactItemUpdateType
       }
 
 type NonSuccessfulExitCodeException(str:string) =
     inherit Exception(str)
 
-type SourceMethod(source: SourceVertex, experimentRoot,
-                    checkStoragePresence : HashString seq -> Async<bool array>) = 
+type SourceMethod(source: SourceVertex, experimentRoot) = 
     inherit AngaraGraphNode<ArtefactItem>(DependencyGraph.Source source)
 
     override s.Execute(_, _) = // ignoring checkpoints
         async {
+            // we need to do two things here
+            // 1. Update Alph file (if needed)
+            // 2. Construct the ArtefactItem[s] and pass them as method result
             let expectedArtefact = source.Output
             let artefact = expectedArtefact.Artefact
-            let items = artefact.Id |> PathUtils.enumerateItems experimentRoot
+            let diskItems = artefact.Id |> PathUtils.enumerateItems experimentRoot
+            let expectedVersions = expectedArtefact.ExpectedVersion
+            let actualIndices = diskItems |> MdMap.toSeq |> Seq.map fst
+            let! actualVersionsStrached = actualIndices |> Seq.map artefact.ActualVersion.Get |> Async.Parallel
+            let actualVersions = Seq.zip actualIndices actualVersionsStrached |> Seq.fold (fun s e -> let k,v = e in MdMap.add k v s) MdMap.empty
 
-            // if alph file exists on disk (e.g. isTracked), we need to re-save it to update the expected version
+            let merger _ expectedOpt actualOpt = (Option.flatten expectedOpt), (Option.flatten actualOpt)
+            let expAndAct = Utils.mdmapMerge merger expectedVersions actualVersions
+
             let alphExists = source.Output.Artefact.Id |> PathUtils.idToAlphFileFullPath source.ExperimentRoot |> File.Exists
-            if alphExists then
-                let itemsIndex = items |> MdMap.toSeq |> Seq.map fst
-                let expectActualOnlyForExistent index =
-                    async {
-                        let! actualVersion = source.Output.Artefact.ActualVersion.Get index
-                        match actualVersion with
-                        |   None -> return () // we do nothing for artefacts that are not on disk. e.g. do not expect nothing for source artefact
-                        |   Some _ -> return! source.Output.ExpectActualVersionAsync index
-                    }
-                let expect = itemsIndex |> Seq.map expectActualOnlyForExistent
-                do! expect |> Async.Parallel |> Async.Ignore
-                artefact.SaveAlphFile()            
+            // 1. Update Alph file (if needed)
+            // if alph file exists on disk (e.g. isTracked), we need to re-save it to update the expected version
+            // also we need to save alph file in case we have vector output. It is needed to track which indices were generate on previous run
+            // on the updated data run, the indices that disapperead will be propagated as delete operation
+            if alphExists || (not expAndAct.IsScalar) then
+                // we need to update (expect actual in) alph file only if there is something on disk
+                // otherwise the artefact can be saved and restored later from storages, so we do not need to override expectations
+                let doUpdateAlphFile = expAndAct |> MdMap.toSeq |> Seq.exists (fun p -> let _,(_,actual) = p in actual.IsSome)
+                if doUpdateAlphFile then
+                    do! expAndAct |> MdMap.toSeq |> Seq.map (fun p -> let idx,_  = p in source.Output.ExpectActualVersionAsync idx) |>  Async.Parallel |> Async.Ignore
+                    Logger.logVerbose Logger.DependencyGraph (sprintf "Written alph file for source artefact (%O), as there is some data for the artefact on disk" source.Output)
+                artefact.SaveAlphFile()
             
+            // 2. Constructing the ArtefactItem[s] and pass them as method result
             // Output of the method is an scalar or a vector of full paths to the data of the artefact.
+            let pairToStatus pair =
+                let expectedOp,actualOp = pair
+                match expectedOp,actualOp with
+                |   Some(_),Some(_) -> Process
+                |   Some(_), None -> Delete
+                |   None, Some(_) -> Process
+                |   None,None -> Delete // why this can happen?
+            let diskItemExists pair =
+                let expectedOp,(actualOp:'a option) = pair
+                actualOp.IsSome
+            let idxToPath idx =
+                PathUtils.idToFullPath experimentRoot source.Output.Artefact.Id |> PathUtils.applyIndex idx
             let outputArtefact : Artefact =
-                items
-                |> toJaggedArrayOrValue (fun (index, fullPath) -> { FullPath = fullPath; Index = index })
+                if expAndAct.IsScalar then
+                    // in case of scalar we do not utilize vector element delete feature. Thus always process
+                    upcast { FullPath = idxToPath []; Index = []; UpdateType = Process }
+                else
+                    let itemMapper =
+                        let vectorIsNotEmpty = expAndAct |> MdMap.toSeq |> Seq.exists (fun p -> let _,v = p in diskItemExists v )
+                        if vectorIsNotEmpty then
+                            (fun (index, v) -> { FullPath = idxToPath index; Index = index; UpdateType = pairToStatus v })
+                        else
+                            // nothing is on disk. We hope the vector will be restored from storages. Thus Update type is not 'delete'
+                            (fun (index, _) -> { FullPath = idxToPath index; Index = index; UpdateType = Process }) 
+                    expAndAct
+                    |> toJaggedArrayOrValue itemMapper
 
             return Seq.singleton ([outputArtefact], null)
         } |> Async.RunSynchronously
@@ -66,7 +104,7 @@ type CommandMethod(command: CommandLineVertex,
             let fullIndex = vector.[0].Index
             let reducedIndex = fullIndex |> List.truncate (fullIndex.Length-1)
             let path = command.Inputs.[inputN].Artefact.Id |> PathUtils.idToFullPath experimentRoot |> PathUtils.applyIndex reducedIndex
-            { FullPath = path; Index = reducedIndex }
+            { FullPath = path; Index = reducedIndex; UpdateType=Process } // is it valid to always treat reduce as process and never as delete?
         else failwith "Input is empty (no artefacts to reduce)"
 
 
@@ -78,8 +116,11 @@ type CommandMethod(command: CommandLineVertex,
         
            
             // If any input, output is not valid we need to
-            //  1) restore inputs if they are absent on disk
-            //  2) execute the command
+            //  if input status brings 'delete'
+            //      1) we need to propagate the delete: delete disk content, output in delete ArtefactItem
+            //  otherwise
+            //      1) restore inputs if they are absent on disk
+            //      2) execute the command
             
             let inputItems = inputs |> List.mapi (fun i inp -> 
                 match inp with
@@ -101,100 +142,133 @@ type CommandMethod(command: CommandLineVertex,
             let logError str = Logger.logError Logger.Execution (sprintf "%s%A: %s" methodItemId index str)
             logVerbose "Started"
 
+            let deletedIndices =
+                let isDelete = function
+                    |   Delete -> true
+                    |   Process -> false
+                inputItems |> Seq.filter (fun item -> isDelete item.UpdateType) |> Seq.map (fun x -> x.Index) |> Seq.distinct |> Array.ofSeq
+
+
             // Build the full output paths by applying the index of this method.
             // Note that in case of scatter, these still might contain '*'
             let outputPaths = 
                 command.Outputs // the order is important here
                 |> List.map(fun out -> out.Artefact.Id |> PathUtils.idToFullPath experimentRoot |> applyIndex index)
+            if not (Array.isEmpty deletedIndices) then
+                // we need to delete the outputs in order to propagate input
+                logVerbose (sprintf "Deleting the outputs as input was deleted in vectorized operation")
+                let deleteDiskData (outputPath:string) =
+                    let deletePath path =
+                        logVerbose (sprintf "Deleting path %s" path)
+                        PathUtils.deletePath path
+                    if outputPath.Contains('*') then
+                        let outputItems = PathUtils.enumeratePath outputPath
+                        let paths = outputItems |> MdMap.toSeq |> Seq.map snd
+                        paths |> Seq.iter deletePath
+                    else
+                        deletePath outputPath
+                outputPaths |> Seq.iter deleteDiskData
 
-            let! currentVertexStatus = getCommandVertexStatus checkStoragePresence command index
+                do! command.OnSucceeded(index) // we erase the expectations for current index
+
+                let outPathToArtefactItem (outputPath:string) : Artefact =
+                    if outputPath.Contains('*') then
+                        let outputItems = PathUtils.enumeratePath outputPath
+                        outputItems |> toJaggedArrayOrValue (fun (extraIndex, itemFullPath) -> { FullPath = itemFullPath; Index = index @ extraIndex; UpdateType=Delete }) 
+                    else
+                        upcast { FullPath = outputPath; Index = index; UpdateType=Delete }
+                return Seq.singleton(outputPaths |> List.map outPathToArtefactItem, null)
+            else
+                // not vector element delete branch
+                let! currentVertexStatus = getCommandVertexStatus checkStoragePresence command index
        
-            match currentVertexStatus with
-            |   Outdated _ ->
-                // We need to do computation            
-                // 1) clearing the outputs if they exist   
-                // 2) restoring inputs from storage if it is needed
-                // 3) execute external command
-                // 4) upon 0 exit code hash the outputs
-                // 5) fill in corresponding method vertex (to fix proper versions)
-                // 6) write alph files for outputs
+                match currentVertexStatus with
+                |   Outdated _ ->
+                    // We need to do computation            
+                    // 1) clearing the outputs if they exist   
+                    // 2) restoring inputs from storage if it is needed
+                    // 3) execute external command
+                    // 4) upon 0 exit code hash the outputs
+                    // 5) fill in corresponding method vertex (to fix proper versions)
+                    // 6) write alph files for outputs
 
-                // 1) Deleting outputs
-                let recreatePath path =                    
-                    if not command.DoNotCleanOutputs then
-                        deletePath path
-                    ensureDirectories path
+                    // 1) Deleting outputs
+                    let recreatePath path =                    
+                        if not command.DoNotCleanOutputs then
+                            deletePath path
+                        ensureDirectories path
                 
-                outputPaths |> List.iter (fun path -> 
-                    if path.Contains '*' then 
-                        enumeratePath path |> MdMap.toSeq |> Seq.iter(fun (i,fullPath) -> recreatePath fullPath)
-                    else 
-                        recreatePath path)
+                    outputPaths |> List.iter (fun path -> 
+                        if path.Contains '*' then 
+                            enumeratePath path |> MdMap.toSeq |> Seq.iter(fun (i,fullPath) -> recreatePath fullPath)
+                        else 
+                            recreatePath path)
 
-                // 2) restoring inputs from storage if it is needed
-                let! hashesToRestorePerInput = 
-                    command.Inputs 
-                    |> Seq.map(getPathsToRestore index)
-                    |> Async.Parallel
-                let hashesToRestore =
-                    hashesToRestorePerInput
-                    |> Array.collect List.toArray
-                    |> Array.map(fun (path, hash) -> hash, path)
-                if Array.length hashesToRestore > 0 then
-                    let ct = logLongRunningStart (sprintf "Restoring missing inputs from storage...")
-                    do! restoreFromStorage hashesToRestore
-                    logLongRunningFinish ct (sprintf "Inputs are restored")
+                    // 2) restoring inputs from storage if it is needed
+                    let! hashesToRestorePerInput = 
+                        command.Inputs 
+                        |> Seq.map(getPathsToRestore index)
+                        |> Async.Parallel
+                    let hashesToRestore =
+                        hashesToRestorePerInput
+                        |> Array.collect List.toArray
+                        |> Array.map(fun (path, hash) -> hash, path)
+                    if Array.length hashesToRestore > 0 then
+                        let ct = logLongRunningStart (sprintf "Restoring missing inputs from storage...")
+                        do! restoreFromStorage hashesToRestore
+                        logLongRunningFinish ct (sprintf "Inputs are restored")
 
 
-                // 3) executing a command
-                let mutable exitCode = 0
-                let mutable aquiredResources = Set.empty
-                let mutable aquiringResources = Set.empty
-                try
-                    // acquiring resource semaphores
-                    let resourcesCt = logLongRunningStart "Waiting for system resources quota to become available"
-                    for resorceAqcAsync,resName in command.ResourceGroups |> Seq.sort |> Seq.map (fun g -> (Utils.enterResourceGroupMonitorAsync resourceSemaphores g),g) do
-                        aquiringResources <- Set.add resName aquiringResources
-                        do! resorceAqcAsync // in is crucial to lock the resources sequential and in ordered manner to prevent deadlocks
-                        aquiredResources <- Set.add resName aquiredResources
-                        logVerbose (sprintf "Got resource: %s" resName)
+                    // 3) executing a command
+                    let mutable exitCode = 0
+                    let mutable aquiredResources = Set.empty
+                    let mutable aquiringResources = Set.empty
+                    try
+                        // acquiring resource semaphores
+                        let resourcesCt = logLongRunningStart "Waiting for system resources quota to become available"
+                        for resorceAqcAsync,resName in command.ResourceGroups |> Seq.sort |> Seq.map (fun g -> (Utils.enterResourceGroupMonitorAsync resourceSemaphores g),g) do
+                            aquiringResources <- Set.add resName aquiringResources
+                            do! resorceAqcAsync // in is crucial to lock the resources sequential and in ordered manner to prevent deadlocks
+                            aquiredResources <- Set.add resName aquiredResources
+                            logVerbose (sprintf "Got resource: %s" resName)
 
-                    logLongRunningFinish resourcesCt "Obtained needed system resources quota"
-                    let print (s:string) = Logger.logInfo Logger.ExecutionOutput s
-                    let input idx = command.Inputs.[idx-1].Artefact.Id |> idToFullPath experimentRoot |> applyIndex index
-                    let output idx = command.Outputs.[idx-1].Artefact.Id |> idToFullPath experimentRoot |> applyIndex index
-                    let context : ComputationContext = { ExperimentRoot = experimentRoot; Print = print }
-                    let! exitCode2 = command |> ExecuteCommand.runCommandLineMethodAndWaitAsync context (input, output) 
-                    exitCode <- exitCode2
-                finally
-                    // releasing resource semaphores
-                    let notAquired = Set.difference aquiringResources aquiredResources
-                    if not (Set.isEmpty notAquired) then                        
-                        logError <| sprintf "Method could not success as failed to obtain the following resources: %A" notAquired
-                    aquiredResources |> Seq.iter (fun g -> Utils.exitResourceGroupMonitor (!resourceSemaphores) g)
+                        logLongRunningFinish resourcesCt "Obtained needed system resources quota"
+                        let print (s:string) = Logger.logInfo Logger.ExecutionOutput s
+                        let input idx = command.Inputs.[idx-1].Artefact.Id |> idToFullPath experimentRoot |> applyIndex index
+                        let output idx = command.Outputs.[idx-1].Artefact.Id |> idToFullPath experimentRoot |> applyIndex index
+                        let context : ComputationContext = { ExperimentRoot = experimentRoot; Print = print }
+                        let! exitCode2 = command |> ExecuteCommand.runCommandLineMethodAndWaitAsync context (input, output) 
+                        exitCode <- exitCode2
+                    finally
+                        // releasing resource semaphores
+                        let notAquired = Set.difference aquiringResources aquiredResources
+                        if not (Set.isEmpty notAquired) then                        
+                            logError <| sprintf "Method could not success as failed to obtain the following resources: %A" notAquired
+                        aquiredResources |> Seq.iter (fun g -> Utils.exitResourceGroupMonitor (!resourceSemaphores) g)
 
-                // 4) upon successful exit code hash the outputs
-                if not (Seq.exists (fun x -> exitCode = x) command.SuccessfulExitCodes) then
-                    raise(NonSuccessfulExitCodeException(sprintf "Process exited with non-successful exit code %d" exitCode))
-                else
-                    logInfo "Method succeeded"
-                    logVerbose (sprintf "Program succeeded. Calculating hashes of the outputs...")
-                    // 5a) hashing outputs disk content                
-                    // 5b) updating dependency versions in dependency graph
-                    // 6) dumping updated alph files to disk
-                    do! command.OnSucceeded(index)                    
-            |   UpToDate _ ->
-                logInfo "Up to date"
-            //comp.Outputs |> Seq.map (fun (output:DependencyGraph.VersionedArtefact) -> output.ExpectedVersion) |> List.ofSeq
+                    // 4) upon successful exit code hash the outputs
+                    if not (Seq.exists (fun x -> exitCode = x) command.SuccessfulExitCodes) then
+                        raise(NonSuccessfulExitCodeException(sprintf "Process exited with non-successful exit code %d" exitCode))
+                    else
+                        logInfo "Method succeeded"
+                        logVerbose (sprintf "Program succeeded. Calculating hashes of the outputs...")
+                        // 5a) hashing outputs disk content                
+                        // 5b) updating dependency versions in dependency graph
+                        // 6) dumping updated alph files to disk
+                        do! command.OnSucceeded(index)
+                |   UpToDate _ ->
+                    logInfo "Up to date"
+                //comp.Outputs |> Seq.map (fun (output:DependencyGraph.VersionedArtefact) -> output.ExpectedVersion) |> List.ofSeq
 
-            let outPathToArtefactItem (outputPath:string) : Artefact =
-                if outputPath.Contains('*') then
-                    let outputItems = PathUtils.enumeratePath outputPath
-                    outputItems |> toJaggedArrayOrValue (fun (extraIndex, itemFullPath) -> { FullPath = itemFullPath; Index = index @ extraIndex })
-                else
-                    upcast { FullPath = outputPath; Index = index }
-            let result =  Seq.singleton(outputPaths |> List.map outPathToArtefactItem, null)
-            return result
+                let outPathToArtefactItem (outputPath:string) : Artefact =
+                    if outputPath.Contains('*') then
+                        let outputItems = PathUtils.enumeratePath outputPath
+                        outputItems |> toJaggedArrayOrValue (fun (extraIndex, itemFullPath) -> { FullPath = itemFullPath; Index = index @ extraIndex; UpdateType=Process })
+                    else
+                        upcast { FullPath = outputPath; Index = index; UpdateType=Process }
+                return Seq.singleton(outputPaths |> List.map outPathToArtefactItem, null)
+                    
+                
         } |> Async.RunSynchronously
 
 
@@ -202,7 +276,7 @@ let buildGraph experimentRoot (g:DependencyGraph.Graph) checkStoragePresence res
     let resourceSemaphores = ref Map.empty
     let factory method : AngaraGraphNode<ArtefactItem> = 
         match method with
-        | DependencyGraph.Source src -> upcast SourceMethod(src, experimentRoot, checkStoragePresence) 
+        | DependencyGraph.Source src -> upcast SourceMethod(src, experimentRoot) 
         | DependencyGraph.Command cmd -> upcast CommandMethod(cmd, experimentRoot, checkStoragePresence, restoreFromStorage, resourceSemaphores)
 
     let flow = g |> DependencyGraphToAngaraWrapper |> AngaraTranslator.translate factory
