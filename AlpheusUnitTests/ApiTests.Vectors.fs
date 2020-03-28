@@ -145,6 +145,47 @@ type ``Vector scenarios``(output) as this =
             | _ -> failwith "Unexpected origin"
         }
 
+    [<Fact>]
+    member s.``Runs same method for changed index``() =
+        // also see issue #89
+        async {
+            let root = s.ExperimentRoot 
+            do! prepareSources(root)
+
+            let! res = API.buildAsync root root ["base.txt"; "data/*.txt"] ["output/out*.txt"] concatCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res
+
+            let outputId = ArtefactId.Path "output/out*.txt"
+            let res = API.compute (root, outputId)
+            assertResultOk res
+
+            "Base fileFile 1" |> assertFileContent (Path.Combine(root, "output", "out1.txt"))
+            "Base fileFile 2" |> assertFileContent (Path.Combine(root, "output", "out2.txt"))
+            "Base fileFile 3" |> assertFileContent (Path.Combine(root, "output", "out3.txt"))
+
+            Logger.logInfo Logger.Test "Renaming data/2.txt into data/4.txt"
+            File.Move(Path.Combine(root,"data","2.txt"),Path.Combine(root,"data","4.txt"))
+            
+            //running again
+            Logger.logInfo Logger.Test "computing output/out*.txt again"
+            let res = API.compute (root, outputId)
+            assertResultOk res
+
+            Assert.False(File.Exists(Path.Combine(root,"output","out2.txt")))
+            Assert.True(File.Exists(Path.Combine(root,"output","out4.txt")))
+
+            // Checks the output alph file:
+            let alph = AlphFiles.tryLoad (PathUtils.idToAlphFileFullPath root outputId) |> Option.get
+            match alph.Origin with 
+            | DataOrigin.CommandOrigin cmd ->
+                cmd.Inputs.[0].Hash.IsScalar.Should().BeTrue("base.txt is scalar") |> ignore
+                (cmd.Inputs.[1].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "2nd input is a vector of 3 elements") |> ignore
+                (cmd.Outputs.[0].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "The output is a vector of 3 elements") |> ignore
+                Assert.True(cmd.Outputs.[0].Hash |> MdMap.toSeq |> Seq.exists (fun x -> let k,v = x in k = ["4"]))
+                Assert.False(cmd.Outputs.[0].Hash |> MdMap.toSeq |> Seq.exists (fun x -> let k,v = x in k = ["2"]))
+            | _ -> failwith "Unexpected origin"
+        }
+
 
     [<Fact>]
     member s.``Re-Runs same method upon input changes``() =

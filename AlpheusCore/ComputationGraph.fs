@@ -80,7 +80,8 @@ type SourceMethod(source: SourceVertex, experimentRoot) =
                     upcast { FullPath = idxToPath []; Index = []; UpdateType = Process }
                 else
                     let itemMapper =
-                        if expAndAct |> MdMap.toSeq |> Seq.exists (fun p -> let _,v = p in diskItemExists v ) then
+                        let vectorIsNotEmpty = expAndAct |> MdMap.toSeq |> Seq.exists (fun p -> let _,v = p in diskItemExists v )
+                        if vectorIsNotEmpty then
                             (fun (index, v) -> { FullPath = idxToPath index; Index = index; UpdateType = pairToStatus v })
                         else
                             // nothing is on disk. We hope the vector will be restored from storages. Thus Update type is not 'delete'
