@@ -196,6 +196,10 @@ let deletePath (path:string) =
     else
         if File.Exists path then
             File.Delete path
+    // also deleting hash file if exists
+    let hashFilePath = pathToHashFile path
+    if File.Exists hashFilePath then
+        File.Delete hashFilePath
 
 /// Substitutes index of string values into a pattern command, e.g. "/files/*/*".
 /// Note that index length is allowed to be less or equal to the rank of the command.
