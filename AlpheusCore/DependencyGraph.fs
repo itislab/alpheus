@@ -269,7 +269,14 @@ and LinkToArtefact(artefact: ArtefactVertex, expectedVersion: ArtefactVersion) =
         if index.Length <> artefact.Rank then invalidArg "index" "Index doesn't correspond to the rank of the artefact"
         async {
             let! actual = artefact.ActualVersion.Get index
-            lock lockObj (fun() -> expected <- expected |> MdMap.add index actual)
+            lock lockObj (fun() ->
+                match actual with
+                |   Some(_) ->
+                    expected <- expected |> MdMap.add index actual
+                |   None ->
+                    // deleting this expectation from MdMap
+                    expected <- expected |> Utils.mdmapRemoveIfDefined index
+                )
             return ()
         }
 
