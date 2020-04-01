@@ -49,7 +49,7 @@ with
             match s with
             |   D _ -> "Dependency path (file or folder)"
             |   O _ -> "Output path (file or folder)"
-            |   Resource_Group _ -> "Include current command to some resource group (e.g. \"GPU\", \"DiskIO\", \"RAM\" etc.  any arbitrary string). Space separated strings. Command does not belong to any group by default."
+            |   Resource_Group _ -> "Include current command to some resource group (e.g. \"GPU\", \"DiskIO\", \"RAM\" etc.  any arbitrary string). Space separated strings. Command does not belong to any group by default. There exist special value \'cpu\'. This resource group allows to run as many commands simultaneously as the count of CPU cores available on the local machine. All other group names (arbitrary) allow only single command execution simultaneously."
             |   Disable_Outputs_Clean -> "Make the command responsible for clearing the outputs in case of re-computation. Useful for resumable computations. Default: The outputs are cleaned by alpheus"
             |   Successful_Exit_Codes _ -> "Exit codes (space separated) of the command that are considered as successful computation. Default: 0"
             |   Command _ -> "Command that generates the outputs"
