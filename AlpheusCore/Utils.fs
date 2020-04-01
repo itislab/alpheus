@@ -34,7 +34,11 @@ let enterResourceGroupMonitorAsync monitors (groupName:string) =
         let ss = match Map.tryFind groupName (!monitors) with
                  |  Some(ss) -> ss
                  |  None ->
-                    let ss = new SemaphoreSlim(1)
+                    let permitedCount = 
+                        match groupName.ToLowerInvariant() with
+                        |   "cpu" -> Environment.ProcessorCount
+                        |   _ -> 1
+                    let ss = new SemaphoreSlim(permitedCount)
                     monitors := Map.add groupName ss (!monitors)
                     ss
         simaphore <- ss

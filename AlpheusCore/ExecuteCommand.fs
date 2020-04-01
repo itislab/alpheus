@@ -89,6 +89,7 @@ let runCommandLineMethodAndWaitAsync (context: ComputationContext) (input: int -
     let command = computation.Command.Trim() |> MethodCommand.substitute (input, output)
     let program,args = MethodCommand.split command                 
     let wdAbsPath = context.GetAbsolutePath(computation.WorkingDirectory)
-    runCmdLocallyAsync context.Print computation.MethodId program args wdAbsPath
+    let annotationId = sprintf "%s" (PathUtils.applyIndex context.Index computation.MethodId)
+    runCmdLocallyAsync context.Print annotationId program args wdAbsPath
 
     

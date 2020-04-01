@@ -236,7 +236,7 @@ type CommandMethod(command: CommandLineVertex,
                         let print (s:string) = Logger.logInfo Logger.ExecutionOutput s
                         let input idx = command.Inputs.[idx-1].Artefact.Id |> idToFullPath experimentRoot |> applyIndex index
                         let output idx = command.Outputs.[idx-1].Artefact.Id |> idToFullPath experimentRoot |> applyIndex index
-                        let context : ComputationContext = { ExperimentRoot = experimentRoot; Print = print }
+                        let context : ComputationContext = { ExperimentRoot = experimentRoot; Print = print; Index=index }
                         let! exitCode2 = command |> ExecuteCommand.runCommandLineMethodAndWaitAsync context (input, output) 
                         exitCode <- exitCode2
                     finally
