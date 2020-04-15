@@ -531,7 +531,34 @@ type ``Vector scenarios``(output) as this =
             
             "Base fileFile 1Base fileFile 2Base fileFile 3" |> assertFileContent (Path.Combine(root, "summary.txt"))
         }
-        
+    
+    [<Fact>]
+    member s.``Issue 96: Reduce operation fails if the index from prev run does not exist on disk``() =
+        async {
+            let root = s.ExperimentRoot
+            do! prepareSources(root)
+
+            let! res = API.buildAsync root root ["base.txt"; "data/*.txt"] ["output/*.txt"] concatCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res
+
+            // this one is gather
+            let! res = API.buildAsync root root ["output/*.txt"] ["summary.txt"] concatVectorCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res
+
+            let summaryId = ArtefactId.Path "summary.txt"
+            let res = API.compute (root, summaryId)
+            assertResultOk res
+
+            // now removing index 2
+            File.Delete(Path.Combine(root,"data","2.txt"))
+
+            let res = API.compute (root, summaryId)
+            assertResultOk res
+
+                        
+            ["Base filesample1"; "Base filesample3"] |> concatStrings |> assertFileContent (Path.Combine(root, "summary.txt"))
+        }
+
     [<Fact>]
     member s.``Scatter-reduce: Creates many files and then reduces``() =
         async {
