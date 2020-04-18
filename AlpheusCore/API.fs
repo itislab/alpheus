@@ -346,13 +346,17 @@ let compute (experimentRoot, artefactId) =
                 let restoreSingleItemTreadSafeAsync toRestore =
                     Utils.singleExecutionGuardAsync restoreTasksCache toRestore (restoreSingleItemAsync experimentRoot)
                 let! comp = swapedPairs |> Array.map restoreSingleItemTreadSafeAsync |> Async.Parallel
-                let checker res =
+                let chooser res =
                     match res with
-                    |   Ok _ -> ()
-                    |   Error(e) -> failwith (e.ToString())
+                    |   Ok _ -> None
+                    |   Error(e) -> Some(e)
 
-                Array.iter checker comp
-                return ()
+                let result =
+                    match Array.choose chooser comp |> Seq.tryHead with
+                    |   None -> Ok()
+                    |   Some(res) -> Error(res)
+                    
+                return result
             }
 
         // flow graph to calculate statuses
