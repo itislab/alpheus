@@ -237,7 +237,7 @@ type CommandMethod(command: CommandLineVertex,
                         let input idx = command.Inputs.[idx-1].Artefact.Id |> idToFullPath experimentRoot |> applyIndex index
                         let output idx = command.Outputs.[idx-1].Artefact.Id |> idToFullPath experimentRoot |> applyIndex index
                         let context : ComputationContext = { ExperimentRoot = experimentRoot; Print = print; Index=index }
-                        let! exitCode2 = command |> ExecuteCommand.runCommandLineMethodAndWaitAsync context (input, output) 
+                        let exitCode2 = command |> ExecuteCommand.runCommandLineMethodAndWait context (input, output) 
                         exitCode <- exitCode2
                     finally
                         // releasing resource semaphores
@@ -299,10 +299,17 @@ let doComputations (g:FlowGraph<AngaraGraphNode<ArtefactItem>>) =
         Ok()
     with
     | :? Control.FlowFailedException as flowExc ->
-        match Seq.tryFind (fun (exc:exn) -> exc :? NonSuccessfulExitCodeException) flowExc.InnerExceptions with
-        | Some(exc) ->
-            let exc2: NonSuccessfulExitCodeException = downcast exc
-            Error(UserError(exc2.Message))
+        let userErrorExceptionTypes = [
+            typedefof<NonSuccessfulExitCodeException>;
+            typedefof<ExecuteCommand.MissingExecutableException> ]
+        let innerExtracted = 
+            flowExc.InnerExceptions
+            |> Seq.collect (fun (exc:exn) ->
+                userErrorExceptionTypes
+                |> List.choose (fun t -> if t.IsInstanceOfType(exc) then Some exc.Message else None ))
+        match Seq.tryHead innerExtracted with
+        | Some(message) ->
+            Error(UserError(message))
         | None ->
             let failed = String.Join("\n\t", flowExc.InnerExceptions |> Seq.map(fun e -> e.ToString()))
             Error(SystemError(sprintf "Failed to compute the artefacts: \n\t%s" failed))
