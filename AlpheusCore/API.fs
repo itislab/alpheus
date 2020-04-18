@@ -141,7 +141,7 @@ let private restoreSingleItemAsync experimentRoot (path,versionToRestore) =
         let! restoreSourcesResults = checker [| versionToRestore |]
         let restoreSources = restoreSourcesResults.[0]
         if List.length restoreSources = 0 then
-            return Error (UserError(sprintf "%A:%s is not found in any registered storages" path (versionToRestore.Substring(0,6))))
+            return Error (UserError(sprintf "%A:%s is not found in any registered storages. Are you missing some storage configured?" path (versionToRestore.Substring(0,6))))
         else
             let restoreSource = List.head restoreSources
             logVerbose LogCategory.API (sprintf "Restoring %A:%s from %s storage" path (versionToRestore.Substring(0,6)) restoreSource)
