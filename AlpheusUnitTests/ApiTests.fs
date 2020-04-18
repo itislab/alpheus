@@ -1246,6 +1246,30 @@ type ScalarScenarios(output) =
         }
 
     [<Fact>]
+    member s.``compute: unexistant executable``() =
+        async {      
+            let path = Path.GetFullPath s.ExperimentRoot
+                
+            do! buildExperiment(path)
+                
+            let! buildRes = API.buildAsync path path ["1.txt"; "2.txt"] ["1_copy.txt";] "executablethatdoesnotexist" DependencyGraph.CommandExecutionSettings.Default
+
+            assertResultOk buildRes
+
+            output.WriteLine("TEST: command is built")
+
+            let res = API.compute(path, ArtefactId.Path "1_copy.txt") // computing all
+            let isUserError = 
+                match res with
+                |   Ok() -> false
+                |   Error er ->
+                    match er with
+                    |   SystemError _ -> false
+                    |   UserError _ -> true
+            Assert.True(isUserError, "missing executable should be treated as user error")
+        }
+
+    [<Fact>]
     member s.``compute: 2 outputs of single command``() =
         async {      
             let path = Path.GetFullPath s.ExperimentRoot
