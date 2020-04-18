@@ -1270,6 +1270,46 @@ type ScalarScenarios(output) =
         }
 
     [<Fact>]
+    member s.``missing expected source is a user error``() =
+        // in case the user did not connect proper storage
+        async {      
+            let path = Path.GetFullPath s.ExperimentRoot
+                
+            do! buildExperiment(path)
+                
+            let! buildRes = API.buildAsync path path ["1.txt"; "2.txt"] ["1_copy.txt";"2_copy.txt"] twoOutputsCommand DependencyGraph.CommandExecutionSettings.Default
+
+            assertResultOk buildRes
+
+            output.WriteLine("TEST: command is built")
+
+            let art1ID =  ArtefactId.Path "1.txt"
+            let artOut = ArtefactId.Path "1_copy.txt"
+
+            assertResultOk <| API.compute(path, artOut) // computing all
+
+            output.WriteLine("TEST: artefacts are produced")
+            
+            let! res = API.saveAsync (s.ExperimentRoot, art1ID) None false
+            assertResultOk res
+            
+            Logger.logInfo Logger.Test "now deleting 1.txt from disk and from storage. 1_copy.txt from disk"
+            File.Delete(Path.Combine(s.ExperimentRoot,"1.txt"))
+            File.Delete(Path.Combine(s.ExperimentRoot,"1_copy.txt"))
+            let storageFiles = Directory.EnumerateFiles(Path.Combine(s.ExperimentRoot,".alpheus","storage"))
+            storageFiles |> Seq.map (fun x -> Path.Combine(s.ExperimentRoot,".alpheus","storage",x)) |> Seq.iter File.Delete
+
+            Logger.logInfo Logger.Test "Now computing again, this must trigger user error"
+
+            match API.compute(path, artOut) with
+            |   Ok() -> Assert.True(false, "must fail as input is missing")
+            |   Error er ->
+                match er with
+                |   SystemError _ -> Assert.True(false, "missing expected input must be user error, not system")
+                |   UserError _ -> ()
+        }
+
+    [<Fact>]
     member s.``compute: 2 outputs of single command``() =
         async {      
             let path = Path.GetFullPath s.ExperimentRoot

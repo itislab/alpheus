@@ -27,6 +27,10 @@ type ArtefactItem =
 type NonSuccessfulExitCodeException(str:string) =
     inherit Exception(str)
 
+type StorageRelatedUserError(str:string) =
+    inherit System.Exception(str)
+
+
 type SourceMethod(source: SourceVertex, experimentRoot) = 
     inherit AngaraGraphNode<ArtefactItem>(DependencyGraph.Source source)
 
@@ -95,7 +99,7 @@ type SourceMethod(source: SourceVertex, experimentRoot) =
 type CommandMethod(command: CommandLineVertex,
                     experimentRoot,
                     checkStoragePresence: HashString seq -> Async<bool array>,
-                    restoreFromStorage: (HashString*string) array -> Async<unit>, // version*filename
+                    restoreFromStorage: (HashString*string) array -> Async<Result<unit,AlpheusError>>, // version*filename
                     resourceSemaphores: Map<string,System.Threading.SemaphoreSlim> ref) = 
     inherit AngaraGraphNode<ArtefactItem>(DependencyGraph.Command command)  
 
@@ -215,7 +219,13 @@ type CommandMethod(command: CommandLineVertex,
                         |> Array.map(fun (path, hash) -> hash, path)
                     if Array.length hashesToRestore > 0 then
                         let ct = logLongRunningStart (sprintf "Restoring missing inputs from storage...")
-                        do! restoreFromStorage hashesToRestore
+                        let! restoreResult = restoreFromStorage hashesToRestore
+                        match restoreResult with
+                        |   Ok () -> ()
+                        |   Error(er) -> 
+                            match er with
+                            |   SystemError se -> failwith se
+                            |   UserError ue -> raise (StorageRelatedUserError ue)
                         logLongRunningFinish ct (sprintf "Inputs are restored")
 
 
@@ -301,7 +311,9 @@ let doComputations (g:FlowGraph<AngaraGraphNode<ArtefactItem>>) =
     | :? Control.FlowFailedException as flowExc ->
         let userErrorExceptionTypes = [
             typedefof<NonSuccessfulExitCodeException>;
-            typedefof<ExecuteCommand.MissingExecutableException> ]
+            typedefof<ExecuteCommand.MissingExecutableException>;
+            typedefof<StorageRelatedUserError>
+            ]
         let innerExtracted = 
             flowExc.InnerExceptions
             |> Seq.collect (fun (exc:exn) ->
