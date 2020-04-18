@@ -147,6 +147,11 @@ let getPathsToRestore index (link: LinkToArtefact) =
     async {
         let! actualForExpected = link |> getActualForExpected index
         let artefactPathPattern = link.Artefact.Id |> PathUtils.idToFullPath link.Artefact.ExperimentRoot |> PathUtils.applyIndex index
+        let isEmptyVectorInputForReduce =
+            let isMissingOnDisk = function
+                |   NoVersionExpected -> true
+                |   ExpectedAndActual(_,actualOpt) -> Option.isNone actualOpt
+            actualForExpected |> MdMap.toSeq |> Seq.map snd |> Seq.forall isMissingOnDisk
         let! restoreCandidate =
             actualForExpected 
             |> MdMap.toSeq
@@ -155,7 +160,15 @@ let getPathsToRestore index (link: LinkToArtefact) =
                 match linkExpectation with
                 | ExpectedAndActual(expected,None) ->
                     // we want to consider for restore only those which absent now on disk AND we expect some version of them!
-                    async.Return([|Some(pathToMissing, expected)|])
+                    if (List.length j > 0) && (not isEmptyVectorInputForReduce) then
+                        // that is a reduce where the index "j" existed on prev run, but removed now from disk
+                        // while some other indeces exist at current run. So that't not the case where all of the inpute vector to reduce is missing on disk
+                        async.Return [| None |]
+                    else
+                        // either whole input vector (for reduce) is missing from disk. Thus, restoring all of expected indeces
+                        // or that is not reduce (vector or scalar). It requires restore
+                        async.Return([|Some(pathToMissing, expected)|])
+
                 | ExpectedAndActual(_,Some(act)) ->
                     // input is on disk. We don't care whether the versions match
                     // in any case we do not need to restore

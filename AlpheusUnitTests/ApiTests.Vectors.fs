@@ -556,7 +556,7 @@ type ``Vector scenarios``(output) as this =
             assertResultOk res
 
                         
-            ["Base filesample1"; "Base filesample3"] |> concatStrings |> assertFileContent (Path.Combine(root, "summary.txt"))
+            "Base fileFile 1Base fileFile 3" |> assertFileContent (Path.Combine(root, "summary.txt"))
         }
 
     [<Fact>]
