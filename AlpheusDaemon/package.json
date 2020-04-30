@@ -44,7 +44,7 @@
         "cytoscape-expand-collapse": "^3.1.2",
         "cytoscape-fcose": "^1.0.0",
         "cytoscape-klay": "^3.1.2",
-        "jquery": "^3.4.0",
+        "jquery": "^3.5.0",
         "lodash": "^4.17.13",
         "react": "16.8.6",
         "react-cytoscapejs": "^1.1.0",
