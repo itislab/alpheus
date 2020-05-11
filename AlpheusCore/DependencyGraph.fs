@@ -15,7 +15,6 @@ open Logger
 // As I want vertices to be alphnumerically sorted, but compared by reference
 #nowarn "0346"
 
-
 type ArtefactLocation  =
     /// Artefact can be restored from storage
     |   Remote
@@ -112,7 +111,8 @@ type CommandExecutionSettings = {
 }
 with
     static member Default = 
-        { DoNotCleanOutputs = false
+        {
+          DoNotCleanOutputs = false
           SuccessfulExitCodes = [ 0 ]
           ResourceGroups = Set.empty
           }
@@ -123,6 +123,7 @@ type ArtefactVertex(id:ArtefactId, experimentRoot:string) =
     let mutable usedIn : Set<CommandLineVertex> = Set.empty
     let mutable isTracked = false
     let actualVersion = ActualArtefactVersion(id, experimentRoot)
+    let appliedAction = ArtefactAppliedAction(id)
     let saveLock = obj()
     let rank = Lazy<int>(fun() -> Artefacts.rank id)
 
@@ -147,6 +148,10 @@ type ArtefactVertex(id:ArtefactId, experimentRoot:string) =
     /// Lazy execution. Calculated based on disk data only on the first call. 
     /// Later returns the hashed results, unless ForceActualVersionCalc() is called.
     member s.ActualVersion = actualVersion
+
+    /// what happened to the artefact(or artefact item in case of vector) during the computation.
+    /// Not persisted to disk. Modified when alpheus does computation
+    member s.AppliedAction = appliedAction
 
     member s.Rank = rank.Value
 
@@ -273,9 +278,11 @@ and LinkToArtefact(artefact: ArtefactVertex, expectedVersion: ArtefactVersion) =
                 match actual with
                 |   Some(_) ->
                     expected <- expected |> MdMap.add index actual
+                    artefact.AppliedAction.Set index Recomputed
                 |   None ->
                     // deleting this expectation from MdMap
                     expected <- expected |> Utils.mdmapRemoveIfDefined index
+                    artefact.AppliedAction.Set index Deleted
                 )
             return ()
         }
@@ -385,7 +392,7 @@ and CommandLineVertex(
     /// Reads the actual version of the output artefacts, 
     /// updates the expected versions for the input and output artefacts,
     /// and updates the *.alph file.
-    member s.OnSucceeded(index: string list) : Async<unit> =
+    member s.OnSucceeded(index: string list, isDryRun: bool) : Async<unit> =
         let expectActualStrict index invalidate (link:LinkToArtefact) =
             async {
                 if invalidate then link.Artefact.ActualVersion.Invalidate index
@@ -418,8 +425,11 @@ and CommandLineVertex(
                 |> Seq.map (expectActual index true) 
             do! Seq.append outLinksUpdates inputLinksUpdates |> Async.Parallel |> Async.Ignore            
 
-            logVerbose DependencyGraph (sprintf "Saving alph files for outputs of %A%A" methodId index)
-            s.Outputs |> Seq.iter(fun out -> out.Artefact.SaveAlphFile())
+            if not isDryRun then
+                logVerbose DependencyGraph (sprintf "Saving alph files for outputs of %A%A" methodId index)
+                s.Outputs |> Seq.iter(fun out -> out.Artefact.SaveAlphFile())
+            else
+                logVerbose DependencyGraph (sprintf "Skipping  alph files save (due to dry run) for outputs of %A%A" methodId index)
         }
 
     interface System.IComparable with

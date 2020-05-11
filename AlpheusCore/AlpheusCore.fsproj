@@ -37,6 +37,7 @@
     <Compile Include="ArtefactArchiver.fs" />
     <Compile Include="StorageFactory.fs" />
     <Compile Include="ActualVersion.fs" />
+    <Compile Include="AppliedAction.fs" />
     <Compile Include="DependencyGraph.fs" />
     <Compile Include="DependencyGraphUtils.fs" />
     <Compile Include="DependencyGraphToAngaraWrapper.fs" />

@@ -13,6 +13,10 @@ open ItisLab.Alpheus.AngaraGraphCommon
 open DependencyGraph
 open Angara.Data
 
+// status of the artefacts reflects what will happen if "compute" is executed (e.g. dry run of the compute)
+
+
+
 type ArtefactItem =
     { ArtefactId: ArtefactId
       Index: string list

@@ -100,7 +100,10 @@ type CommandMethod(command: CommandLineVertex,
                     experimentRoot,
                     checkStoragePresence: HashString seq -> Async<bool array>,
                     restoreFromStorage: (HashString*string) array -> Async<Result<unit,AlpheusError>>, // version*filename
-                    resourceSemaphores: Map<string,System.Threading.SemaphoreSlim> ref) = 
+                    resourceSemaphores: Map<string,System.Threading.SemaphoreSlim> ref,
+                    /// Do not actually touch disk content. Just account what would change
+                    isDryRun: bool
+                    ) = 
     inherit AngaraGraphNode<ArtefactItem>(DependencyGraph.Command command)  
 
     let reduceArtefactItem inputN (vector: ArtefactItem[]) : ArtefactItem =
@@ -163,8 +166,11 @@ type CommandMethod(command: CommandLineVertex,
                 logVerbose (sprintf "Deleting the outputs as input was deleted in vectorized operation")
                 let deleteDiskData (outputPath:string) =
                     let deletePath path =
-                        logVerbose (sprintf "Deleting path %s" path)
-                        PathUtils.deletePath path
+                        if not isDryRun then
+                            logVerbose (sprintf "Deleting path %s" path)
+                            PathUtils.deletePath path
+                        else
+                            logVerbose (sprintf "Skipping delete path %s due to dry run" path)
                     if outputPath.Contains('*') then
                         let outputItems = PathUtils.enumeratePath outputPath
                         let paths = outputItems |> MdMap.toSeq |> Seq.map snd
@@ -173,7 +179,7 @@ type CommandMethod(command: CommandLineVertex,
                         deletePath outputPath
                 outputPaths |> Seq.iter deleteDiskData
 
-                do! command.OnSucceeded(index) // we erase the expectations for current index
+                do! command.OnSucceeded(index, isDryRun) // we erase the expectations for current index
 
                 let outPathToArtefactItem (outputPath:string) : Artefact =
                     if outputPath.Contains('*') then
@@ -196,11 +202,18 @@ type CommandMethod(command: CommandLineVertex,
                     // 5) fill in corresponding method vertex (to fix proper versions)
                     // 6) write alph files for outputs
 
+                    let restoreFromStorage = 
+                        if not isDryRun then restoreFromStorage
+                        else
+                            // do actually nothing
+                            fun _ -> async { return Ok()}
+
                     // 1) Deleting outputs
                     let recreatePath path =                    
-                        if not command.DoNotCleanOutputs then
-                            deletePath path
-                        ensureDirectories path
+                        if not isDryRun then
+                            if not command.DoNotCleanOutputs then
+                                    deletePath path                               
+                            ensureDirectories path
                 
                     outputPaths |> List.iter (fun path -> 
                         if path.Contains '*' then 
@@ -218,7 +231,7 @@ type CommandMethod(command: CommandLineVertex,
                         |> Array.collect List.toArray
                         |> Array.map(fun (path, hash) -> hash, path)
                     if Array.length hashesToRestore > 0 then
-                        let ct = logLongRunningStart (sprintf "Restoring missing inputs from storage...")
+                        let ct = logLongRunningStart (if isDryRun then "Skipping inputs restore due to dry run" else "Restoring missing inputs from storage...")
                         let! restoreResult = restoreFromStorage hashesToRestore
                         match restoreResult with
                         |   Ok () -> ()
@@ -226,7 +239,7 @@ type CommandMethod(command: CommandLineVertex,
                             match er with
                             |   SystemError se -> failwith se
                             |   UserError ue -> raise (StorageRelatedUserError ue)
-                        logLongRunningFinish ct (sprintf "Inputs are restored")
+                        logLongRunningFinish ct (sprintf "Inputs restore phase complete")
 
 
                     // 3) executing a command
@@ -261,11 +274,11 @@ type CommandMethod(command: CommandLineVertex,
                         raise(NonSuccessfulExitCodeException(sprintf "Process exited with non-successful exit code %d" exitCode))
                     else
                         logInfo "Method succeeded"
-                        logVerbose (sprintf "Program succeeded. Calculating hashes of the outputs...")
+                        logVerbose (sprintf "Registering successful completion")
                         // 5a) hashing outputs disk content                
                         // 5b) updating dependency versions in dependency graph
                         // 6) dumping updated alph files to disk
-                        do! command.OnSucceeded(index)
+                        do! command.OnSucceeded(index, isDryRun)
                 |   UpToDate _ ->
                     logInfo "Up to date"
                 //comp.Outputs |> Seq.map (fun (output:DependencyGraph.VersionedArtefact) -> output.ExpectedVersion) |> List.ofSeq
