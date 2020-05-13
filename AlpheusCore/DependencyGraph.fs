@@ -269,7 +269,14 @@ and LinkToArtefact(artefact: ArtefactVertex, expectedVersion: ArtefactVersion) =
         if index.Length <> artefact.Rank then invalidArg "index" "Index doesn't correspond to the rank of the artefact"
         async {
             let! actual = artefact.ActualVersion.Get index
-            lock lockObj (fun() -> expected <- expected |> MdMap.add index actual)
+            lock lockObj (fun() ->
+                match actual with
+                |   Some(_) ->
+                    expected <- expected |> MdMap.add index actual
+                |   None ->
+                    // deleting this expectation from MdMap
+                    expected <- expected |> Utils.mdmapRemoveIfDefined index
+                )
             return ()
         }
 
@@ -404,9 +411,11 @@ and CommandLineVertex(
             let outLinksUpdates =
                 s.Outputs 
                 |> Seq.map (expectActual index true) 
+            // for the inputs we need to set invalidate=true to cover the case
+            // when the inputs are restored from up-to-date remote state.
             let inputLinksUpdates =
                 s.Inputs 
-                |> Seq.map (expectActual index false) 
+                |> Seq.map (expectActual index true) 
             do! Seq.append outLinksUpdates inputLinksUpdates |> Async.Parallel |> Async.Ignore            
 
             logVerbose DependencyGraph (sprintf "Saving alph files for outputs of %A%A" methodId index)

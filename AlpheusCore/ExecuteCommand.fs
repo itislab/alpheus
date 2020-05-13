@@ -6,6 +6,9 @@ open ItisLab.Alpheus.Logger
 open ItisLab.Alpheus.AlphFiles
 open DependencyGraph
 
+type MissingExecutableException(str:string) =
+    inherit Exception(str)
+
 /// The processes that have been started by alpheus and need to be terminated upon alpheus termination
 /// process ID -> process object
 let mutable activeSubprocesses: Map<int,Diagnostics.Process> = Map.empty // this is not private for testing
@@ -36,38 +39,39 @@ let terminateAllSubprocesses() =
 /// Executes program as a separate process, capturing stderr and stdout, processing them with print function callback.
 /// Also supplies the output with outputAnnotationId label
 /// workingDir is both the path for looking for the program and workingDir for the new process to be executed
-let runCmdLocallyAsync print outputAnnotationId program args (workingDir:string) =
+let runCmdLocally print outputAnnotationId program args (workingDir:string) =
     if not(Path.IsPathRooted(workingDir)) then
         invalidArg "workingDir" "working directory must be specified as full path"
-    async {
-        let printStream (annotate:string->string) (stream:StreamReader) = 
-            async {
-                do! Async.SwitchToNewThread()
-                while not stream.EndOfStream do
-                    let! line = Async.AwaitTask(stream.ReadLineAsync())
-                    line |> annotate |> print
-            }
+    
+    let printStream (annotate:string->string) (stream:StreamReader) = 
+        async {
+            do! Async.SwitchToNewThread()
+            while not stream.EndOfStream do
+                let! line = Async.AwaitTask(stream.ReadLineAsync())
+                line |> annotate |> print
+        }
         
-        use p = new System.Diagnostics.Process()
-        // There is tricky situation with command (see github issue #1)
-        // sometimes the user specifies "command" as an path to executable relative to the "working directory"
-        // that is the prioritized behavior
-        // if the executable is not found we try to run the "command" searching it in PATH
-        let program = 
-            let absExecutableCandidate = Path.Combine(workingDir,program)
-            if File.Exists(absExecutableCandidate) then
-                absExecutableCandidate
-            else
-                program
-        p.StartInfo.FileName <- program
-        p.StartInfo.Arguments <- args
-        p.StartInfo.WorkingDirectory <- workingDir
-        p.StartInfo.RedirectStandardError <- true
-        p.StartInfo.RedirectStandardOutput <- true
-        p.StartInfo.UseShellExecute <- false
-        p.StartInfo.CreateNoWindow <- true
+    use p = new System.Diagnostics.Process()
+    // There is tricky situation with command (see github issue #1)
+    // sometimes the user specifies "command" as an path to executable relative to the "working directory"
+    // that is the prioritized behavior
+    // if the executable is not found we try to run the "command" searching it in PATH
+    let program = 
+        let absExecutableCandidate = Path.Combine(workingDir,program)
+        if File.Exists(absExecutableCandidate) then
+            absExecutableCandidate
+        else
+            program
+    p.StartInfo.FileName <- program
+    p.StartInfo.Arguments <- args
+    p.StartInfo.WorkingDirectory <- workingDir
+    p.StartInfo.RedirectStandardError <- true
+    p.StartInfo.RedirectStandardOutput <- true
+    p.StartInfo.UseShellExecute <- false
+    p.StartInfo.CreateNoWindow <- true
 
-        logVerbose LogCategory.Execution (formatLine outputAnnotationId (sprintf "Running \"%s %s\" in \"%s\"" program args p.StartInfo.WorkingDirectory))
+    logVerbose LogCategory.Execution (formatLine outputAnnotationId (sprintf "Running \"%s %s\" in \"%s\"" program args p.StartInfo.WorkingDirectory))
+    try
         p.Start() |> ignore
         lock activeSubprocessesLockObj (fun () -> activeSubprocesses <- Map.add p.Id p activeSubprocesses )
         let ct = logVerboseLongRunningStart LogCategory.Execution (formatLine outputAnnotationId (sprintf "Started subprocess (PID=%d)" p.Id))
@@ -80,15 +84,18 @@ let runCmdLocallyAsync print outputAnnotationId program args (workingDir:string)
         finally
             lock activeSubprocessesLockObj (fun () -> activeSubprocesses <- Map.remove p.Id activeSubprocesses)
             logVerboseLongRunningFinish ct LogCategory.Execution (formatLine outputAnnotationId (sprintf "Subprocess (PID=%d) exited with exit code %d" p.Id p.ExitCode))
-        return p.ExitCode
-    }
+        p.ExitCode
+    with
+    | :? System.ComponentModel.Win32Exception as ex -> raise (MissingExecutableException ex.Message)
+    
 
 /// Runs the command line method and waits indefinitely until the process exits.
 /// Returns the exit code.
-let runCommandLineMethodAndWaitAsync (context: ComputationContext) (input: int -> string, output: int -> string) (computation: CommandLineVertex) =
+let runCommandLineMethodAndWait (context: ComputationContext) (input: int -> string, output: int -> string) (computation: CommandLineVertex) =
     let command = computation.Command.Trim() |> MethodCommand.substitute (input, output)
     let program,args = MethodCommand.split command                 
     let wdAbsPath = context.GetAbsolutePath(computation.WorkingDirectory)
-    runCmdLocallyAsync context.Print computation.MethodId program args wdAbsPath
+    let annotationId = sprintf "%s" (PathUtils.applyIndex context.Index computation.MethodId)
+    runCmdLocally context.Print annotationId program args wdAbsPath
 
     

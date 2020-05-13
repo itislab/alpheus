@@ -107,6 +107,146 @@ type ``Vector scenarios``(output) as this =
         }
 
     [<Fact>]
+    member s.``Runs same method for shrinked index``() =
+        // also see issue #89
+        async {
+            let root = s.ExperimentRoot 
+            do! prepareSources(root)
+
+            let! res = API.buildAsync root root ["base.txt"; "data/*.txt"] ["output/out*.txt"] concatCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res
+
+            let outputId = ArtefactId.Path "output/out*.txt"
+            let res = API.compute (root, outputId)
+            assertResultOk res
+
+            "Base fileFile 1" |> assertFileContent (Path.Combine(root, "output", "out1.txt"))
+            "Base fileFile 2" |> assertFileContent (Path.Combine(root, "output", "out2.txt"))
+            "Base fileFile 3" |> assertFileContent (Path.Combine(root, "output", "out3.txt"))
+
+            Logger.logInfo Logger.Test "Deleting data/3.txt"
+            // shrinking input index: instead of 3 files in data, we will retain only 2
+            File.Delete(Path.Combine(root,"data","3.txt"))
+
+            //running again
+            Logger.logInfo Logger.Test "computing output/out*.txt again"
+            let res = API.compute (root, outputId)
+            assertResultOk res
+
+            Assert.False(File.Exists(Path.Combine(root,"output","out3.txt")))
+
+            // Checks the output alph file:
+            let alph = AlphFiles.tryLoad (PathUtils.idToAlphFileFullPath root outputId) |> Option.get
+            match alph.Origin with 
+            | DataOrigin.CommandOrigin cmd ->
+                cmd.Inputs.[0].Hash.IsScalar.Should().BeTrue("base.txt is scalar") |> ignore
+                (cmd.Inputs.[1].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(2, "2nd input is a vector of 2 elements") |> ignore
+                (cmd.Outputs.[0].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(2, "The output is a vector of 2 elements") |> ignore
+            | _ -> failwith "Unexpected origin"
+        }
+
+    [<Fact>]
+    member s.``Runs same method for changed index``() =
+        // also see issue #89
+        async {
+            let root = s.ExperimentRoot 
+            do! prepareSources(root)
+
+            let! res = API.buildAsync root root ["base.txt"; "data/*.txt"] ["output/out*.txt"] concatCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res
+
+            let outputId = ArtefactId.Path "output/out*.txt"
+            let res = API.compute (root, outputId)
+            assertResultOk res
+
+            "Base fileFile 1" |> assertFileContent (Path.Combine(root, "output", "out1.txt"))
+            "Base fileFile 2" |> assertFileContent (Path.Combine(root, "output", "out2.txt"))
+            "Base fileFile 3" |> assertFileContent (Path.Combine(root, "output", "out3.txt"))
+
+            Logger.logInfo Logger.Test "Renaming data/2.txt into data/4.txt"
+            File.Move(Path.Combine(root,"data","2.txt"),Path.Combine(root,"data","4.txt"))
+            
+            //running again
+            Logger.logInfo Logger.Test "computing output/out*.txt again"
+            let res = API.compute (root, outputId)
+            assertResultOk res
+
+            Assert.False(File.Exists(Path.Combine(root,"output","out2.txt")))
+            Assert.True(File.Exists(Path.Combine(root,"output","out4.txt")))
+
+            // Checks the output alph file:
+            let alph = AlphFiles.tryLoad (PathUtils.idToAlphFileFullPath root outputId) |> Option.get
+            match alph.Origin with 
+            | DataOrigin.CommandOrigin cmd ->
+                cmd.Inputs.[0].Hash.IsScalar.Should().BeTrue("base.txt is scalar") |> ignore
+                (cmd.Inputs.[1].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "2nd input is a vector of 3 elements") |> ignore
+                (cmd.Outputs.[0].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "The output is a vector of 3 elements") |> ignore
+                Assert.True(cmd.Outputs.[0].Hash |> MdMap.toSeq |> Seq.exists (fun x -> let k,_ = x in k = ["4"]))
+                Assert.False(cmd.Outputs.[0].Hash |> MdMap.toSeq |> Seq.exists (fun x -> let k,_ = x in k = ["2"]))
+            | _ -> failwith "Unexpected origin"
+        }
+
+    [<Fact>]
+    member s.``Does not issue vector elements delete if currently no vector source elems on disk``() =
+        // consider the situation
+        // I added source vector artefact
+        // I saved it to storage
+        // I cloned the repo on another machine
+        // I run the experiment
+        // Expected: the system download best known saved vector indices to disk
+        // Possible wrong behavior: the system considers the vector as empty (as nothing on disk matches the * pattern)
+        async {
+            let root = s.ExperimentRoot 
+            do! prepareSources(root)
+
+            let! res = API.buildAsync root root ["base.txt"; "data/*.txt"] ["output/out*.txt"] concatCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res
+
+            let dataId = ArtefactId.Path "data/*.txt"
+            let outputId = ArtefactId.Path "output/out*.txt"
+            let res = API.compute (root, outputId)
+            assertResultOk res
+
+            "Base fileFile 1" |> assertFileContent (Path.Combine(root, "output", "out1.txt"))
+            "Base fileFile 2" |> assertFileContent (Path.Combine(root, "output", "out2.txt"))
+            "Base fileFile 3" |> assertFileContent (Path.Combine(root, "output", "out3.txt"))
+
+            Logger.logInfo Logger.Test "saving data/out*.txt"
+
+            let! res = API.saveAsync (root,dataId) None false
+            assertResultOk res
+            
+            Logger.logInfo Logger.Test "Deleting data/*.txt and output/out*.txt"
+            File.Delete(Path.Combine(root,"data","1.txt"))
+            File.Delete(Path.Combine(root,"data","2.txt"))
+            File.Delete(Path.Combine(root,"data","3.txt"))
+            File.Delete(Path.Combine(root,"output","out1.txt"))
+            File.Delete(Path.Combine(root,"output","out2.txt"))
+            File.Delete(Path.Combine(root,"output","out3.txt"))
+            
+            //running again
+            Logger.logInfo Logger.Test "computing output/out*.txt again. data/*.txt restore must happen with previously existed indices [1;2;3]"
+            let res = API.compute (root, outputId)
+            assertResultOk res
+
+            "Base fileFile 1" |> assertFileContent (Path.Combine(root, "output", "out1.txt"))
+            "Base fileFile 2" |> assertFileContent (Path.Combine(root, "output", "out2.txt"))
+            "Base fileFile 3" |> assertFileContent (Path.Combine(root, "output", "out3.txt"))
+
+            // Checks the output alph file:
+            let alph = AlphFiles.tryLoad (PathUtils.idToAlphFileFullPath root outputId) |> Option.get
+            match alph.Origin with 
+            | DataOrigin.CommandOrigin cmd ->
+                cmd.Inputs.[0].Hash.IsScalar.Should().BeTrue("base.txt is scalar") |> ignore
+                (cmd.Inputs.[1].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "2nd input is a vector of 3 elements") |> ignore
+                (cmd.Outputs.[0].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "The output is a vector of 3 elements") |> ignore
+                Assert.True(cmd.Outputs.[0].Hash |> MdMap.toSeq |> Seq.exists (fun x -> let k,_ = x in k = ["1"]))
+                Assert.True(cmd.Outputs.[0].Hash |> MdMap.toSeq |> Seq.exists (fun x -> let k,_ = x in k = ["2"]))
+                Assert.True(cmd.Outputs.[0].Hash |> MdMap.toSeq |> Seq.exists (fun x -> let k,_ = x in k = ["3"]))
+            | _ -> failwith "Unexpected origin"
+        }
+
+    [<Fact>]
     member s.``Re-Runs same method upon input changes``() =
         async {
             let root = s.ExperimentRoot 
@@ -150,6 +290,146 @@ type ``Vector scenarios``(output) as this =
             let output2Id = ArtefactId.Path "output2/*.txt"
             let res = API.compute (root, output2Id)
             assertResultOk res
+
+            "Base fileBase fileFile 1" |> assertFileContent (Path.Combine(root, "output2", "1.txt"))
+            "Base fileBase fileFile 2" |> assertFileContent (Path.Combine(root, "output2", "2.txt"))
+            "Base fileBase fileFile 3" |> assertFileContent (Path.Combine(root, "output2", "3.txt"))
+
+            // Checks the output alph file:
+            let alph = AlphFiles.tryLoad (PathUtils.idToAlphFileFullPath root outputId) |> Option.get
+            match alph.Origin with 
+            | DataOrigin.CommandOrigin cmd ->
+                cmd.Inputs.[0].Hash.IsScalar.Should().BeTrue("base.txt is scalar") |> ignore
+                (cmd.Inputs.[1].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "2nd input is a vector of 3 elements") |> ignore
+                (cmd.Outputs.[0].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "The output is a vector of 3 elements") |> ignore
+            | _ -> failwith "Unexpected origin"
+
+            let alph = AlphFiles.tryLoad (PathUtils.idToAlphFileFullPath root output2Id) |> Option.get
+            match alph.Origin with 
+            | DataOrigin.CommandOrigin cmd ->
+                cmd.Inputs.[0].Hash.IsScalar.Should().BeTrue("base.txt is scalar") |> ignore
+                (cmd.Inputs.[1].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "2nd input is a vector of 3 elements") |> ignore
+                (cmd.Outputs.[0].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "The output is a vector of 3 elements") |> ignore
+            | _ -> failwith "Unexpected origin"
+        }
+
+    [<Fact>]
+    /// also tests the issue #85
+    member s.``up-to-date remote are not restored if not needed``() =
+        async {
+            let root = s.ExperimentRoot
+            do! prepareSources(root)
+
+            let! res = API.buildAsync root root ["base.txt"; "data/*.txt"] ["output/*.txt"] concatCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res
+
+            let! res = API.buildAsync root root ["base.txt"; "output/*.txt"] ["output2/*.txt"] concatCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res
+
+            let! res = API.buildAsync root root ["base.txt"; "output2/*.txt"] ["output3/*.txt"] concatCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res
+
+            let outputId = ArtefactId.Path "output/*.txt"
+            let output2Id = ArtefactId.Path "output2/*.txt"
+            let output3Id = ArtefactId.Path "output3/*.txt"
+            API.compute (root, output3Id) |> assertResultOk
+            
+            Logger.logInfo Logger.Test "Chain computed first time"
+
+            // now saving "output/*.txt"
+            let! saveRes = API.saveAsync (root,outputId) None false
+            assertResultOk saveRes
+            Logger.logInfo Logger.Test "output/*.txt saved to storage"
+            
+            // deleting "output3/*.txt" and "output/*.txt"
+            File.Delete <| Path.Combine(root, "output", "1.txt")
+            File.Delete <| Path.Combine(root, "output", "2.txt")
+            File.Delete <| Path.Combine(root, "output", "3.txt")
+            File.Delete <| Path.Combine(root, "output3", "1.txt")
+            File.Delete <| Path.Combine(root, "output3", "2.txt")
+            File.Delete <| Path.Combine(root, "output3", "3.txt")
+
+            Logger.logInfo Logger.Test "Deleted output/*.txt and output3/*.txt"
+
+            Logger.logInfo Logger.Test "Test begins. Second time compute..."
+            API.compute (root, output3Id) |> assertResultOk
+            Logger.logInfo Logger.Test "Second time computed"
+
+            Assert.False(File.Exists(Path.Combine(root, "output", "1.txt")))
+            Assert.False(File.Exists(Path.Combine(root, "output", "2.txt")))
+            Assert.False(File.Exists(Path.Combine(root, "output", "3.txt")))
+            
+
+            "Base fileBase fileBase fileFile 1" |> assertFileContent (Path.Combine(root, "output3", "1.txt"))
+            "Base fileBase fileBase fileFile 2" |> assertFileContent (Path.Combine(root, "output3", "2.txt"))
+            "Base fileBase fileBase fileFile 3" |> assertFileContent (Path.Combine(root, "output3", "3.txt"))
+
+            // Checks the output alph file:
+            let alph = AlphFiles.tryLoad (PathUtils.idToAlphFileFullPath root outputId) |> Option.get
+            match alph.Origin with 
+            | DataOrigin.CommandOrigin cmd ->
+                cmd.Inputs.[0].Hash.IsScalar.Should().BeTrue("base.txt is scalar") |> ignore
+                (cmd.Inputs.[1].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "2nd input is a vector of 3 elements") |> ignore
+                (cmd.Outputs.[0].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "The output is a vector of 3 elements") |> ignore
+            | _ -> failwith "Unexpected origin"
+
+            let alph = AlphFiles.tryLoad (PathUtils.idToAlphFileFullPath root output2Id) |> Option.get
+            match alph.Origin with 
+            | DataOrigin.CommandOrigin cmd ->
+                cmd.Inputs.[0].Hash.IsScalar.Should().BeTrue("base.txt is scalar") |> ignore
+                (cmd.Inputs.[1].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "2nd input is a vector of 3 elements") |> ignore
+                (cmd.Outputs.[0].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "The output is a vector of 3 elements") |> ignore
+            | _ -> failwith "Unexpected origin"
+
+            let alph = AlphFiles.tryLoad (PathUtils.idToAlphFileFullPath root output3Id) |> Option.get
+            match alph.Origin with 
+            | DataOrigin.CommandOrigin cmd ->
+                cmd.Inputs.[0].Hash.IsScalar.Should().BeTrue("base.txt is scalar") |> ignore
+                (cmd.Inputs.[1].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "2nd input is a vector of 3 elements") |> ignore
+                (cmd.Outputs.[0].Hash |> MdMap.toShallowSeq |> Seq.length).Should().Be(3, "The output is a vector of 3 elements") |> ignore
+            | _ -> failwith "Unexpected origin"
+        }
+
+    [<Fact>]
+    /// also triggers issue #78
+    member s.``Vector elements are restored from storage during comupute if needed``() =
+        async {
+            let root = s.ExperimentRoot
+            do! prepareSources(root)
+
+            let! res = API.buildAsync root root ["base.txt"; "data/*.txt"] ["output/*.txt"] concatCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res
+
+            let! res = API.buildAsync root root ["base.txt"; "output/*.txt"] ["output2/*.txt"] concatCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res
+
+            let outputId = ArtefactId.Path "output/*.txt"
+            let output2Id = ArtefactId.Path "output2/*.txt"
+            API.compute (root, output2Id) |> assertResultOk
+            
+            Logger.logInfo Logger.Test "First time computed"
+
+            // now saving "output/*.txt"
+            let! saveRes = API.saveAsync (root,outputId) None false
+            assertResultOk saveRes
+
+            Logger.logInfo Logger.Test "output/*.txt saved to storage"
+            
+            // deleting "output2/*.txt" and "output/*.txt"
+            File.Delete <| Path.Combine(root, "output", "1.txt")
+            File.Delete <| Path.Combine(root, "output", "2.txt")
+            File.Delete <| Path.Combine(root, "output", "3.txt")
+            File.Delete <| Path.Combine(root, "output2", "1.txt")
+            File.Delete <| Path.Combine(root, "output2", "2.txt")
+            File.Delete <| Path.Combine(root, "output2", "3.txt")
+
+            Logger.logInfo Logger.Test "Deleted output/*.txt and output2/*.txt"
+
+            // now asking again to compute
+            Logger.logInfo Logger.Test "Now, restore should happen"
+            API.compute (root, output2Id) |> assertResultOk
+
+            Logger.logInfo Logger.Test "Second time computed"
 
             "Base fileBase fileFile 1" |> assertFileContent (Path.Combine(root, "output2", "1.txt"))
             "Base fileBase fileFile 2" |> assertFileContent (Path.Combine(root, "output2", "2.txt"))
@@ -251,7 +531,34 @@ type ``Vector scenarios``(output) as this =
             
             "Base fileFile 1Base fileFile 2Base fileFile 3" |> assertFileContent (Path.Combine(root, "summary.txt"))
         }
-        
+    
+    [<Fact>]
+    member s.``Issue 96: Reduce operation fails if the index from prev run does not exist on disk``() =
+        async {
+            let root = s.ExperimentRoot
+            do! prepareSources(root)
+
+            let! res = API.buildAsync root root ["base.txt"; "data/*.txt"] ["output/*.txt"] concatCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res
+
+            // this one is gather
+            let! res = API.buildAsync root root ["output/*.txt"] ["summary.txt"] concatVectorCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res
+
+            let summaryId = ArtefactId.Path "summary.txt"
+            let res = API.compute (root, summaryId)
+            assertResultOk res
+
+            // now removing index 2
+            File.Delete(Path.Combine(root,"data","2.txt"))
+
+            let res = API.compute (root, summaryId)
+            assertResultOk res
+
+                        
+            "Base fileFile 1Base fileFile 3" |> assertFileContent (Path.Combine(root, "summary.txt"))
+        }
+
     [<Fact>]
     member s.``Scatter-reduce: Creates many files and then reduces``() =
         async {

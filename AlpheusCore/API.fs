@@ -141,7 +141,7 @@ let private restoreSingleItemAsync experimentRoot (path,versionToRestore) =
         let! restoreSourcesResults = checker [| versionToRestore |]
         let restoreSources = restoreSourcesResults.[0]
         if List.length restoreSources = 0 then
-            return Error (UserError(sprintf "%A:%s is not found in any registered storages" path (versionToRestore.Substring(0,6))))
+            return Error (UserError(sprintf "%A:%s is not found in any registered storages. Are you missing some storage configured?" path (versionToRestore.Substring(0,6))))
         else
             let restoreSource = List.head restoreSources
             logVerbose LogCategory.API (sprintf "Restoring %A:%s from %s storage" path (versionToRestore.Substring(0,6)) restoreSource)
@@ -346,13 +346,17 @@ let compute (experimentRoot, artefactId) =
                 let restoreSingleItemTreadSafeAsync toRestore =
                     Utils.singleExecutionGuardAsync restoreTasksCache toRestore (restoreSingleItemAsync experimentRoot)
                 let! comp = swapedPairs |> Array.map restoreSingleItemTreadSafeAsync |> Async.Parallel
-                let checker res =
+                let chooser res =
                     match res with
-                    |   Ok _ -> ()
-                    |   Error(e) -> failwith (e.ToString())
+                    |   Ok _ -> None
+                    |   Error(e) -> Some(e)
 
-                Array.iter checker comp
-                return ()
+                let result =
+                    match Array.choose chooser comp |> Seq.tryHead with
+                    |   None -> Ok()
+                    |   Some(res) -> Error(res)
+                    
+                return result
             }
 
         // flow graph to calculate statuses
