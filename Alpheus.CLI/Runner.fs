@@ -112,6 +112,23 @@ let run (programName:string) (workingDir:string) (parseResults:ParseResults<Alph
         }
     elif parseResults.Contains Build then                
         BuildCommand.run workingDir (parseResults.GetResult <@ Build @>)
+    elif parseResults.Contains Sign then
+        result {
+            let signArgs = parseResults.GetResult <@ Sign @>
+            let path = signArgs.GetResult <@ SignArgs.Path @>
+            let! artefact = API.artefactFor workingDir path
+            return! API.signAlphFileAsync artefact |> Async.RunSynchronously
+        }
+    elif parseResults.Contains Hash then
+        result {
+            let hashArgs = parseResults.GetResult <@ Hash @>
+            let path = hashArgs.GetResult <@ HashArgs.Path @>
+            let! artefact = API.artefactFor workingDir path
+            let versions = API.hashArtefactAsync artefact |> Async.RunSynchronously
+            printfn "Actual disk version of the artefact %O" (snd artefact)
+            versions |> List.iter (fun arg -> let idx,ver = arg in printfn "%15A:\t%A" idx ver.Value)
+            return! Ok()
+        }
     else
         Error (UserError usage)
 
