@@ -3,7 +3,7 @@
 | Platform        | Build           |
 | ------------- |:-------------:|
 | Windows   | [![VS2019 Build Status](https://ci.appveyor.com/api/projects/status/2q24972vyycmjdxx/branch/master?svg=true)](https://ci.appveyor.com/project/dgrechka/alpheus) |
-| Linux     | [![Linux Build Status](https://travis-ci.org/itislab/alpheus.svg?branch=master)](https://travis-ci.org/itislab/alpheus)  |
+| Linux     | [![Linux Build Status](https://drone.k8s.grechka.family/api/badges/itislab/alpheus/status.svg)](https://drone.k8s.grechka.family/itislab/alpheus)  |
 
 [![codecov](https://codecov.io/gh/itislab/alpheus/branch/master/graph/badge.svg)](https://codecov.io/gh/itislab/alpheus)
 [![Tests](https://img.shields.io/appveyor/tests/dgrechka/alpheus/master)](https://ci.appveyor.com/project/dgrechka/alpheus/build/tests)
