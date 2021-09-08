@@ -1,3 +1,4 @@
+---
 kind: pipeline
 type: kubernetes
 name: default
@@ -10,3 +11,8 @@ steps:
   - dotnet build ./AlpheusCore/
   - dotnet build ./AlpheusUnitTests
   - dotnet test ./AlpheusUnitTests
+---
+kind: signature
+hmac: 1c3d27f740d6035e947045d7d46d4ab8d92e32d378a7a6a1459f46ed8ba450cd
+
+...
