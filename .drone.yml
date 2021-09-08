@@ -1,0 +1,12 @@
+kind: pipeline
+type: kubernetes
+name: default
+
+steps:
+- name: build
+  image: mcr.microsoft.com/dotnet/sdk:2.1
+  commands:
+  - dotnet restore
+  - dotnet build ./AlpheusCore/
+  - dotnet build ./AlpheusUnitTests
+  - dotnet test ./AlpheusUnitTests
