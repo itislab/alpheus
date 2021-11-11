@@ -25,7 +25,7 @@ _todo: complete the list_
 Alpheus uses full power of .Net Core threadpool processing, asyncronous IO and asyncronous computations. You will be surprised how effective Alpheus deals with large collection of small files saving them to artefact storages and restoring them back when needed.
 
 ## Installation
-You need to have [.Net Core SDK 2.1.300 or newer](https://dotnet.microsoft.com/learn/dotnet/hello-world-tutorial) installed.
+You need to have [.Net Core SDK 3.1 or newer](https://dotnet.microsoft.com/learn/dotnet/hello-world-tutorial) installed.
 
 If you have it install the latest version of Alpheus with
 
