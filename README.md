@@ -62,7 +62,7 @@ OPTIONS:
 
 Before building the code, you need to make sure the machine has the following tools installed:
 
-1. [.Net Core SDK 2.1.300 or newer](https://dotnet.microsoft.com/download)
+1. [.Net Core SDK 3.1 or newer](https://dotnet.microsoft.com/download)
 1. [Node.js](https://nodejs.org/) 8.11.3 or higher.
 1. [Yarn](https://yarnpkg.com/) package manager.
 

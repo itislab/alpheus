@@ -5,12 +5,25 @@ name: default
 
 steps:
 - name: build
-  image: mcr.microsoft.com/dotnet/sdk:2.1
+  image: mcr.microsoft.com/dotnet/sdk:3.1
   commands:
   - dotnet restore
   - dotnet build ./AlpheusCore/
+  - dotnet build ./Alpheus.CLI/
   - dotnet build ./AlpheusUnitTests
   - dotnet test ./AlpheusUnitTests
+- name: build & publish release
+  image: mcr.microsoft.com/dotnet/sdk:3.1
+  environment:
+    NUGET_TOKEN:
+      from_secret: nuget_angaraproject_token
+  when:
+    event:
+    - tag
+  commands:
+  - dotnet build -c Release Alpheus.CLI
+  - dotnet pack -c Release -p:PackageVersion=${DRONE_TAG} Alpheus.CLI
+  - dotnet nuget push -k ${NUGET_TOKEN} -s https://api.nuget.org/v3/index.json Alpheus.CLI/bin/Release/Alpheus-cli.${DRONE_TAG}.nupkg
 ---
 kind: signature
 hmac: 1c3d27f740d6035e947045d7d46d4ab8d92e32d378a7a6a1459f46ed8ba450cd
