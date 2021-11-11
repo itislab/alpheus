@@ -26,6 +26,6 @@ steps:
   - dotnet nuget push -k ${NUGET_TOKEN} -s https://api.nuget.org/v3/index.json Alpheus.CLI/bin/Release/Alpheus-cli.${DRONE_TAG}.nupkg
 ---
 kind: signature
-hmac: 1c3d27f740d6035e947045d7d46d4ab8d92e32d378a7a6a1459f46ed8ba450cd
+hmac: b00c05bc4744b36a5ae71bb7830079f4318800f30f9502ae708c4a8afcfb5748
 
 ...
