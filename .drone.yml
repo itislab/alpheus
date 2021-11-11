@@ -15,7 +15,7 @@ steps:
 - name: build & publish release
   image: mcr.microsoft.com/dotnet/sdk:3.1
   environment:
-    NUGET_TOKEN:
+    NUGETTOKEN:
       from_secret: nuget_angaraproject_token
   when:
     event:
@@ -23,7 +23,7 @@ steps:
   commands:
   - dotnet build -c Release Alpheus.CLI
   - dotnet pack -c Release -p:PackageVersion=${DRONE_TAG} Alpheus.CLI
-  - dotnet nuget push -k ${NUGET_TOKEN} -s https://api.nuget.org/v3/index.json Alpheus.CLI/bin/Release/Alpheus-cli.${DRONE_TAG}.nupkg
+  - dotnet nuget push -k $NUGETTOKEN -s https://api.nuget.org/v3/index.json Alpheus.CLI/bin/Release/Alpheus-cli.${DRONE_TAG}.nupkg
 ---
 kind: signature
 hmac: b00c05bc4744b36a5ae71bb7830079f4318800f30f9502ae708c4a8afcfb5748
