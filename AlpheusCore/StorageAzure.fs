@@ -1,25 +1,30 @@
 ﻿module ItisLab.Alpheus.StorageAzure
 
 open ItisLab.Alpheus.Storage
-open Microsoft.WindowsAzure.Storage
+open Azure.Storage.Blobs
 open System
 open System.IO
 open System.Diagnostics
+open Azure.Storage
 
 type Storage(accountName:string,accountKey:string,containerName:string) =
-    let storageCredentials = Auth.StorageCredentials(accountName,accountKey)
-    let cloudStorageAccount = CloudStorageAccount(storageCredentials, true)
-    let blobClient = cloudStorageAccount.CreateCloudBlobClient()
-    let container = blobClient.GetContainerReference(containerName)
+    let sharedKeyCredential = StorageSharedKeyCredential(accountName, accountKey);
+
+    let blobUri = "https://" + accountName + ".blob.core.windows.net";
+
+    let blobServiceClient = BlobServiceClient(Uri(blobUri), sharedKeyCredential);
+    
+    let containerClient = blobServiceClient.GetBlobContainerClient(containerName)
+    
     let getBlobStream blobName =
         async {
-            let blob = container.GetBlockBlobReference(blobName)     
-            let! blobStream = Async.AwaitTask (blob.OpenWriteAsync())
-            return (blobStream :> Stream)
+            let blobClient = containerClient.GetBlobClient(blobName)
+            let! blobStream = Async.AwaitTask (blobClient.OpenWriteAsync(true))
+            return blobStream
         }
     do
         try
-            container.CreateIfNotExistsAsync() |> Async.AwaitTask |> Async.RunSynchronously |> ignore
+            containerClient.CreateIfNotExistsAsync() |> Async.AwaitTask |> Async.RunSynchronously |> ignore
         with
         | :? AggregateException as agex ->            
             printfn "Failed to initialize Azure storage. Check azure credentials and container name validity (%s)" (agex.ToString())
@@ -30,11 +35,11 @@ type Storage(accountName:string,accountKey:string,containerName:string) =
                     if String.IsNullOrEmpty(version) then
                         return Storage.Absent
                     else
-                        let fileBlob = container.GetBlockBlobReference(version+".file")
-                        let dirBlob =  container.GetBlockBlobReference(version+".dir-0")
-                        let! res =  [|Async.AwaitTask (fileBlob.ExistsAsync()) ; Async.AwaitTask(dirBlob.ExistsAsync()) |] |> Async.Parallel                    
+                        let fileBlob = containerClient.GetBlobClient(version+".file")
+                        let dirBlob =  containerClient.GetBlobClient(version+".dir-0")
+                        let! res =  [|Async.AwaitTask (fileBlob.ExistsAsync()) ; Async.AwaitTask(dirBlob.ExistsAsync()) |] |> Async.Parallel
                         let result =
-                            match res.[0],res.[1] with
+                            match res.[0].Value,res.[1].Value with
                             |   true,false -> Storage.SingleFile
                             |   false,true -> Storage.Directory
                             |   false,false -> Storage.Absent
@@ -49,7 +54,7 @@ type Storage(accountName:string,accountKey:string,containerName:string) =
 
         member s.getFileRestoreStreamAsync version =
             async {
-                let fileBlob = container.GetBlockBlobReference(version+".file")                
+                let fileBlob = containerClient.GetBlobClient(version+".file")                
                 let! blobStream = Async.AwaitTask (fileBlob.OpenReadAsync())
                 return blobStream
             }
@@ -62,9 +67,9 @@ type Storage(accountName:string,accountKey:string,containerName:string) =
                 while not stop do
                     let blobName = sprintf "%s.dir-%d" version idx
                     idx <- idx + 1
-                    let blobRef = container.GetBlockBlobReference(blobName)
+                    let blobRef = containerClient.GetBlobClient(blobName)
                     let! exists = Async.AwaitTask(blobRef.ExistsAsync())                    
-                    if exists then
+                    if exists.Value then
                         streamTasks <- blobRef.OpenReadAsync() :: streamTasks
                     else
                         stop <- true

@@ -154,7 +154,7 @@ type ``Dependency graph tests``(output) =
             let outArtefact = g |> getArtefact outArtefactId
             g.LoadDependencies [outArtefact]
 
-            inArtefact.UsedIn.Should().BeEquivalentTo(method) |> ignore
+            inArtefact.UsedIn.Should().BeEquivalentTo(Set.singleton method,"Command created the vertex") |> ignore
             inArtefact.ProducedBy.MethodId.Should().Be("dir/testfile.txt", "it is produced by the source method") |> ignore
             inArtefact.Rank.Should().Be(0, "it is a scalar operation") |> ignore
 
