@@ -31,7 +31,7 @@
     <Compile Include="AfterfactId.fs" />
     <Compile Include="MethodCommand.fs" />
     <Compile Include="Storage.fs" />
-    <None Include="StorageAzure.fs" />
+    <Compile Include="StorageAzure.fs" />
     <Compile Include="StorageLocal.fs" />
     <Compile Include="Config.fs" />
     <Compile Include="ArtefactArchiver.fs" />
