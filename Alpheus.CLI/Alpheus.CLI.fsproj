@@ -25,11 +25,15 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Argu" Version="5.4.0" />
+    <PackageReference Include="Argu" Version="6.1.1" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\AlpheusCore\AlpheusCore.fsproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Update="FSharp.Core" Version="6.0.6" />
   </ItemGroup>
 
 </Project>

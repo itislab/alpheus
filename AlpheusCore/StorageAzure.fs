@@ -1,7 +1,7 @@
 ﻿module ItisLab.Alpheus.StorageAzure
 
 open ItisLab.Alpheus.Storage
-open Microsoft.WindowsAzure.Storage
+open Azure.Storage.Blobs
 open System
 open System.IO
 open System.Diagnostics

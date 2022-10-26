@@ -31,7 +31,7 @@
     <Compile Include="AfterfactId.fs" />
     <Compile Include="MethodCommand.fs" />
     <Compile Include="Storage.fs" />
-    <Compile Include="StorageAzure.fs" />
+    <None Include="StorageAzure.fs" />
     <Compile Include="StorageLocal.fs" />
     <Compile Include="Config.fs" />
     <Compile Include="ArtefactArchiver.fs" />
@@ -50,11 +50,15 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="FSharp.Control.AsyncSeq" Version="2.0.21" />
+    <PackageReference Include="Azure.Storage.Blobs" Version="12.14.1" />
+    <PackageReference Include="FSharp.Control.AsyncSeq" Version="3.2.1" />
     <PackageReference Include="Itis.Angara.Flow" Version="0.1.3" />
-    <PackageReference Include="Newtonsoft.Json" Version="11.0.2" />
-    <PackageReference Include="System.Reactive" Version="4.1.2" />
-    <PackageReference Include="WindowsAzure.Storage" Version="9.3.2" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
+    <PackageReference Include="System.Reactive" Version="5.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Update="FSharp.Core" Version="6.0.6" />
   </ItemGroup>
 
 </Project>

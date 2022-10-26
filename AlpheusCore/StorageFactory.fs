@@ -17,9 +17,9 @@ let createStorage (projectRoot:string) storageDef =
                     else Path.GetFullPath(Path.Combine(projectRoot,root))
             let storage = StorageLocal.Storage(absRoot)
             storage :> IStorage
-        |   Azure(definition) ->
-            let storage = StorageAzure.Storage(definition.AccountName, definition.AccountKey,definition.ContainerName)
-            storage :> IStorage
+        //|   Azure(definition) ->
+        //    let storage = StorageAzure.Storage(definition.AccountName, definition.AccountKey,definition.ContainerName)
+        //    storage :> IStorage
 
 // based on code from https://stackoverflow.com/questions/27012651/scheduling-with-async-parallel
 // We can ask the agent to enqueue a new work item;

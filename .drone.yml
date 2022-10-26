@@ -24,8 +24,3 @@ steps:
   - dotnet build -c Release Alpheus.CLI
   - dotnet pack -c Release -p:PackageVersion=${DRONE_TAG} Alpheus.CLI
   - dotnet nuget push -k $NUGETTOKEN -s https://api.nuget.org/v3/index.json Alpheus.CLI/bin/Release/Alpheus-cli.${DRONE_TAG}.nupkg
----
-#kind: signature
-#hmac: 4e20753868f1eb08711c5bfc1e5455e9d05ee28048eeb0ee39efc29f5fb38311
-
-#...
