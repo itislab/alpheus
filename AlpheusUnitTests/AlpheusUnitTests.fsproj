@@ -35,6 +35,7 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Compile Include="TestUtils.fs" />
+    <Compile Include="OsCommands.fs" />
     <Compile Include="GitIgnoreManagerTests.fs" />
     <Compile Include="MethodCommandSyntaxTests.fs" />
     <Compile Include="HashingTests.fs" />

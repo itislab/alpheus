@@ -3,6 +3,7 @@
 open Xunit
 open ItisLab.Alpheus.Tests
 open ItisLab.Alpheus.Tests.Utils
+open ItisLab.Alpheus.Tests.OsCommands
 open ItisLab.Alpheus.API
 open System.Collections
 open System.Collections.Generic
@@ -380,43 +381,14 @@ let equalStatuses expected actual =
     let s2 = Map.toSeq actual
     Seq.forall2 (fun x y -> let idx1,v1 = x in let idx2,v2 = y in (idx1=idx2) && MdMap.equal (fun _ elem1 elem2 -> elem1=elem2) v1 v2) s1 s2
 
-
-
 type ScalarScenarios(output) =
     inherit SingleUseOneTimeDirectory(output)
-
-    let copyFileCommand =
-        if isTestRuntimeWindows then
-            "cmd /C \"copy $in1 $out1\""
-        else
-            "/bin/sh -c \"cp $in1 $out1\""
-
+    
     let twoOutputsCommand = 
         if isTestRuntimeWindows then
             "cmd /C \"cmd.exe /C copy $in1 $out1 & cmd.exe /C copy $in2 $out2\""
         else
             "/bin/sh -c \"cat $in1 > $out1; cat $in2 >> $out2\""
-
-    let copyDirCommand =
-        if isTestRuntimeWindows then
-            "robocopy /E $in1 $out1"
-        else
-            // ubuntu cp works differently if the dest dir exists.
-            // as alpheus creates output dirs before running the command we need to delete it
-            "/bin/sh -c \"rm -Rv $out1 ; cp -Rv $in1 $out1\""
-
-    let concatCommand = 
-        if isTestRuntimeWindows then
-            "cmd /C \"cat.cmd $out1 $in1 $in2\""
-        else
-            "/bin/sh -c \"cat $in1 > $out1; cat $in2 >> $out1\""
-
-    // first file is duplicated
-    let concatCommand2 = 
-        if isTestRuntimeWindows then
-            "cmd /C \"cat.cmd $out1 $in1 $in1\""
-        else
-            "/bin/sh -c \"cat $in1 > $out1; cat $in1 >> $out1\""
 
 
     let buildExperiment(path) =
@@ -1448,4 +1420,3 @@ type ScalarScenarios(output) =
             |   Error e->
                     Assert.True(false, sprintf "Error: %A" e)
         }
-        
