@@ -4,6 +4,7 @@ open System.Threading.Tasks
 open System
 open Xunit
 open Xunit.Abstractions
+open Angara.Data
 
 // Ensure we match the return type xUnit.net is looking for
 let toAsyncFact computation : Task = Async.StartAsTask computation :> _
@@ -96,3 +97,8 @@ let assertResultOk result =
 
 type Microsoft.FSharp.Collections.List<'T> with 
     member this.ToArray() = this |> Array.ofList
+
+let equalStatuses expected actual =
+    let s1 = Map.toSeq expected
+    let s2 = Map.toSeq actual
+    Seq.forall2 (fun x y -> let idx1,v1 = x in let idx2,v2 = y in (idx1=idx2) && MdMap.equal (fun _ elem1 elem2 -> elem1=elem2) v1 v2) s1 s2

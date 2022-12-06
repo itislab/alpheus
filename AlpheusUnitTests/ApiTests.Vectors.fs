@@ -90,7 +90,7 @@ type ``Vector scenarios``(output) as this =
             do! File.WriteAllTextAsync(Path.Combine(path,"vec1","b.txt"),"File 2\\r\\n") |> Async.AwaitTask
             do! File.WriteAllTextAsync(Path.Combine(path,"vec1","c.txt"),"File 3\\r\\n") |> Async.AwaitTask
 
-            let! res1 =  API.buildAsync path path ["vec1\*.txt"] ["vec2\*.txt"] copyFileCommand DependencyGraph.CommandExecutionSettings.Default
+            let! res1 =  API.buildAsync path path ["vec1/*.txt"] ["vec2/*.txt"] copyFileCommand DependencyGraph.CommandExecutionSettings.Default
             assertResultOk res1
             return ()
         }
@@ -744,23 +744,23 @@ type ``Vector scenarios``(output) as this =
         }
 
     [<Fact>]
-    member s.``Status: Uncomputed vector``() =
+    member s.``Status: Source vector``() =
         async {         
             let path = Path.GetFullPath s.RelativeExperimentRoot
             do! buildVectorExperiment(path)
 
-            let res = API.status(path,ArtefactId.Path(Path.Combine("vec2","*.txt.alph")))
+            let res = API.status(path,ArtefactId.Path("vec1/*.txt"))
             match res with
             |   Ok r ->
-                //let expectedStatuses:Map<ArtefactId,MdMap<string,StatusGraph.ArtefactStatus>> = 
-                //    [ 
-                //        ArtefactId.Path "1.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
-                //        ArtefactId.Path "2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
-                //        ArtefactId.Path "3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local);
-                //        ArtefactId.Path "1_2.txt",MdMap.scalar (StatusGraph.ArtefactStatus.NeedsRecomputation OutdatedReason.InputsOutdated);
-                //        ArtefactId.Path "1_2_3.txt",MdMap.scalar (StatusGraph.ArtefactStatus.NeedsRecomputation OutdatedReason.InputsOutdated);
-                //    ] |> Map.ofList
-                //Assert.True(equalStatuses expectedStatuses r)
+                let expectedVector = MdMap.empty
+                let expectedVector = MdMap.add ["a"] (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local) expectedVector
+                let expectedVector = MdMap.add ["b"] (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local) expectedVector
+                let expectedVector = MdMap.add ["c"] (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local) expectedVector
+                let expectedStatuses:Map<ArtefactId,MdMap<string,StatusGraph.ArtefactStatus>> = 
+                    [ 
+                        ArtefactId.Path "vec1/*.txt",expectedVector;
+                    ] |> Map.ofList
+                Assert.True(equalStatuses expectedStatuses r)
                 ()
             |   Error e->
                     Assert.True(false, sprintf "Error: %A" e)

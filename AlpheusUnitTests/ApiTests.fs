@@ -376,11 +376,6 @@ type DepGraphSaveRestore(output) =
 
         } |> toAsyncFact
 
-let equalStatuses expected actual =
-    let s1 = Map.toSeq expected
-    let s2 = Map.toSeq actual
-    Seq.forall2 (fun x y -> let idx1,v1 = x in let idx2,v2 = y in (idx1=idx2) && MdMap.equal (fun _ elem1 elem2 -> elem1=elem2) v1 v2) s1 s2
-
 type ScalarScenarios(output) =
     inherit SingleUseOneTimeDirectory(output)
     
