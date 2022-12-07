@@ -765,6 +765,36 @@ type ``Vector scenarios``(output) as this =
             |   Error e->
                     Assert.True(false, sprintf "Error: %A" e)
         }
+
+    [<Fact>]
+    member s.``Status: vector``() =
+        async {         
+            let path = Path.GetFullPath s.RelativeExperimentRoot
+            do! buildVectorExperiment(path)
+
+            let res = API.status(path,ArtefactId.Path("vec2/*.txt"))
+            match res with
+            |   Ok r ->
+                let expectedVector = MdMap.empty
+                let expectedVector = MdMap.add ["a"] (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local) expectedVector
+                let expectedVector = MdMap.add ["b"] (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local) expectedVector
+                let expectedVector = MdMap.add ["c"] (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local) expectedVector
+
+                let expectedVector2 = MdMap.empty
+                let expectedVector2 = MdMap.add ["a"] (StatusGraph.ArtefactStatus.NeedsRecomputation InputsOutdated) expectedVector2
+                let expectedVector2 = MdMap.add ["b"] (StatusGraph.ArtefactStatus.NeedsRecomputation InputsOutdated) expectedVector2
+                let expectedVector2 = MdMap.add ["c"] (StatusGraph.ArtefactStatus.NeedsRecomputation InputsOutdated) expectedVector2
+
+                let expectedStatuses:Map<ArtefactId,MdMap<string,StatusGraph.ArtefactStatus>> = 
+                    [ 
+                        ArtefactId.Path "vec1/*.txt",expectedVector;
+                        ArtefactId.Path "vec2/*.txt",expectedVector2;
+                    ] |> Map.ofList
+                Assert.True(equalStatuses expectedStatuses r)
+                ()
+            |   Error e->
+                    Assert.True(false, sprintf "Error: %A" e)
+        }
                            
              
 
