@@ -3,6 +3,7 @@
 open Xunit
 open ItisLab.Alpheus.Tests
 open ItisLab.Alpheus.Tests.Utils
+open ItisLab.Alpheus.Tests.OsCommands
 open ItisLab.Alpheus.API
 open System.Collections
 open System.Collections.Generic
@@ -77,6 +78,22 @@ type ``Vector scenarios``(output) as this =
         | TargetPlatform.Windows -> strings |> Seq.map(fun s -> s + " \r\n") |> String.concat ""
         | TargetPlatform.Linux -> strings |> Seq.map(fun s -> s + "\n") |> String.concat ""
         | _ -> failwith "Unknown platform"
+
+    let buildVectorExperiment(path) =
+        async {
+            let path = Path.GetFullPath path
+            let! _ = API.createExperimentDirectory path
+            Directory.CreateDirectory(Path.Combine(path,"vec1")) |> ignore
+            Directory.CreateDirectory(Path.Combine(path,"vec2")) |> ignore
+
+            do! File.WriteAllTextAsync(Path.Combine(path,"vec1","a.txt"),"File 1\\r\\n") |> Async.AwaitTask
+            do! File.WriteAllTextAsync(Path.Combine(path,"vec1","b.txt"),"File 2\\r\\n") |> Async.AwaitTask
+            do! File.WriteAllTextAsync(Path.Combine(path,"vec1","c.txt"),"File 3\\r\\n") |> Async.AwaitTask
+
+            let! res1 =  API.buildAsync path path ["vec1/*.txt"] ["vec2/*.txt"] copyFileCommand DependencyGraph.CommandExecutionSettings.Default
+            assertResultOk res1
+            return ()
+        }
 
 
     [<Fact>]
@@ -724,6 +741,59 @@ type ``Vector scenarios``(output) as this =
             //["sample1"] |> concatStrings |> assertFileContent (Path.Combine(root, "samples", "sample1.txt"))
             //["sample2"] |> concatStrings |> assertFileContent (Path.Combine(root, "samples", "sample2.txt"))
             //["sample3"] |> concatStrings |> assertFileContent (Path.Combine(root, "samples", "sample3.txt"))
+        }
+
+    [<Fact>]
+    member s.``Status: Source vector``() =
+        async {         
+            let path = Path.GetFullPath s.RelativeExperimentRoot
+            do! buildVectorExperiment(path)
+
+            let res = API.status(path,ArtefactId.Path("vec1/*.txt"))
+            match res with
+            |   Ok r ->
+                let expectedVector = MdMap.empty
+                let expectedVector = MdMap.add ["a"] (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local) expectedVector
+                let expectedVector = MdMap.add ["b"] (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local) expectedVector
+                let expectedVector = MdMap.add ["c"] (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local) expectedVector
+                let expectedStatuses:Map<ArtefactId,MdMap<string,StatusGraph.ArtefactStatus>> = 
+                    [ 
+                        ArtefactId.Path "vec1/*.txt",expectedVector;
+                    ] |> Map.ofList
+                Assert.True(equalStatuses expectedStatuses r)
+                ()
+            |   Error e->
+                    Assert.True(false, sprintf "Error: %A" e)
+        }
+
+    [<Fact>]
+    member s.``Status: vector``() =
+        async {         
+            let path = Path.GetFullPath s.RelativeExperimentRoot
+            do! buildVectorExperiment(path)
+
+            let res = API.status(path,ArtefactId.Path("vec2/*.txt"))
+            match res with
+            |   Ok r ->
+                let expectedVector = MdMap.empty
+                let expectedVector = MdMap.add ["a"] (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local) expectedVector
+                let expectedVector = MdMap.add ["b"] (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local) expectedVector
+                let expectedVector = MdMap.add ["c"] (StatusGraph.ArtefactStatus.UpToDate DependencyGraph.Local) expectedVector
+
+                let expectedVector2 = MdMap.empty
+                let expectedVector2 = MdMap.add ["a"] (StatusGraph.ArtefactStatus.NeedsRecomputation InputsOutdated) expectedVector2
+                let expectedVector2 = MdMap.add ["b"] (StatusGraph.ArtefactStatus.NeedsRecomputation InputsOutdated) expectedVector2
+                let expectedVector2 = MdMap.add ["c"] (StatusGraph.ArtefactStatus.NeedsRecomputation InputsOutdated) expectedVector2
+
+                let expectedStatuses:Map<ArtefactId,MdMap<string,StatusGraph.ArtefactStatus>> = 
+                    [ 
+                        ArtefactId.Path "vec1/*.txt",expectedVector;
+                        ArtefactId.Path "vec2/*.txt",expectedVector2;
+                    ] |> Map.ofList
+                Assert.True(equalStatuses expectedStatuses r)
+                ()
+            |   Error e->
+                    Assert.True(false, sprintf "Error: %A" e)
         }
                            
              

@@ -247,7 +247,7 @@ and LinkToArtefact(artefact: ArtefactVertex, expectedVersion: ArtefactVersion) =
     member s.AnalyzeStatus checkStoragePresence (index: string list) =    
         if index.Length <> artefact.Rank then invalidArg "index" "Index doesn't correspond to the rank of the artefact"
         async {
-            let expectedVersion = MdMap.find index expected
+            let expectedVersion = MdMap.tryFind index expected |> Option.flatten
             let! artefactItemActualVersion = artefact.ActualVersion.Get index
             let expectation =
                 match expectedVersion with

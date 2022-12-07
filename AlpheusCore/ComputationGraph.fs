@@ -276,7 +276,8 @@ type CommandMethod(command: CommandLineVertex,
                         outputItems |> toJaggedArrayOrValue (fun (extraIndex, itemFullPath) -> { FullPath = itemFullPath; Index = index @ extraIndex; UpdateType=Process })
                     else
                         upcast { FullPath = outputPath; Index = index; UpdateType=Process }
-                return Seq.singleton(outputPaths |> List.map outPathToArtefactItem, null)
+                let outputs = outputPaths |> List.map outPathToArtefactItem
+                return Seq.singleton(outputs, null)
                     
                 
         } |> Async.RunSynchronously

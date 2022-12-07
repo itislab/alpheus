@@ -40,7 +40,9 @@ let getInputTypes<'a> (v:MethodVertex) =
     | Source src -> List.empty
     | Command cmd -> cmd.Inputs |> Seq.map(fun a -> max 0 (a.Artefact.Rank - rank) |> arrayType<'a>) |> List.ofSeq
 
-let toJaggedArrayOrValue (mapValue: (string list * 'a) -> 'c) (map: MdMap<string,'a>) : obj =
+/// returns either jagged array of 'c or single 'c element. Thus return type obj. This brakes the type checking,
+/// but unfortunately that's how Angara expects artefact to be of that type
+let toJaggedArrayOrValue (mapValue: (string list * 'a) -> 'c) (map: MdMap<string,'a>) =
     let rec toJaggedArrayOrValueRec (mapValue: (string list * 'a) -> 'c) (index: string list) (map: MdMapTree<string,'a>) : obj =
         let isValue = function
         | MdMapTree.Value _ -> true
@@ -68,6 +70,48 @@ let toJaggedArrayOrValue (mapValue: (string list * 'a) -> 'c) (map: MdMap<string
                     | MdMapTree.Map _ -> toJaggedArrayOrValueRec mapValue newIndex t 
                     | MdMapTree.Value _ -> failwith "Data is incomplete and has missing elements"))
     toJaggedArrayOrValueRec mapValue [] (map |> MdMap.toTree)
+
+/// returns either jagged array of 'c or single 'c element. Thus return type obj. This brakes the type checking,
+/// but unfortunately that's how Angara expects artefact to be of that type
+let toJaggedArrayOrValueAsync (mapValue: (string list * 'a) -> Async<'c>) (map: MdMap<string,'a>) : Async<obj> =
+    let rec toJaggedArrayOrValueRec (mapValue: (string list * 'a) -> Async<'c>) (index: string list) (map: MdMapTree<string,'a>) : Async<obj> =
+        let isValue = function
+        | MdMapTree.Value _ -> true
+        | MdMapTree.Map _ -> false
+
+        let mapToArray (getElement: (string * MdMapTree<string,'a>) -> Async<'b>) (map: Map<string,MdMapTree<string,'a>>) : Async<'b[]> =
+            map |> Map.toSeq |> Seq.sortBy fst |> Seq.map getElement |> Seq.toArray |> Async.Parallel
+
+        let append v list = list |> List.append [v]
+
+        match map with
+        | MdMapTree.Value v -> 
+            async {
+                let! mappedValue = mapValue (index, v)
+                return upcast(mappedValue)
+            }
+        | MdMapTree.Map subMap ->
+            match subMap |> Map.forall(fun _ -> isValue) with
+            | true -> // final level
+                async {
+                    let! arr = subMap |> mapToArray (fun (k,t) -> 
+                        let newIndex = index |> append k
+                        match t with 
+                        | MdMapTree.Value v -> mapValue (newIndex, v)
+                        | MdMapTree.Map _ -> failwith "Unreachable case")
+                    return arr
+                }
+            | false ->
+                async {
+                    let! arr = subMap |> mapToArray (fun (k,t) -> 
+                        let newIndex = index |> append k
+                        match t with 
+                        | MdMapTree.Map _ -> toJaggedArrayOrValueRec mapValue newIndex t 
+                        | MdMapTree.Value _ -> failwith "Data is incomplete and has missing elements")
+                    return arr
+                }
+    toJaggedArrayOrValueRec mapValue [] (map |> MdMap.toTree)
+
 
 /// Truncates `index` so its length is `rank`, if rank is less or equal to the length of the index.
 /// Throws if the rank is greater than the length of the index.
